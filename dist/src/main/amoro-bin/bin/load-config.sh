@@ -16,7 +16,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
+#  Modified by Datazip Inc. in 2026
 
 CURRENT_DIR="$( cd "$(dirname "$0")" ; pwd -P )"
 AMORO_HOME="$( cd "$CURRENT_DIR/../" ; pwd -P )"
