@@ -51,7 +51,7 @@ You can assign the issue to yourself by leaving a comment with content `take`.
 
 Pull requests are the preferred mechanism for contributing to OLake-Fusion.
 
-* Generally, create a PR only to the main branch.
+* Generally, create a PR only to the staging branch.
 * PR should be linked to the corresponding issue.
     * The PR title format should be: \[{module}\] {pr_description}.
     * Add fix/resolve #{issue_number} in the description to link the PR to the issue.
@@ -132,49 +132,9 @@ The above text replacement command is applicable to macOS. In the Linux system, 
 
    In the `Maven` tab, click the `Reload All Maven Projects` button, or right-click the imported OLake-Fusion project in the Project view and select `Maven`->`Reload project`.
 
-### Start Fusion
-1. Open the following file:
-
-`
-{base_dir}/amoro-ams/src/main/java/org/apache/amoro/server/AmoroServiceContainer.java
-`
-
-2. In the top right corner of IntelliJ IDEA, click the `Run AmoroServiceContainer` button to start the Fusion service.
-3. Once the service has started, open your web browser and navigate to: [http://localhost:1630](http://localhost:1630/)
-4. If you see the login page, the startup was successful. The default username and password for login are both `admin`.
-
-### Start the optimizer
-#### Add an optimizer group
-1. Open http://localhost:1630 in your browser and log in with admin/admin.
-2. Click on `Optimizing` in the sidebar, select `Optimizer Groups`, and click the `Add Group` button to create a new group.
-3. Configure the newly added Optimizer group:
-   ![config-optimizer-group](docs/images/admin/config-optimizer-group.png)
-
-   The following configuration needs to be filled in:
-
-    - Name: the name of the optimizer group, which can be seen in the list of optimizer groups on the front-end page.
-    - Container: the name of a container configured in containers.
-    - Properties: the default configuration under this group, is used as a configuration parameter for tasks when the optimize page is scaled out.
-
-
-#### Start an optimizer in IntelliJ IDEA
-1. Open the following file in IntelliJ IDEA:
-
-`
-{base_dir}/amoro-optimizer/amoro-optimizer-standalone/src/main/java/org/apache/amoro/optimizer/standalone/StandaloneOptimizer.java
-`
-
-2. Click the `Run/Debug Configurations` button in the top right corner of IntelliJ IDEA and select `Current File`.
-3. Click `More Actions` on the right side and select `Run with Parameters...`.
-4. In `Build and run`, enter the following parameters in the `Program arguments:`:`-a thrift://127.0.0.1:1261 -p 1 -g local`
-
-   The detailed description of the relevant parameters can be found in the [OLake documentation](https://olake.io/docs/).
-
-5. Click `Apply` and `Run` to start an optimizer.
-6. In the OLake dashboard, click on `Optimizing` in the sidebar and choose `Optimizers`. If you see a newly created optimizer, the startup was successful.
-
 ### Quickstart
-To quickly explore OLake-Fusion's core features, such as self-optimizing, visit [Quickstart](https://olake.io/docs/getting-started/configure-first-compaction/).
+   The detailed description of the relevant parameters can be found in the [OLake documentation](https://olake.io/docs/).
+To quickly explore OLake-Fusion's core features, such as compaction, visit [Configure-first-compaction](https://olake.io/docs/getting-started/configure-first-compaction/).
 
 
 ## Code suggestions
