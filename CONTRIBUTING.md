@@ -1,33 +1,35 @@
 <!--
- - Licensed to the Apache Software Foundation (ASF) under one
- - or more contributor license agreements.  See the NOTICE file
- - distributed with this work for additional information
- - regarding copyright ownership.  The ASF licenses this file
- - to you under the Apache License, Version 2.0 (the
- - "License"); you may not use this file except in compliance
- - with the License.  You may obtain a copy of the License at
- - 
- -     http://www.apache.org/licenses/LICENSE-2.0
- - 
- - Unless required by applicable law or agreed to in writing, software
- - distributed under the License is distributed on an "AS IS" BASIS,
- - WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- - See the License for the specific language governing permissions and 
- - limitations under the License.
- -
- - Modified by Datazip Inc. in 2026
+- Licensed to the Apache Software Foundation (ASF) under one
+- or more contributor license agreements.  See the NOTICE file
+- distributed with this work for additional information
+- regarding copyright ownership.  The ASF licenses this file
+- to you under the Apache License, Version 2.0 (the
+- "License"); you may not use this file except in compliance
+- with the License.  You may obtain a copy of the License at
+- 
+-     http://www.apache.org/licenses/LICENSE-2.0
+- 
+- Unless required by applicable law or agreed to in writing, software
+- distributed under the License is distributed on an "AS IS" BASIS,
+- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+- See the License for the specific language governing permissions and 
+- limitations under the License.
+-
+- Modified by Datazip Inc. in 2026
 -->
 
 # Contributing
 
-This document provides guidelines for contributing to Amoro. While these suggestions are not strict
+This document provides guidelines for contributing to OLake-Fusion. While these suggestions are not strict
 rules, they aim to facilitate a smooth contribution experience.
 
-If you are thinking of contributing but first would like to discuss the change you wish to make, 
-we welcome you to head over to the [Join Community](https://amoro.apache.org/join-community/) page 
-on the official Amoro documentation site to find a number of ways to connect with the community, 
-including [Slack](https://the-asf.slack.com/archives/C06RZ9UHUTH) and our mailing lists. Of course, always feel free to just open a [new issue](https://github.com/apache/amoro/issues/new) in the 
-GitHub repo. You can also check the following for a [good first issue](https://github.com/apache/amoro/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22).
+If you are thinking of contributing but first would like to discuss the change you wish to make,
+we welcome you to join the OLake community:
+
+- [Slack](https://olake.io/slack/)
+- [GitHub Issues](https://github.com/datazip-inc/olake-fusion/issues/new)
+- [Contributing Docs](https://olake.io/docs/community/contributing/)
+- [Good First Issues](https://github.com/datazip-inc/olake-fusion/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
 
 ## Issues
 
@@ -47,11 +49,11 @@ You can assign the issue to yourself by leaving a comment with content `take`.
 
 ## Pull requests
 
-Pull requests are the preferred mechanism for contributing to Amoro
+Pull requests are the preferred mechanism for contributing to OLake-Fusion.
 
-* Generally, create a PR only to the master branch.
+* Generally, create a PR only to the staging branch.
 * PR should be linked to the corresponding issue.
-    * The PR title format should be: \[AMORO-{issue_number}\]\[{module}\]{pr_description}.
+    * The PR title format should be: \[{module}\] {pr_description}.
     * Add fix/resolve #{issue_number} in the description to link the PR to the issue.
     * The linked issue should clearly explain the background, objectives, and implementation methods
       of the PR.
@@ -87,11 +89,11 @@ for reference.
 
 ## Building the Project Locally
 
-[Build Guide](https://github.com/apache/amoro?tab=readme-ov-file#building) can be found in GitHub readme.
+[Build Guide](https://github.com/datazip-inc/olake-fusion?tab=readme-ov-file#building) can be found in the GitHub README.
 
-## Importing the Amoro project into IntelliJ IDEA
+## Importing the OLake-Fusion project into IntelliJ IDEA
 
-The following guide describes how to import the Amoro project into IntelliJ IDEA and deploy it.
+The following guide describes how to import the OLake-Fusion project into IntelliJ IDEA and deploy it.
 
 ### Requirements
 + Java Version: Java 17 is required.
@@ -103,14 +105,14 @@ The following guide describes how to import the Amoro project into IntelliJ IDEA
     - Scala
 4. Restart IntelliJ IDEA if prompted.
 
-### Import Amoro into IntelliJ IDEA
+### Import OLake-Fusion into IntelliJ IDEA
 This guide is based on IntelliJ IDEA 2024. Some details might differ in other versions.
 
 1. Clone the repository and create the test configuration file:
 
 ```shell
-$ git clone https://github.com/apache/amoro.git
-$ cd amoro
+$ git clone https://github.com/datazip-inc/olake-fusion.git
+$ cd olake-fusion
 $ base_dir=$(pwd)
 $ mkdir -p conf
 $ cp dist/src/main/amoro-bin/conf/config.yaml conf/config.yaml
@@ -120,7 +122,7 @@ The above text replacement command is applicable to macOS. In the Linux system, 
 
 2. Import the project:
     1. Open IntelliJ IDEA and select `File`->`Open`.
-    2. Choose the root folder of the cloned Amoro repository.
+    2. Choose the root folder of the cloned OLake-Fusion repository.
 3. Configure Java version:
     1. Open the `Maven` tab on the right side of the IDE.
     2. Expand `Profiles` and ensure the selected Java version matches your IDE's Java version.
@@ -128,58 +130,18 @@ The above text replacement command is applicable to macOS. In the Linux system, 
 
 4. Load dependencies
 
-   In the `Maven` tab,  click the `Reload All Maven Projects` button, or right-click the imported Amoro project in the Project view and select `Maven`->`Reload project`.
-
-### Start AMS
-1. Open the following file:
-
-`
-{base_dir}/amoro-ams/src/main/java/org/apache/amoro/server/AmoroServiceContainer.java
-`
-
-2. In the top right corner of IntelliJ IDEA, click the `Run AmoroServiceContainer` button to start the AMS service.
-3. Once the service has started, open your web browser and navigate to: [http://localhost:1630](http://localhost:1630/)
-4. If you see the login page, the startup was successful. The default username and password for login are both `admin`.
-
-### Start the optimizer
-#### Add an optimizer group
-1. Open http://localhost:1630 in your browser and log in with admin/admin.
-2. Click on `Optimizing` in the sidebar, select `Optimizer Groups`, and click the `Add Group` button to create a new group.
-3. Configure the newly added Optimizer group:
-   ![config-optimizer-group](docs/images/admin/config-optimizer-group.png)
-
-   The following configuration needs to be filled in:
-
-    - Name: the name of the optimizer group, which can be seen in the list of optimizer groups on the front-end page.
-    - Container: the name of a container configured in containers.
-    - Properties: the default configuration under this group, is used as a configuration parameter for tasks when the optimize page is scaled out.
-
-
-#### Start an optimizer in IntelliJ IDEA
-1. Open the following file in IntelliJ IDEA:
-
-`
-{base_dir}/amoro-optimizer/amoro-optimizer-standalone/src/main/java/org/apache/amoro/optimizer/standalone/StandaloneOptimizer.java
-`
-
-2. Click the `Run/Debug Configurations` button in the top right corner of IntelliJ IDEA and select `Current File`.
-3. Click `More Actions` on the right side and select `Run with Parameters...`.
-4. In `Build and run`, enter the following parameters in the `Program arguments:`:`-a thrift://127.0.0.1:1261 -p 1 -g local`
-
-   The detailed description of the relevant parameters can be found in [Managing Optimizers](https://amoro.apache.org/docs/latest/managing-optimizers/).
-
-5. Click `Apply` and `Run` to start an optimizer.
-6. In the Amoro dashboard, click on `Optimizing` in the sidebar and choose `Optimizers`. If you see a newly created optimizer, the startup was successful.
+   In the `Maven` tab, click the `Reload All Maven Projects` button, or right-click the imported OLake-Fusion project in the Project view and select `Maven`->`Reload project`.
 
 ### Quickstart
-To quickly explore Amoro's core features, such as self-optimizing, visit [Quickstart](https://amoro.apache.org/quick-start/).
+   The detailed description of the relevant parameters can be found in the [OLake documentation](https://olake.io/docs/).
+To quickly explore OLake-Fusion's core features, such as compaction, visit [Configure-first-compaction](https://olake.io/docs/getting-started/configure-first-compaction/).
 
 
 ## Code suggestions
 
 ### Code formatting
 
-Amoro uses [Spotless](https://github.com/diffplug/spotless/tree/main/plugin-maven) together with
+OLake-Fusion uses [Spotless](https://github.com/diffplug/spotless/tree/main/plugin-maven) together with
 [google-java-format](https://github.com/google/google-java-format) to format the Java code. For
 Scala, it uses Spotless with [scalafmt](https://scalameta.org/scalafmt/).
 
@@ -218,7 +180,7 @@ UPDATE=1 ./mvnw test -pl amoro-ams -am -Dtest=ConfigurationsTest
 ### Copyright
 
 All files (including source code, configuration files) in the project are required to declare
-CopyRight information at the top, and the project uses Apache License 2. You can configure the
+CopyRight information at the top, and the project uses Apache License 2.0 You can configure the
 copyright information in IntelliJ IDEA with the following steps:
 
 1. Open Settings → Editor → Copyright → Copyright Profiles.
@@ -248,3 +210,4 @@ limitations under the License.
 5. Click Apply to save the configuration changes.
 6. Right-click on the existing File/Package/Module and select `Update Copyrights…` to update the
    Copyright of the file.
+ 
