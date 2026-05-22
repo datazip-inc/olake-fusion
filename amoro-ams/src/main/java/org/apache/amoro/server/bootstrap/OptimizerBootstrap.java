@@ -20,12 +20,6 @@
 
 package org.apache.amoro.server.bootstrap;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.stream.Collectors;
-
 import org.apache.amoro.config.Configurations;
 import org.apache.amoro.resource.Resource;
 import org.apache.amoro.resource.ResourceContainer;
@@ -42,6 +36,12 @@ import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 /** Ensures the configured optimizer group and resource exist when AMS starts. */
 public class OptimizerBootstrap {

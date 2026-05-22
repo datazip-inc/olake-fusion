@@ -277,8 +277,8 @@ services:
       - -c
       - |
         set -e
-        IMAGE="olakego/fusion-spark:logging-20260521-113340"
-        IMAGE_REF="docker.io/olakego/fusion-spark:logging-20260521-113340"
+        IMAGE="olakego/fusion-spark:latest"
+        IMAGE_REF="docker.io/olakego/fusion-spark:latest"
 
         if ! docker image inspect $$IMAGE >/dev/null 2>&1; then
           echo "==> Image $$IMAGE not found locally — skipping."
@@ -324,7 +324,7 @@ services:
         echo "==> Done — image available on all workers."
 
   spark-copy:
-    image: olakego/fusion-spark:logging-20260522-162342
+    image: olakego/fusion-spark:latest
     container_name: fusion-spark-copy
     profiles:
       - prod
