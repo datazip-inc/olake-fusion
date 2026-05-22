@@ -14,13 +14,11 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- * 
+ *
  * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.persistence.mapper;
-
-import java.util.List;
 
 import org.apache.amoro.resource.Resource;
 import org.apache.amoro.resource.ResourceGroup;
@@ -34,6 +32,8 @@ import org.apache.ibatis.annotations.Result;
 import org.apache.ibatis.annotations.Results;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
+
+import java.util.List;
 
 public interface ResourceMapper {
 
