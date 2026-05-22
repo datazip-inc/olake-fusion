@@ -62,6 +62,12 @@ ams:
     task-execute-timeout: 1h # 3600000
     polling-timeout: 3s # 3000
     max-planning-parallelism: 1 # default 1
+    # After the optimizing Thrift service starts, AMS creates/updates this group and submits Spark.
+    bootstrap:
+      group-name: "spark-container"
+      container: "sparkContainer"
+      parallelism: 1
+      properties: {}
 
   blocker:
     timeout: 1min # 60000

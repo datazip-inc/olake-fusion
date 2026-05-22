@@ -517,6 +517,28 @@ public class AmoroManagementConf {
           .defaultValue(Duration.ofSeconds(3))
           .withDescription("Optimizer polling task timeout.");
 
+  public static final ConfigOption<String> OPTIMIZER_BOOTSTRAP_GROUP_NAME =
+      ConfigOptions.key("optimizer.bootstrap.group-name")
+          .stringType()
+          .noDefaultValue()
+          .withDescription("Name of the optimizer resource group to bootstrap on startup.");
+
+  public static final ConfigOption<String> OPTIMIZER_BOOTSTRAP_CONTAINER =
+      ConfigOptions.key("optimizer.bootstrap.container")
+          .stringType()
+          .noDefaultValue()
+          .withDescription("Container name for the bootstrapped optimizer resource group.");
+
+  public static final ConfigOption<Integer> OPTIMIZER_BOOTSTRAP_PARALLELISM =
+      ConfigOptions.key("optimizer.bootstrap.parallelism")
+          .intType()
+          .defaultValue(1)
+          .withDescription("Parallelism (thread count) for the bootstrapped Spark optimizer.");
+
+  /** Prefix for free-form bootstrap properties that become ResourceGroup.properties. */
+  public static final String OPTIMIZER_BOOTSTRAP_PROPERTIES_PREFIX =
+      "optimizer.bootstrap.properties.";
+
   public static final ConfigOption<Duration> OPTIMIZING_REFRESH_GROUP_INTERVAL =
       ConfigOptions.key("self-optimizing.refresh-group-interval")
           .durationType()

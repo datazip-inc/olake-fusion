@@ -63,11 +63,11 @@ public interface ResourceMapper {
           + " FROM resource WHERE group_name = #{resourceGroup}")
   @Results({
     @Result(property = "resourceId", column = "resource_id"),
-    @Result(property = "group", column = "group_name"),
-    @Result(property = "container", column = "container_name"),
+    @Result(property = "groupName", column = "group_name"),
+    @Result(property = "containerName", column = "container_name"),
     @Result(property = "startTime", column = "start_time", typeHandler = Long2TsConverter.class),
     @Result(property = "threadCount", column = "thread_count"),
-    @Result(property = "totalMemory", column = "total_memory"),
+    @Result(property = "memoryMb", column = "total_memory"),
     @Result(property = "properties", column = "properties", typeHandler = Map2StringConverter.class)
   })
   List<Resource> selectResourcesByGroup(@Param("resourceGroup") String groupName);
