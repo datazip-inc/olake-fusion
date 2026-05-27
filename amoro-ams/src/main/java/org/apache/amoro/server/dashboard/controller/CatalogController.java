@@ -63,6 +63,7 @@ import org.apache.amoro.server.catalog.CatalogManager;
 import org.apache.amoro.server.catalog.InternalCatalog;
 import org.apache.amoro.server.catalog.ServerCatalog;
 import org.apache.amoro.server.dashboard.PlatformFileManager;
+import org.apache.amoro.server.dashboard.model.CatalogConnectionTestResult;
 import org.apache.amoro.server.dashboard.model.CatalogRegisterInfo;
 import org.apache.amoro.server.dashboard.model.CatalogSettingInfo;
 import org.apache.amoro.server.dashboard.model.CatalogSettingInfo.ConfigFileItem;
@@ -609,6 +610,15 @@ public class CatalogController {
     CatalogMeta catalogMeta = constructCatalogMeta(info, null);
     catalogService.createCatalog(catalogMeta);
     ctx.json(OkResponse.of(""));
+  }
+
+  /** Test catalog connection without persisting catalog metadata. */
+  public void testConnection(Context ctx) {
+    CatalogRegisterInfo info = ctx.bodyAsClass(CatalogRegisterInfo.class);
+    validateCatalogRegisterInfo(info);
+    CatalogMeta catalogMeta = constructCatalogMeta(info, null);
+    CatalogConnectionTestResult result = catalogService.testCatalogConnection(catalogMeta);
+    ctx.json(OkResponse.of(result));
   }
 
   private void validateCatalogRegisterInfo(CatalogRegisterInfo info) {

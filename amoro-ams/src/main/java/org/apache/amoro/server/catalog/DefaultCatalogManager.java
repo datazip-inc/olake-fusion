@@ -33,6 +33,7 @@ import org.apache.amoro.exception.IllegalMetadataException;
 import org.apache.amoro.exception.ObjectNotExistsException;
 import org.apache.amoro.properties.CatalogMetaProperties;
 import org.apache.amoro.server.AmoroManagementConf;
+import org.apache.amoro.server.dashboard.model.CatalogConnectionTestResult;
 import org.apache.amoro.server.dashboard.utils.AmsUtil;
 import org.apache.amoro.server.persistence.PersistentBase;
 import org.apache.amoro.server.persistence.mapper.CatalogMetaMapper;
@@ -48,6 +49,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -238,6 +240,30 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
   public AmoroTable<?> loadTable(TableIdentifier identifier) {
     ServerCatalog serverCatalog = getServerCatalog(identifier.getCatalog());
     return serverCatalog.loadTable(identifier.getDatabase(), identifier.getTableName());
+  }
+
+  @Override
+  public CatalogConnectionTestResult testCatalogConnection(CatalogMeta catalogMeta) {
+    fillCatalogProperties(catalogMeta);
+    ServerCatalog catalog = CatalogBuilder.buildServerCatalog(catalogMeta, serverConfiguration);
+    try {
+      List<String> databases = catalog.listDatabases();
+      String message =
+          String.format(
+              "Connection successful. Found %d database(s).",
+              databases != null ? databases.size() : 0);
+      return new CatalogConnectionTestResult(true, databases, message);
+    } catch (Exception e) {
+      LOG.warn(
+          "Catalog connection test failed for {}: {}",
+          catalogMeta.getCatalogName(),
+          e.getMessage(),
+          e);
+      return new CatalogConnectionTestResult(
+          false, Collections.emptyList(), e.getMessage() != null ? e.getMessage() : e.toString());
+    } finally {
+      catalog.dispose();
+    }
   }
 
   private void validateCatalogUpdate(CatalogMeta oldMeta, CatalogMeta newMeta) {
