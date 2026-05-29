@@ -20,6 +20,7 @@ package org.apache.amoro.server.catalog;
 
 import org.apache.amoro.AmoroTable;
 import org.apache.amoro.api.CatalogMeta;
+import org.apache.amoro.server.dashboard.model.CatalogConnectionTestResult;
 import org.apache.amoro.table.TableIdentifier;
 
 import java.util.List;
@@ -100,4 +101,12 @@ public interface CatalogManager {
    * @return managed table.
    */
   AmoroTable<?> loadTable(TableIdentifier identifier);
+
+  /**
+   * Test catalog connectivity without persisting catalog metadata.
+   *
+   * @param catalogMeta the catalog meta information used to build a temporary catalog
+   * @return connection test result with database list or failure message
+   */
+  CatalogConnectionTestResult testCatalogConnection(CatalogMeta catalogMeta);
 }
