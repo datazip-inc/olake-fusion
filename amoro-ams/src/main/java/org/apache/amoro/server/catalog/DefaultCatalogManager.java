@@ -248,10 +248,15 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
     ServerCatalog catalog = CatalogBuilder.buildServerCatalog(catalogMeta, serverConfiguration);
     try {
       List<String> databases = catalog.listDatabases();
-      String message =
-          String.format(
-              "Connection successful. Found %d database(s).",
-              databases != null ? databases.size() : 0);
+      String message;
+      if (databases.empty()) {
+        message = String.format("Test connection successful");
+      } else {
+        String testDatabase =
+            databases.stream().sorted().findFirst().orElseThrow(IllegalStateException::new);
+        CatalogTableListing.listTables(catalog, testDatabase).size();
+        message = String.format("Test connection sucessful");
+      }
       return new CatalogConnectionTestResult(true, databases, message);
     } catch (Exception e) {
       LOG.warn(
