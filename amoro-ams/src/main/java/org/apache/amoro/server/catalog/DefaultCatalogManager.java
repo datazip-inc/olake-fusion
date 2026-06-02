@@ -49,7 +49,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -242,18 +241,20 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
     return serverCatalog.loadTable(identifier.getDatabase(), identifier.getTableName());
   }
 
+  //  TODO: create a test_olake namespace and test_olake table to test the connection
   @Override
   public CatalogConnectionTestResult testCatalogConnection(CatalogMeta catalogMeta) {
-    fillCatalogProperties(catalogMeta);
-    ServerCatalog catalog = CatalogBuilder.buildServerCatalog(catalogMeta, serverConfiguration);
+    ServerCatalog catalog = null;
     try {
+      fillCatalogProperties(catalogMeta);
+      catalog = CatalogBuilder.buildServerCatalog(catalogMeta, serverConfiguration);
       List<String> databases = catalog.listDatabases();
       if (!databases.isEmpty()) {
         String testDatabase =
             databases.stream().sorted().findFirst().orElseThrow(IllegalStateException::new);
         CatalogTableListing.listTables(catalog, testDatabase);
       }
-      return new CatalogConnectionTestResult(true, databases, "Test connection successful");
+      return new CatalogConnectionTestResult(true, "Test connection successful");
     } catch (Exception e) {
       LOG.warn(
           "Catalog connection test failed for {}: {}",
@@ -261,9 +262,11 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
           e.getMessage(),
           e);
       return new CatalogConnectionTestResult(
-          false, Collections.emptyList(), e.getMessage() != null ? e.getMessage() : e.toString());
+          false, e.getMessage() != null ? e.getMessage() : e.toString());
     } finally {
-      catalog.dispose();
+      if (catalog != null) {
+        catalog.dispose();
+      }
     }
   }
 

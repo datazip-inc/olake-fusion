@@ -18,18 +18,14 @@
 
 package org.apache.amoro.server.dashboard.model;
 
-import java.util.List;
-
 public class CatalogConnectionTestResult {
   private boolean connected;
-  private List<String> databases;
   private String message;
 
   public CatalogConnectionTestResult() {}
 
-  public CatalogConnectionTestResult(boolean connected, List<String> databases, String message) {
+  public CatalogConnectionTestResult(boolean connected, String message) {
     this.connected = connected;
-    this.databases = databases;
     this.message = message;
   }
 
@@ -39,14 +35,6 @@ public class CatalogConnectionTestResult {
 
   public void setConnected(boolean connected) {
     this.connected = connected;
-  }
-
-  public List<String> getDatabases() {
-    return databases;
-  }
-
-  public void setDatabases(List<String> databases) {
-    this.databases = databases;
   }
 
   public String getMessage() {

@@ -18,23 +18,24 @@
 
 package org.apache.amoro.server.catalog;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Objects;
-import java.util.Set;
-import java.util.stream.Collectors;
+import static org.apache.amoro.properties.CatalogMetaProperties.CATALOG_TYPE_HIVE;
 
 import org.apache.amoro.TableFormat;
 import org.apache.amoro.api.CatalogMeta;
 import org.apache.amoro.hive.CachedHiveClientPool;
 import org.apache.amoro.hive.HMSClientPool;
 import org.apache.amoro.hive.utils.HiveTableUtil;
-import static org.apache.amoro.properties.CatalogMetaProperties.CATALOG_TYPE_HIVE;
 import org.apache.amoro.server.dashboard.model.TableMeta;
 import org.apache.amoro.shade.guava32.com.google.common.base.Function;
 import org.apache.amoro.table.TableMetaStore;
 import org.apache.amoro.utils.CatalogUtil;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /** Shared table-listing logic used by the dashboard API and catalog connection tests. */
 public final class CatalogTableListing {

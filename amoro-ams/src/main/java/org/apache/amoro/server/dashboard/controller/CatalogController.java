@@ -63,6 +63,7 @@ import org.apache.amoro.server.catalog.CatalogManager;
 import org.apache.amoro.server.catalog.InternalCatalog;
 import org.apache.amoro.server.catalog.ServerCatalog;
 import org.apache.amoro.server.dashboard.PlatformFileManager;
+import org.apache.amoro.server.dashboard.model.CatalogConnectionTestResult;
 import org.apache.amoro.server.dashboard.model.CatalogRegisterInfo;
 import org.apache.amoro.server.dashboard.model.CatalogSettingInfo;
 import org.apache.amoro.server.dashboard.model.CatalogSettingInfo.ConfigFileItem;
@@ -601,7 +602,7 @@ public class CatalogController {
 
   /** Register catalog to ams. */
   public void createCatalog(Context ctx) {
-    CatalogMeta catalogMeta = parseRegisterInfo(ctx);
+    CatalogMeta catalogMeta = parseCatalogInfo(ctx);
     if (catalogService.catalogExist(catalogMeta.getCatalogName())) {
       throw new RuntimeException("Duplicate catalog name!");
     }
@@ -611,13 +612,22 @@ public class CatalogController {
 
   /** Test catalog connection without persisting catalog metadata. */
   public void testConnection(Context ctx) {
-    ctx.json(OkResponse.of(catalogService.testCatalogConnection(parseRegisterInfo(ctx))));
+    try {
+      CatalogMeta catalogMeta = parseCatalogInfo(ctx);
+      ctx.json(OkResponse.of(catalogService.testCatalogConnection(catalogMeta)));
+    } catch (Exception e) {
+      ctx.json(
+          OkResponse.of(
+              new CatalogConnectionTestResult(
+                  false, e.getMessage() != null ? e.getMessage() : e.toString())));
+    }
   }
 
-  private CatalogMeta parseRegisterInfo(Context ctx) {
+  private CatalogMeta parseCatalogInfo(Context ctx) {
     CatalogRegisterInfo info = ctx.bodyAsClass(CatalogRegisterInfo.class);
     validateCatalogRegisterInfo(info);
-    return constructCatalogMeta(info, null);
+    CatalogMeta catalogMeta = constructCatalogMeta(info, null);
+    return catalogMeta;
   }
 
   private void validateCatalogRegisterInfo(CatalogRegisterInfo info) {
