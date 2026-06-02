@@ -618,11 +618,10 @@ public class CatalogController {
       CatalogMeta catalogMeta = parseCatalogInfo(ctx);
       ctx.json(OkResponse.of(catalogService.testCatalogConnection(catalogMeta)));
     } catch (Exception e) {
-      String errorMsg = "Test Connection unsuccessful: " + (e.getMessage() != null ? e.getMessage() : e.toString());
-      ctx.json(
-          OkResponse.of(
-              new CatalogConnectionTestResult(
-                  false, errorMsg)));
+      String errorMsg =
+          "Test Connection unsuccessful: "
+              + (e.getMessage() != null ? e.getMessage() : e.toString());
+      ctx.json(OkResponse.of(new CatalogConnectionTestResult(false, errorMsg)));
     }
   }
 

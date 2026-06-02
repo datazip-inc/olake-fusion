@@ -27,7 +27,6 @@ import static org.apache.amoro.properties.CatalogMetaProperties.CLIENT_POOL_SIZE
 import org.apache.amoro.AmoroTable;
 import org.apache.amoro.Constants;
 import org.apache.amoro.api.CatalogMeta;
-import java.util.Collections;
 import org.apache.amoro.config.Configurations;
 import org.apache.amoro.exception.AlreadyExistsException;
 import org.apache.amoro.exception.IllegalMetadataException;
@@ -50,6 +49,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -262,9 +262,10 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
           catalogMeta.getCatalogName(),
           e.getMessage(),
           e);
-        String errorMsg = "Test Connection unsuccessful: " + (e.getMessage() != null ? e.getMessage() : e.toString());
+      String errorMsg =
+          "Test Connection unsuccessful: "
+              + (e.getMessage() != null ? e.getMessage() : e.toString());
       return new CatalogConnectionTestResult(false, errorMsg);
-    }
     }
   }
 
