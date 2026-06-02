@@ -27,6 +27,7 @@ import static org.apache.amoro.properties.CatalogMetaProperties.CLIENT_POOL_SIZE
 import org.apache.amoro.AmoroTable;
 import org.apache.amoro.Constants;
 import org.apache.amoro.api.CatalogMeta;
+import java.util.Collections;
 import org.apache.amoro.config.Configurations;
 import org.apache.amoro.exception.AlreadyExistsException;
 import org.apache.amoro.exception.IllegalMetadataException;
@@ -246,12 +247,12 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
   public CatalogConnectionTestResult testCatalogConnection(CatalogMeta catalogMeta) {
     ServerCatalog catalog = null;
     try {
-      fillCatalogProperties(catalogMeta);
-      catalog = CatalogBuilder.buildServerCatalog(catalogMeta, serverConfiguration);
+      CatalogMeta copy = catalogMeta.deepCopy();
+      fillCatalogProperties(copy);
+      catalog = CatalogBuilder.buildServerCatalog(copy, serverConfiguration);
       List<String> databases = catalog.listDatabases();
       if (!databases.isEmpty()) {
-        String testDatabase =
-            databases.stream().sorted().findFirst().orElseThrow(IllegalStateException::new);
+        String testDatabase = Collections.min(databases);
         CatalogTableListing.listTables(catalog, testDatabase);
       }
       return new CatalogConnectionTestResult(true, "Test connection successful");
@@ -261,12 +262,9 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
           catalogMeta.getCatalogName(),
           e.getMessage(),
           e);
-      return new CatalogConnectionTestResult(
-          false, e.getMessage() != null ? e.getMessage() : e.toString());
-    } finally {
-      if (catalog != null) {
-        catalog.dispose();
-      }
+        String errorMsg = "Test Connection unsuccessful: " + (e.getMessage() != null ? e.getMessage() : e.toString());
+      return new CatalogConnectionTestResult(false, errorMsg);
+    }
     }
   }
 

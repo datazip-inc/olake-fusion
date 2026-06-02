@@ -602,24 +602,27 @@ public class CatalogController {
 
   /** Register catalog to ams. */
   public void createCatalog(Context ctx) {
-    CatalogMeta catalogMeta = parseCatalogInfo(ctx);
-    if (catalogService.catalogExist(catalogMeta.getCatalogName())) {
+    CatalogRegisterInfo info = ctx.bodyAsClass(CatalogRegisterInfo.class);
+    if (catalogService.catalogExist(info.getName())) {
       throw new RuntimeException("Duplicate catalog name!");
     }
+    validateCatalogRegisterInfo(info);
+    CatalogMeta catalogMeta = constructCatalogMeta(info, null);
     catalogService.createCatalog(catalogMeta);
     ctx.json(OkResponse.of(""));
   }
 
-  /** Test catalog connection without persisting catalog metadata. */
+  // test catalog connnection
   public void testConnection(Context ctx) {
     try {
       CatalogMeta catalogMeta = parseCatalogInfo(ctx);
       ctx.json(OkResponse.of(catalogService.testCatalogConnection(catalogMeta)));
     } catch (Exception e) {
+      String errorMsg = "Test Connection unsuccessful: " + (e.getMessage() != null ? e.getMessage() : e.toString());
       ctx.json(
           OkResponse.of(
               new CatalogConnectionTestResult(
-                  false, e.getMessage() != null ? e.getMessage() : e.toString())));
+                  false, errorMsg)));
     }
   }
 

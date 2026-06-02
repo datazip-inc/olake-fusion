@@ -103,7 +103,7 @@ public interface CatalogManager {
   AmoroTable<?> loadTable(TableIdentifier identifier);
 
   /**
-   * Test catalog connectivity without persisting catalog metadata.
+   * Test catalog connection.
    *
    * @param catalogMeta the catalog meta information used to build a temporary catalog
    * @return connection test result with database list or failure message

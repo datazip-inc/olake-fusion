@@ -18,30 +18,12 @@
 
 package org.apache.amoro.server.dashboard.model;
 
-public class CatalogConnectionTestResult {
-  private boolean connected;
-  private String message;
-
-  public CatalogConnectionTestResult() {}
+public final class CatalogConnectionTestResult {
+  private final boolean connected;
+  private final String message;
 
   public CatalogConnectionTestResult(boolean connected, String message) {
     this.connected = connected;
-    this.message = message;
-  }
-
-  public boolean isConnected() {
-    return connected;
-  }
-
-  public void setConnected(boolean connected) {
-    this.connected = connected;
-  }
-
-  public String getMessage() {
-    return message;
-  }
-
-  public void setMessage(String message) {
     this.message = message;
   }
 }
