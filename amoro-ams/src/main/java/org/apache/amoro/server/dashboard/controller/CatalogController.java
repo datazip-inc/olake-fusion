@@ -628,13 +628,6 @@ public class CatalogController {
     }
   }
 
-  // private CatalogMeta parseCatalogInfo(Context ctx) {
-  //   CatalogRegisterInfo info = ctx.bodyAsClass(CatalogRegisterInfo.class);
-  //   validateCatalogRegisterInfo(info);
-  //   CatalogMeta catalogMeta = constructCatalogMeta(info, null);
-  //   return catalogMeta;
-  // }
-
   private void validateCatalogRegisterInfo(CatalogRegisterInfo info) {
     Preconditions.checkNotNull(info.getAuthConfig(), "Catalog auth config must not be null");
     Preconditions.checkNotNull(info.getStorageConfig(), "Catalog storage config must not be null");
