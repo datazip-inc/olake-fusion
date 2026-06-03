@@ -14,7 +14,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- * 
+ *
  * Modified by Datazip Inc. in 2026
  */
 
@@ -605,10 +605,6 @@ public class CatalogController {
   /** Register catalog to ams. */
   public void createCatalog(Context ctx) {
     CatalogRegisterInfo info = ctx.bodyAsClass(CatalogRegisterInfo.class);
-    if (catalogService.catalogExist(info.getName())) {
-      throw new RuntimeException("Duplicate catalog name!");
-    }
-    validateCatalogRegisterInfo(info);
     CatalogMeta catalogMeta = constructCatalogMeta(info, null);
     catalogService.createCatalog(catalogMeta);
     ctx.json(OkResponse.of(""));
@@ -617,7 +613,12 @@ public class CatalogController {
   // test catalog connnection
   public void testConnection(Context ctx) {
     try {
-      CatalogMeta catalogMeta = parseCatalogInfo(ctx);
+      CatalogRegisterInfo info = ctx.bodyAsClass(CatalogRegisterInfo.class);
+      if (catalogService.catalogExist(info.getName())) {
+        throw new RuntimeException("Duplicate catalog name!");
+      }
+      validateCatalogRegisterInfo(info);
+      CatalogMeta catalogMeta = constructCatalogMeta(info, null);
       ctx.json(OkResponse.of(catalogService.testCatalogConnection(catalogMeta)));
     } catch (Exception e) {
       String errorMsg =
@@ -627,12 +628,12 @@ public class CatalogController {
     }
   }
 
-  private CatalogMeta parseCatalogInfo(Context ctx) {
-    CatalogRegisterInfo info = ctx.bodyAsClass(CatalogRegisterInfo.class);
-    validateCatalogRegisterInfo(info);
-    CatalogMeta catalogMeta = constructCatalogMeta(info, null);
-    return catalogMeta;
-  }
+  // private CatalogMeta parseCatalogInfo(Context ctx) {
+  //   CatalogRegisterInfo info = ctx.bodyAsClass(CatalogRegisterInfo.class);
+  //   validateCatalogRegisterInfo(info);
+  //   CatalogMeta catalogMeta = constructCatalogMeta(info, null);
+  //   return catalogMeta;
+  // }
 
   private void validateCatalogRegisterInfo(CatalogRegisterInfo info) {
     Preconditions.checkNotNull(info.getAuthConfig(), "Catalog auth config must not be null");
