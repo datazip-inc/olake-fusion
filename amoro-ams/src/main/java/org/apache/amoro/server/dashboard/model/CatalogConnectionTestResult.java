@@ -21,8 +21,8 @@
 package org.apache.amoro.server.dashboard.model;
 
 public final class CatalogConnectionTestResult {
-  private final boolean connected;
-  private final String message;
+  public final boolean connected;
+  public final String message;
 
   public CatalogConnectionTestResult(boolean connected, String message) {
     this.connected = connected;
