@@ -33,7 +33,6 @@ import org.apache.amoro.table.TableMetaStore;
 import org.apache.amoro.utils.CatalogUtil;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -68,11 +67,18 @@ public final class CatalogTableListing {
                         new TableMeta(
                             idWithFormat.getIdentifier().getTableName(),
                             formatToType.apply(idWithFormat.getTableFormat())))
-                .sorted(Comparator.comparing(TableMeta::getType).thenComparing(TableMeta::getName))
+                .sorted(
+                    (table1, table2) -> {
+                      if (Objects.equals(table1.getType(), table2.getType())) {
+                        return table1.getName().compareTo(table2.getName());
+                      } else {
+                        return table1.getType().compareTo(table2.getType());
+                      }
+                    })
                 .collect(Collectors.toList()));
 
     String catalogType = serverCatalog.getMetadata().getCatalogType();
-    if (Objects.equals(catalogType, CATALOG_TYPE_HIVE)) {
+    if (catalogType.equals(CATALOG_TYPE_HIVE)) {
       CatalogMeta catalogMeta = serverCatalog.getMetadata();
       TableMetaStore tableMetaStore = CatalogUtil.buildMetaStore(catalogMeta);
       HMSClientPool hmsClientPool =

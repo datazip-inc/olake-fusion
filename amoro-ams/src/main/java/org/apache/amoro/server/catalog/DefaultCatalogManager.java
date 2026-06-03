@@ -267,6 +267,9 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
               + (e.getMessage() != null ? e.getMessage() : e.toString());
       return new CatalogConnectionTestResult(false, errorMsg);
     }
+    finally{
+      disposeCatalog(catalogMeta.getCatalogName());
+    }
   }
 
   private void validateCatalogUpdate(CatalogMeta oldMeta, CatalogMeta newMeta) {
