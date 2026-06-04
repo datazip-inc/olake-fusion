@@ -242,19 +242,13 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
     return serverCatalog.loadTable(identifier.getDatabase(), identifier.getTableName());
   }
 
-  //  TODO: create a test_olake namespace and test_olake table to test the connection
   @Override
   public CatalogConnectionTestResult testCatalogConnection(CatalogMeta catalogMeta) {
-    ServerCatalog catalog = null;
     try {
       CatalogMeta copy = catalogMeta.deepCopy();
       fillCatalogProperties(copy);
-      catalog = CatalogBuilder.buildServerCatalog(copy, serverConfiguration);
-      List<String> databases = catalog.listDatabases();
-      if (!databases.isEmpty()) {
-        String testDatabase = Collections.min(databases);
-        CatalogTableListing.listTables(catalog, testDatabase);
-      }
+      ServerCatalog catalog = CatalogBuilder.buildServerCatalog(copy, serverConfiguration);
+      CatalogConnectionTester.runTestConnection(catalog);
       return new CatalogConnectionTestResult(true, "Test connection successful");
     } catch (Exception e) {
       LOG.warn(
