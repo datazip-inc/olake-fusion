@@ -45,7 +45,12 @@ public class CatalogConnectionTester {
   static final String TEST_TABLE = "test_olake";
 
   private static final Schema TEST_SCHEMA =
-      new Schema(Types.NestedField.required(1, "id", Types.IntegerType.get()));
+      new Schema(
+          Types.NestedField.required(1, "_olake_id", Types.StringType.get()),
+          Types.NestedField.required(2, "_olake_timestamp", Types.TimestampType.withZone()),
+          Types.NestedField.required(3, "_op_type", Types.StringType.get()),
+          Types.NestedField.optional(4, "_cdc_timestamp", Types.TimestampType.withZone()),
+          Types.NestedField.required(5, "data", Types.StringType.get()));
 
   public static void runTestConnection(ServerCatalog serverCatalog) throws Exception {
     CatalogMeta catalogMeta = serverCatalog.getMetadata();
@@ -79,7 +84,6 @@ public class CatalogConnectionTester {
     SupportsNamespaces nsCatalog = (SupportsNamespaces) catalog;
     Namespace ns = Namespace.of(TEST_NAMESPACE);
     TableIdentifier tableId = TableIdentifier.of(ns, TEST_TABLE);
-    //    tableId = { namespace: ns, name: "test_olake" }
     try {
       try {
         nsCatalog.createNamespace(ns);
@@ -96,11 +100,12 @@ public class CatalogConnectionTester {
         TableExists = true;
         LOG.info("Test table {} created successfully", tableId);
       } catch (Exception e) {
-        LOG.error("Test connection failed  while creating table {}: {}", tableId, e.getMessage(), e);
+        LOG.error(
+            "Test connection failed  while creating table {}: {}", tableId, e.getMessage(), e);
         throw e;
       }
     } finally {
-      if(tableExists || namespaceExists) {
+      if (tableExists || namespaceExists) {
         cleanup(catalog, nsCatalog, ns, tableId, tableExists, namespaceExists);
       }
     }
@@ -108,7 +113,12 @@ public class CatalogConnectionTester {
   }
 
   private static void cleanup(
-      Catalog catalog, SupportsNamespaces nsCatalog, Namespace ns, TableIdentifier tableId, Boolean tableExists, Boolean namespaceExists) {
+      Catalog catalog,
+      SupportsNamespaces nsCatalog,
+      Namespace ns,
+      TableIdentifier tableId,
+      Boolean tableExists,
+      Boolean namespaceExists) {
     try {
       if (tableExists) {
         catalog.dropTable(tableId, true);
@@ -118,7 +128,7 @@ public class CatalogConnectionTester {
       LOG.warn("Connection test dropTable {} failed: {}", tableId, e.getMessage(), e);
     }
     try {
-      if(namespaceExists) {
+      if (namespaceExists) {
         nsCatalog.dropNamespace(ns);
         LOG.info("Connection test namespace {} dropped", ns);
       }

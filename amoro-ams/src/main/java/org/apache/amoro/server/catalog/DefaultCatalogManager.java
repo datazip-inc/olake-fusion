@@ -49,7 +49,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -260,8 +259,7 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
           "Test Connection unsuccessful: "
               + (e.getMessage() != null ? e.getMessage() : e.toString());
       return new CatalogConnectionTestResult(false, errorMsg);
-    }
-    finally{
+    } finally {
       disposeCatalog(catalogMeta.getCatalogName());
     }
   }

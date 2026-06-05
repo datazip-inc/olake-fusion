@@ -108,7 +108,7 @@ public interface CatalogManager {
    * Test catalog connection.
    *
    * @param catalogMeta the catalog meta information used to build a temporary catalog
-   * @return connection test result success or failure message
+   * @return connection test result with success or failure message
    */
   CatalogConnectionTestResult testCatalogConnection(CatalogMeta catalogMeta);
 }
