@@ -99,31 +99,31 @@ public class CatalogConnectionTester {
     if (!nsCatalog.namespaceExists(ns)) {
       try {
         nsCatalog.createNamespace(ns);
-        LOG.info("Connection test namespace {} created", TEST_NAMESPACE);
+        LOG.info("Test connection namespace {} created", TEST_NAMESPACE);
       } catch (Exception e) {
         LOG.error("Connection test failed while creating namespace {}: {}", TEST_NAMESPACE, e.getMessage(),e);
         throw e;
       }
     } else {
-      LOG.info("Connection test namespace {} already exists, reusing it", TEST_NAMESPACE);
+      LOG.info("Test connection namespace {} already exists, reusing it", TEST_NAMESPACE);
     }
 
     // Create table if it does not already exist; otherwise load the existing one.
     if (!catalog.tableExists(tableId)) {
       try {
         catalog.createTable(tableId, TEST_SCHEMA, PartitionSpec.unpartitioned());
-        LOG.info("Connection test table {} created", tableId);
+        LOG.info("Test table {} created", tableId);
       } catch (Exception e) {
-        LOG.error("Connection test failed while creating table {}: {}", tableId, e.getMessage(), e);
+        LOG.error("Test connection failed while creating table {}: {}", tableId, e.getMessage(), e);
         throw e;
       }
     } else {
-      LOG.info("Connection test table {} already exists, reusing it", tableId);
+      LOG.info("Test table {} already exists, reusing it", tableId);
     }
     try {
       writeTestRecord(catalog, tableId);
     } catch (Exception e) {
-      LOG.error("Connection test failed while writing test record to {}: {}", tableId, e.getMessage(), e);
+      LOG.error("Test connection failed while writing test record to {}: {}", tableId, e.getMessage(), e);
       throw e;
     }
     LOG.info("Test connection finished successfully for catalog {}", catalogName);
