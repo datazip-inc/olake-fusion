@@ -101,7 +101,11 @@ public class CatalogConnectionTester {
         nsCatalog.createNamespace(ns);
         LOG.info("Test connection namespace {} created", TEST_NAMESPACE);
       } catch (Exception e) {
-        LOG.error("Connection test failed while creating namespace {}: {}", TEST_NAMESPACE, e.getMessage(),e);
+        LOG.error(
+            "Connection test failed while creating namespace {}: {}",
+            TEST_NAMESPACE,
+            e.getMessage(),
+            e);
         throw e;
       }
     } else {
@@ -123,7 +127,8 @@ public class CatalogConnectionTester {
     try {
       writeTestRecord(catalog, tableId);
     } catch (Exception e) {
-      LOG.error("Test connection failed while writing test record to {}: {}", tableId, e.getMessage(), e);
+      LOG.error(
+          "Test connection failed while writing test record to {}: {}", tableId, e.getMessage(), e);
       throw e;
     }
     LOG.info("Test connection finished successfully for catalog {}", catalogName);
