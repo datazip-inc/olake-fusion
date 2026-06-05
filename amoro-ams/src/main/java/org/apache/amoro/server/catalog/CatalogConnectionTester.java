@@ -87,6 +87,7 @@ public class CatalogConnectionTester {
     try {
       try {
         nsCatalog.createNamespace(ns);
+        namespaceExists = true;
       } catch (Exception e) {
         LOG.error(
             "Connection test failed while creating namespace {}: {}",
@@ -97,7 +98,7 @@ public class CatalogConnectionTester {
       }
       try {
         catalog.createTable(tableId, TEST_SCHEMA, PartitionSpec.unpartitioned());
-        TableExists = true;
+        tableExists = true;
         LOG.info("Test table {} created successfully", tableId);
       } catch (Exception e) {
         LOG.error(
