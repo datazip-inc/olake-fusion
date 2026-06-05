@@ -25,16 +25,29 @@ import org.apache.amoro.aws.StaticAwsCredentialsProvider;
 import org.apache.amoro.properties.CatalogMetaProperties;
 import org.apache.amoro.table.TableMetaStore;
 import org.apache.amoro.utils.MixedFormatCatalogUtil;
+import org.apache.iceberg.AppendFiles;
+import org.apache.iceberg.DataFile;
+import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.Table;
 import org.apache.iceberg.catalog.Catalog;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.SupportsNamespaces;
 import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.data.GenericAppenderFactory;
+import org.apache.iceberg.data.GenericRecord;
+import org.apache.iceberg.data.Record;
+import org.apache.iceberg.io.OutputFileFactory;
+import org.apache.iceberg.io.UnpartitionedWriter;
+import org.apache.iceberg.io.WriteResult;
 import org.apache.iceberg.types.Types;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.Map;
 
 public class CatalogConnectionTester {
@@ -79,62 +92,78 @@ public class CatalogConnectionTester {
 
   private static void createNamespaceAndTable(Catalog catalog, String catalogName)
       throws Exception {
-    Boolean tableExists = false;
-    Boolean namespaceExists = false;
     SupportsNamespaces nsCatalog = (SupportsNamespaces) catalog;
     Namespace ns = Namespace.of(TEST_NAMESPACE);
     TableIdentifier tableId = TableIdentifier.of(ns, TEST_TABLE);
-    try {
+    // Create namespace if it does not already exist.
+    if (!nsCatalog.namespaceExists(ns)) {
       try {
         nsCatalog.createNamespace(ns);
-        namespaceExists = true;
+        LOG.info("Connection test namespace {} created", TEST_NAMESPACE);
       } catch (Exception e) {
-        LOG.error(
-            "Connection test failed while creating namespace {}: {}",
-            TEST_NAMESPACE,
-            e.getMessage(),
-            e);
+        LOG.error("Connection test failed while creating namespace {}: {}", TEST_NAMESPACE, e.getMessage(),e);
         throw e;
       }
+    } else {
+      LOG.info("Connection test namespace {} already exists, reusing it", TEST_NAMESPACE);
+    }
+
+    // Create table if it does not already exist; otherwise load the existing one.
+    if (!catalog.tableExists(tableId)) {
       try {
         catalog.createTable(tableId, TEST_SCHEMA, PartitionSpec.unpartitioned());
-        tableExists = true;
-        LOG.info("Test table {} created successfully", tableId);
+        LOG.info("Connection test table {} created", tableId);
       } catch (Exception e) {
-        LOG.error(
-            "Test connection failed  while creating table {}: {}", tableId, e.getMessage(), e);
+        LOG.error("Connection test failed while creating table {}: {}", tableId, e.getMessage(), e);
         throw e;
       }
-    } finally {
-      if (tableExists || namespaceExists) {
-        cleanup(catalog, nsCatalog, ns, tableId, tableExists, namespaceExists);
-      }
+    } else {
+      LOG.info("Connection test table {} already exists, reusing it", tableId);
+    }
+    try {
+      writeTestRecord(catalog, tableId);
+    } catch (Exception e) {
+      LOG.error("Connection test failed while writing test record to {}: {}", tableId, e.getMessage(), e);
+      throw e;
     }
     LOG.info("Test connection finished successfully for catalog {}", catalogName);
   }
 
-  private static void cleanup(
-      Catalog catalog,
-      SupportsNamespaces nsCatalog,
-      Namespace ns,
-      TableIdentifier tableId,
-      Boolean tableExists,
-      Boolean namespaceExists) {
-    try {
-      if (tableExists) {
-        catalog.dropTable(tableId, true);
-        LOG.info("Connection test table {} dropped", tableId);
-      }
-    } catch (Exception e) {
-      LOG.warn("Connection test dropTable {} failed: {}", tableId, e.getMessage(), e);
+  private static void writeTestRecord(Catalog catalog, TableIdentifier tableId) throws Exception {
+    Table table = catalog.loadTable(tableId);
+    appendRecord(table, createTestRecord(table.schema()));
+    LOG.info("Test record written successfully to table {}", tableId);
+  }
+
+  private static GenericRecord createTestRecord(Schema schema) {
+    GenericRecord record = GenericRecord.create(schema);
+    OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+    record.setField("_olake_id", "olake");
+    record.setField("_olake_timestamp", now);
+    record.setField("_op_type", "r");
+    record.setField("_cdc_timestamp", now);
+    record.setField("data", "{\"name\":\"olake\"}");
+    return record;
+  }
+
+  private static void appendRecord(Table table, Record record) throws IOException {
+    Schema schema = table.schema();
+    WriteResult result;
+    try (UnpartitionedWriter<Record> writer =
+        new UnpartitionedWriter<>(
+            table.spec(),
+            FileFormat.PARQUET,
+            new GenericAppenderFactory(schema, table.spec()),
+            OutputFileFactory.builderFor(table, 0, 0).build(),
+            table.io(),
+            Long.MAX_VALUE)) {
+      writer.write(record);
+      result = writer.complete();
     }
-    try {
-      if (namespaceExists) {
-        nsCatalog.dropNamespace(ns);
-        LOG.info("Connection test namespace {} dropped", ns);
-      }
-    } catch (Exception e) {
-      LOG.warn("Connection test dropNamespace {} failed: {}", ns, e.getMessage(), e);
+    AppendFiles append = table.newFastAppend();
+    for (DataFile dataFile : result.dataFiles()) {
+      append.appendFile(dataFile);
     }
+    append.commit();
   }
 }
