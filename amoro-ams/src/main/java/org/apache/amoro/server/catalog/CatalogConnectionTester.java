@@ -20,6 +20,12 @@
 
 package org.apache.amoro.server.catalog;
 
+import java.io.Closeable;
+import java.io.IOException;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.Map;
+
 import org.apache.amoro.api.CatalogMeta;
 import org.apache.amoro.aws.StaticAwsCredentialsProvider;
 import org.apache.amoro.properties.CatalogMetaProperties;
@@ -45,11 +51,6 @@ import org.apache.iceberg.types.Types;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
-import java.util.Map;
-
 public class CatalogConnectionTester {
 
   private static final Logger LOG = LoggerFactory.getLogger(CatalogConnectionTester.class);
@@ -69,12 +70,10 @@ public class CatalogConnectionTester {
     CatalogMeta catalogMeta = serverCatalog.getMetadata();
     String catalogName = catalogMeta.getCatalogName();
     String metastoreType = catalogMeta.getCatalogType();
-    TableMetaStore metaStore = serverCatalog.metaStore;
+    TableMetaStore metaStore = serverCatalog.metaStore();
 
-    // We cannot use icebergCatalog.java  because it does not support createTable operation.
-    // Building raw iceberg catalog that supports createTable operation.
-
-    // create iceberg catalog properties
+    // We cannot use IcebergCatalog.java because it does not support createTable operation.
+    // Build a raw Iceberg catalog that supports createTable.
     Map<String, String> baseIcebergProps =
         MixedFormatCatalogUtil.withIcebergCatalogInitializeProperties(
             catalogName, metastoreType, catalogMeta.getCatalogProperties());
@@ -82,16 +81,27 @@ public class CatalogConnectionTester {
         CatalogMetaProperties.CATALOG_TYPE_GLUE.equalsIgnoreCase(metastoreType)
             ? StaticAwsCredentialsProvider.applyGlueCredentials(baseIcebergProps)
             : baseIcebergProps;
-    // create iceberg catalog
-    Catalog catalog =
-        org.apache.iceberg.CatalogUtil.buildIcebergCatalog(
-            catalogName, icebergProps, metaStore.getConfiguration());
-    createNamespaceAndTable(catalog, catalogName);
+
+    // All catalog/IO operations must run under the configured TableMetaStore UGI so that
+    // Kerberos / hadoop-user impersonation behaves the same as regular catalog access
+    // (see IcebergCatalog which wraps every operation in metaStore.doAs).
+    metaStore.doAs(
+        () -> {
+          Catalog catalog =
+              org.apache.iceberg.CatalogUtil.buildIcebergCatalog(
+                  catalogName, icebergProps, metaStore.getConfiguration());
+          try {
+            createNamespaceAndTable(catalog, catalogName);
+          } finally {
+            closeQuietly(catalog);
+          }
+          return null;
+        });
   }
 
   private static void createNamespaceAndTable(Catalog catalog, String catalogName)
       throws Exception {
-    SupportsNamespaces nsCatalog = (SupportsNamespaces) catalog;
+    SupportsNamespaces nsCatalog = asNamespaceCatalog(catalog);
     Namespace ns = Namespace.of(TEST_NAMESPACE);
     TableIdentifier tableId = TableIdentifier.of(ns, TEST_TABLE);
     // Create namespace if it does not already exist.
@@ -133,6 +143,15 @@ public class CatalogConnectionTester {
     LOG.info("Test connection finished successfully for catalog {}", catalogName);
   }
 
+  private static SupportsNamespaces asNamespaceCatalog(Catalog catalog) {
+    if (!(catalog instanceof SupportsNamespaces)) {
+      String className = catalog == null ? "null" : catalog.getClass().getName();
+      throw new UnsupportedOperationException(
+          String.format("Iceberg catalog: %s doesn't implement SupportsNamespaces", className));
+    }
+    return (SupportsNamespaces) catalog;
+  }
+
   private static void writeTestRecord(Catalog catalog, TableIdentifier tableId) throws Exception {
     Table table = catalog.loadTable(tableId);
     appendRecord(table, createTestRecord(table.schema()));
@@ -169,5 +188,15 @@ public class CatalogConnectionTester {
       append.appendFile(dataFile);
     }
     append.commit();
+  }
+
+  private static void closeQuietly(Catalog catalog) {
+    if (catalog instanceof Closeable) {
+      try {
+        ((Closeable) catalog).close();
+      } catch (Exception e) {
+        LOG.warn("Failed to close iceberg catalog after connection test: {}", e.getMessage(), e);
+      }
+    }
   }
 }

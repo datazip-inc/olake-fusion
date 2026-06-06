@@ -616,17 +616,31 @@ public class CatalogController {
 
   // test catalog connection
   public void testConnection(Context ctx) {
+    CatalogRegisterInfo info;
+    CatalogMeta catalogMeta;
     try {
-      CatalogRegisterInfo info = ctx.bodyAsClass(CatalogRegisterInfo.class);
+      info = ctx.bodyAsClass(CatalogRegisterInfo.class);
       validateCatalogRegisterInfo(info);
-      CatalogMeta catalogMeta = constructCatalogMeta(info, null);
-      ctx.json(OkResponse.of(catalogService.testCatalogConnection(catalogMeta)));
+      // When testing an already-registered catalog (edit flow), reuse the stored auth/storage
+      // config so the user doesn't have to re-upload keytabs / hadoop XMLs and so that
+      // desensitized secrets ("•••…") are replaced with the real values before we build the
+      // iceberg catalog. Mirrors what updateCatalog does.
+      CatalogMeta oldCatalogMeta =
+          catalogService.catalogExist(info.getName())
+              ? catalogService.getCatalogMeta(info.getName())
+              : null;
+      if (oldCatalogMeta != null) {
+        unMaskSensitiveData(info, oldCatalogMeta);
+      }
+      catalogMeta = constructCatalogMeta(info, oldCatalogMeta);
     } catch (Exception e) {
       String errorMsg =
-          "Test Connection unsuccessful: "
+          "Invalid catalog configuration: "
               + (e.getMessage() != null ? e.getMessage() : e.toString());
       ctx.json(OkResponse.of(new CatalogConnectionTestResult(false, errorMsg)));
+      return;
     }
+    ctx.json(OkResponse.of(catalogService.testCatalogConnection(catalogMeta)));
   }
 
   private void validateCatalogRegisterInfo(CatalogRegisterInfo info) {

@@ -46,6 +46,10 @@ public abstract class ServerCatalog extends PersistentBase {
     return metadata;
   }
 
+  public TableMetaStore metaStore() {
+    return metaStore;
+  }
+
   public void updateMetadata(CatalogMeta metadata) {
     doAs(CatalogMetaMapper.class, mapper -> mapper.updateCatalog(metadata));
     this.metadata = metadata;

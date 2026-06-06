@@ -38,7 +38,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-/** Shared table-listing logic used by the dashboard API and catalog connection tests. */
+/** Shared table-listing logic used by the dashboard API. */
 public final class CatalogTableListing {
 
   private CatalogTableListing() {}

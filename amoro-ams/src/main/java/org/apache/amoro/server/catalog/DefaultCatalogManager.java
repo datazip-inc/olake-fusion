@@ -243,11 +243,16 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
 
   @Override
   public CatalogConnectionTestResult testCatalogConnection(CatalogMeta catalogMeta) {
+    // Build a throwaway ServerCatalog purely for the connectivity check. We must NOT touch
+    // serverCatalogMap / metaCache for catalogMeta.getCatalogName() here: if a catalog with
+    // that name is already registered and live, disposing it from the map would yank it out
+    // from under concurrent callers and force a needless cache reload.
+    ServerCatalog testCatalog = null;
     try {
       CatalogMeta copy = catalogMeta.deepCopy();
       fillCatalogProperties(copy);
-      ServerCatalog catalog = CatalogBuilder.buildServerCatalog(copy, serverConfiguration);
-      CatalogConnectionTester.runTestConnection(catalog);
+      testCatalog = CatalogBuilder.buildServerCatalog(copy, serverConfiguration);
+      CatalogConnectionTester.runTestConnection(testCatalog);
       return new CatalogConnectionTestResult(true, "Test connection successful");
     } catch (Exception e) {
       LOG.warn(
@@ -260,7 +265,17 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
               + (e.getMessage() != null ? e.getMessage() : e.toString());
       return new CatalogConnectionTestResult(false, errorMsg);
     } finally {
-      disposeCatalog(catalogMeta.getCatalogName());
+      if (testCatalog != null) {
+        try {
+          testCatalog.dispose();
+        } catch (Exception disposeEx) {
+          LOG.warn(
+              "Failed to dispose throwaway catalog used for connection test {}: {}",
+              catalogMeta.getCatalogName(),
+              disposeEx.getMessage(),
+              disposeEx);
+        }
+      }
     }
   }
 
