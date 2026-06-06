@@ -82,7 +82,6 @@ public class CatalogConnectionTester {
         CatalogMetaProperties.CATALOG_TYPE_GLUE.equalsIgnoreCase(metastoreType)
             ? StaticAwsCredentialsProvider.applyGlueCredentials(baseIcebergProps)
             : baseIcebergProps;
-d
     // create iceberg catalog
     Catalog catalog =
         org.apache.iceberg.CatalogUtil.buildIcebergCatalog(
