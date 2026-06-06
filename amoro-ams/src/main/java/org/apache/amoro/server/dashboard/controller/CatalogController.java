@@ -614,7 +614,7 @@ public class CatalogController {
     ctx.json(OkResponse.of(""));
   }
 
-  // test catalog cnnnection
+  // test catalog connection
   public void testConnection(Context ctx) {
     try {
       CatalogRegisterInfo info = ctx.bodyAsClass(CatalogRegisterInfo.class);
