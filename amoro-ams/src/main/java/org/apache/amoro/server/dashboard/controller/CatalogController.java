@@ -628,7 +628,7 @@ public class CatalogController {
         oldCatalogMeta = catalogService.getCatalogMeta(info.getName());
         unMaskSensitiveData(info, oldCatalogMeta);
       }
-      catalogMeta = constructCatalogMeta(info, null);
+      catalogMeta = constructCatalogMeta(info, oldCatalogMeta);
     } catch (Exception e) {
       String errorMsg = "Invalid catalog configuration: " + ExceptionUtils.getRootCauseMessage(e);
       ctx.json(OkResponse.of(new CatalogConnectionTestResult(false, errorMsg)));
