@@ -44,6 +44,7 @@ import org.apache.amoro.shade.guava32.com.google.common.cache.LoadingCache;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Maps;
 import org.apache.amoro.table.TableIdentifier;
 import org.apache.amoro.utils.CatalogUtil;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -243,16 +244,19 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
 
   @Override
   public CatalogConnectionTestResult testCatalogConnection(CatalogMeta catalogMeta) {
-    // Build a throwaway ServerCatalog purely for the connectivity check. We must NOT touch
-    // serverCatalogMap / metaCache for catalogMeta.getCatalogName() here: if a catalog with
-    // that name is already registered and live, disposing it from the map would yank it out
-    // from under concurrent callers and force a needless cache reload.
-    ServerCatalog testCatalog = null;
+    // The test must NOT touch serverCatalogMap / metaCache for catalogMeta.getCatalogName():
+    // if a catalog with that name is already registered and live, disposing it from the map
+    // would yank it out from under concurrent callers and force a needless cache reload.
+    //
+    // We also deliberately do NOT build a ServerCatalog here: ExternalCatalog's constructor
+    // eagerly builds a CommonUnifiedCatalog + one FormatCatalog per configured format, each
+    // holding real connections (HMS pool, REST HTTP client, AWS client, ...). ServerCatalog
+    // .dispose() is a no-op, so those connections would leak on every test. The tester
+    // builds its own iceberg catalog and closes it itself.
     try {
       CatalogMeta copy = catalogMeta.deepCopy();
       fillCatalogProperties(copy);
-      testCatalog = CatalogBuilder.buildServerCatalog(copy, serverConfiguration);
-      CatalogConnectionTester.runTestConnection(testCatalog);
+      CatalogConnectionTester.runTestConnection(copy);
       return new CatalogConnectionTestResult(true, "Test connection successful");
     } catch (Exception e) {
       LOG.warn(
@@ -260,22 +264,10 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
           catalogMeta.getCatalogName(),
           e.getMessage(),
           e);
-      String errorMsg =
-          "Test Connection unsuccessful: "
-              + (e.getMessage() != null ? e.getMessage() : e.toString());
-      return new CatalogConnectionTestResult(false, errorMsg);
-    } finally {
-      if (testCatalog != null) {
-        try {
-          testCatalog.dispose();
-        } catch (Exception disposeEx) {
-          LOG.warn(
-              "Failed to dispose throwaway catalog used for connection test {}: {}",
-              catalogMeta.getCatalogName(),
-              disposeEx.getMessage(),
-              disposeEx);
-        }
-      }
+      // getRootCauseMessage unwraps TableMetaStore#doAs's "Run with ugi request failed." wrapper
+      // so the user sees the underlying error (e.g. "AccessDeniedException: ...").
+      return new CatalogConnectionTestResult(
+          false, "Test Connection unsuccessful: " + ExceptionUtils.getRootCauseMessage(e));
     }
   }
 

@@ -30,6 +30,7 @@ import org.apache.amoro.api.CatalogMeta;
 import org.apache.amoro.aws.StaticAwsCredentialsProvider;
 import org.apache.amoro.properties.CatalogMetaProperties;
 import org.apache.amoro.table.TableMetaStore;
+import org.apache.amoro.utils.CatalogUtil;
 import org.apache.amoro.utils.MixedFormatCatalogUtil;
 import org.apache.iceberg.AppendFiles;
 import org.apache.iceberg.DataFile;
@@ -66,11 +67,20 @@ public class CatalogConnectionTester {
           Types.NestedField.optional(4, "_cdc_timestamp", Types.TimestampType.withZone()),
           Types.NestedField.required(5, "data", Types.StringType.get()));
 
-  public static void runTestConnection(ServerCatalog serverCatalog) throws Exception {
-    CatalogMeta catalogMeta = serverCatalog.getMetadata();
+  /**
+   * Run a write-capability smoke test against the catalog described by {@code catalogMeta}.
+   *
+   * <p>Intentionally takes a {@link CatalogMeta} instead of a {@code ServerCatalog}: building a
+   * {@code ServerCatalog} here would also build a {@code CommonUnifiedCatalog} and one
+   * {@code FormatCatalog} per configured format, each holding live connections (HMS pool, REST
+   * HTTP client, AWS client, ...). {@code ServerCatalog.dispose()} is a no-op, so those would
+   * leak on every test. Using {@code CatalogMeta} directly keeps the test to a single iceberg
+   * catalog that we own and close ourselves.
+   */
+  public static void runTestConnection(CatalogMeta catalogMeta) throws Exception {
     String catalogName = catalogMeta.getCatalogName();
     String metastoreType = catalogMeta.getCatalogType();
-    TableMetaStore metaStore = serverCatalog.metaStore();
+    TableMetaStore metaStore = CatalogUtil.buildMetaStore(catalogMeta);
 
     // We cannot use IcebergCatalog.java because it does not support createTable operation.
     // Build a raw Iceberg catalog that supports createTable.

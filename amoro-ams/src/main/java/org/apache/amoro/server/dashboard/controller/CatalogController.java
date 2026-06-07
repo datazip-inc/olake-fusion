@@ -20,11 +20,24 @@
 
 package org.apache.amoro.server.dashboard.controller;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Base64;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+import org.apache.amoro.TableFormat;
 import static org.apache.amoro.TableFormat.HUDI;
 import static org.apache.amoro.TableFormat.ICEBERG;
 import static org.apache.amoro.TableFormat.MIXED_HIVE;
 import static org.apache.amoro.TableFormat.MIXED_ICEBERG;
 import static org.apache.amoro.TableFormat.PAIMON;
+import org.apache.amoro.api.CatalogMeta;
+import org.apache.amoro.exception.ObjectNotExistsException;
+import org.apache.amoro.properties.CatalogMetaProperties;
 import static org.apache.amoro.properties.CatalogMetaProperties.AUTH_CONFIGS_KEY_ACCESS_KEY;
 import static org.apache.amoro.properties.CatalogMetaProperties.AUTH_CONFIGS_KEY_HADOOP_USERNAME;
 import static org.apache.amoro.properties.CatalogMetaProperties.AUTH_CONFIGS_KEY_KEYTAB;
@@ -55,11 +68,6 @@ import static org.apache.amoro.properties.CatalogMetaProperties.STORAGE_CONFIGS_
 import static org.apache.amoro.properties.CatalogMetaProperties.STORAGE_CONFIGS_VALUE_TYPE_OSS;
 import static org.apache.amoro.properties.CatalogMetaProperties.STORAGE_CONFIGS_VALUE_TYPE_S3;
 import static org.apache.amoro.properties.CatalogMetaProperties.TABLE_FORMATS;
-
-import io.javalin.http.Context;
-import org.apache.amoro.TableFormat;
-import org.apache.amoro.api.CatalogMeta;
-import org.apache.amoro.properties.CatalogMetaProperties;
 import org.apache.amoro.server.AmoroManagementConf;
 import org.apache.amoro.server.catalog.CatalogManager;
 import org.apache.amoro.server.catalog.InternalCatalog;
@@ -81,6 +89,7 @@ import org.apache.amoro.shade.guava32.com.google.common.collect.Sets;
 import org.apache.amoro.table.TableProperties;
 import org.apache.amoro.utils.CatalogUtil;
 import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.iceberg.CatalogProperties;
 import org.apache.iceberg.aliyun.AliyunProperties;
 import org.apache.iceberg.aws.AwsClientProperties;
@@ -88,14 +97,7 @@ import org.apache.iceberg.aws.glue.GlueCatalog;
 import org.apache.iceberg.aws.s3.S3FileIOProperties;
 import org.apache.iceberg.rest.RESTCatalog;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Base64;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
+import io.javalin.http.Context;
 
 /** The controller that handles catalog requests. */
 public class CatalogController {
@@ -623,20 +625,23 @@ public class CatalogController {
       validateCatalogRegisterInfo(info);
       // When testing an already-registered catalog (edit flow), reuse the stored auth/storage
       // config so the user doesn't have to re-upload keytabs / hadoop XMLs and so that
-      // desensitized secrets ("•••…") are replaced with the real values before we build the
-      // iceberg catalog. Mirrors what updateCatalog does.
-      CatalogMeta oldCatalogMeta =
-          catalogService.catalogExist(info.getName())
-              ? catalogService.getCatalogMeta(info.getName())
-              : null;
+      // desensitized secrets ("********") are replaced with the real values before we build
+      // the iceberg catalog. Mirrors what updateCatalog does. We tolerate the catalog being
+      // deleted between the existence check and the meta lookup.
+      CatalogMeta oldCatalogMeta = null;
+      if (catalogService.catalogExist(info.getName())) {
+        try {
+          oldCatalogMeta = catalogService.getCatalogMeta(info.getName());
+        } catch (ObjectNotExistsException ignored) {
+          // catalog was dropped between the existence check and now; treat as create flow.
+        }
+      }
       if (oldCatalogMeta != null) {
         unMaskSensitiveData(info, oldCatalogMeta);
       }
       catalogMeta = constructCatalogMeta(info, oldCatalogMeta);
     } catch (Exception e) {
-      String errorMsg =
-          "Invalid catalog configuration: "
-              + (e.getMessage() != null ? e.getMessage() : e.toString());
+      String errorMsg = "Invalid catalog configuration: " + ExceptionUtils.getRootCauseMessage(e);
       ctx.json(OkResponse.of(new CatalogConnectionTestResult(false, errorMsg)));
       return;
     }
