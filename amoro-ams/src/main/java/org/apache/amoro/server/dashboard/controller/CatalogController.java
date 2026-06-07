@@ -617,7 +617,7 @@ public class CatalogController {
 
   // test catalog connection
   public void testConnection(Context ctx) {
-    CatalogRegisterInfo info = null;
+    CatalogRegisterInfo info;
     CatalogMeta catalogMeta;
     try {
       info = ctx.bodyAsClass(CatalogRegisterInfo.class);
