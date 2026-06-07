@@ -57,6 +57,7 @@ import org.apache.amoro.shade.guava32.com.google.common.annotations.VisibleForTe
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Lists;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Maps;
+import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.amoro.table.MixedTable;
 import org.apache.amoro.table.TableIdentifier;
 import org.apache.amoro.utils.CompatiblePropertyUtil;
@@ -69,8 +70,16 @@ import org.apache.iceberg.util.StructLikeMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -93,6 +102,17 @@ import java.util.stream.Collectors;
 public class OptimizingQueue extends PersistentBase {
 
   private static final Logger LOG = LoggerFactory.getLogger(OptimizingQueue.class);
+  private static final String LOG_BASE_DIR;
+  private static final String DRIVER_LOG_FILE = "driver.log";
+  private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+  private static final DateTimeFormatter LOG_TIME_FORMATTER =
+      DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS").withZone(ZoneOffset.UTC);
+
+  static {
+    String envLogDir = System.getenv("LOG_DIR");
+    LOG_BASE_DIR =
+        (envLogDir != null && !envLogDir.isEmpty()) ? envLogDir : "/mnt/amoro-logs/compaction";
+  }
 
   private final QuotaProvider quotaProvider;
   private final Queue<TableOptimizingProcess> tableQueue = new LinkedTransferQueue<>();
@@ -868,6 +888,9 @@ public class OptimizingQueue extends PersistentBase {
     }
 
     private void persistAndSetCompleted(boolean success) {
+      if (!success && failedReason != null) {
+        appendFailReasonToDriverLog(processId, failedReason);
+      }
       doAsTransaction(
           () -> {
             if (!success) {
@@ -942,6 +965,26 @@ public class OptimizingQueue extends PersistentBase {
         taskMap.put(taskRuntime.getTaskId(), taskRuntime);
         taskQueue.offer(taskRuntime);
       }
+    }
+  }
+
+  private static void appendFailReasonToDriverLog(long processId, String failReason) {
+    Path driverLogPath = Paths.get(LOG_BASE_DIR, String.valueOf(processId), DRIVER_LOG_FILE);
+    try {
+      Files.createDirectories(driverLogPath.getParent());
+      Map<String, String> logEntry = new LinkedHashMap<>();
+      logEntry.put("level", "ERROR");
+      logEntry.put("time", LOG_TIME_FORMATTER.format(Instant.now()));
+      logEntry.put("processId", String.valueOf(processId));
+      logEntry.put("taskId", "");
+      logEntry.put("logger", "OptimizingQueue");
+      logEntry.put("message", failReason);
+      logEntry.put("stackTrace", "");
+      String jsonLine = OBJECT_MAPPER.writeValueAsString(logEntry) + System.lineSeparator();
+      Files.writeString(
+          driverLogPath, jsonLine, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+    } catch (Exception e) {
+      LOG.warn("Failed to append fail reason to driver log for process {}", processId, e);
     }
   }
 }
