@@ -88,6 +88,7 @@ import org.apache.iceberg.aws.AwsClientProperties;
 import org.apache.iceberg.aws.glue.GlueCatalog;
 import org.apache.iceberg.aws.s3.S3FileIOProperties;
 import org.apache.iceberg.rest.RESTCatalog;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -630,7 +631,7 @@ public class CatalogController {
       }
       catalogMeta = constructCatalogMeta(info, null);
     } catch (Exception e) {
-      String errorMsg = "Invalid catalog configuration: " + ExceptionUtil.getRootCauseMessage(e);
+      String errorMsg = "Invalid catalog configuration: " + ExceptionUtils.getRootCauseMessage(e);
       ctx.json(OkResponse.of(new CatalogConnectionTestResult(false, errorMsg)));
       return;
     }
