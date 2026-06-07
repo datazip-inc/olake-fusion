@@ -181,7 +181,7 @@ public class CatalogConnectionTester {
       try {
         ((AutoCloseable) catalog).close();
       } catch (Exception e) {
-        LOG.warn("Failed to close catalog {}", catalog.name(), e);
+        LOG.warn("Failed to close iceberg catalog after connection test: {}", e.getMessage(), e);
       }
     }
   }
