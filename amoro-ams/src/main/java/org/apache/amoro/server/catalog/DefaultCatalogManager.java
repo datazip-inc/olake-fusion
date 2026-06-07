@@ -44,6 +44,7 @@ import org.apache.amoro.shade.guava32.com.google.common.cache.LoadingCache;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Maps;
 import org.apache.amoro.table.TableIdentifier;
 import org.apache.amoro.utils.CatalogUtil;
+import org.apache.amoro.utils.ExceptionUtil;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -246,8 +247,7 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
     try {
       CatalogMeta copy = catalogMeta.deepCopy();
       fillCatalogProperties(copy);
-      ServerCatalog catalog = CatalogBuilder.buildServerCatalog(copy, serverConfiguration);
-      CatalogConnectionTester.runTestConnection(catalog);
+      CatalogConnectionTester.runTestConnection(copy);
       return new CatalogConnectionTestResult(true, "Test connection successful");
     } catch (Exception e) {
       LOG.warn(
@@ -255,12 +255,8 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
           catalogMeta.getCatalogName(),
           e.getMessage(),
           e);
-      String errorMsg =
-          "Test Connection unsuccessful: "
-              + (e.getMessage() != null ? e.getMessage() : e.toString());
+      String errorMsg = "Test Connection unsuccessful: " + ExceptionUtil.getRootCauseMessage(e);
       return new CatalogConnectionTestResult(false, errorMsg);
-    } finally {
-      disposeCatalog(catalogMeta.getCatalogName());
     }
   }
 

@@ -80,6 +80,7 @@ import org.apache.amoro.shade.guava32.com.google.common.collect.Maps;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Sets;
 import org.apache.amoro.table.TableProperties;
 import org.apache.amoro.utils.CatalogUtil;
+import org.apache.amoro.utils.ExceptionUtil;
 import org.apache.commons.lang.StringUtils;
 import org.apache.iceberg.CatalogProperties;
 import org.apache.iceberg.aliyun.AliyunProperties;
@@ -616,17 +617,24 @@ public class CatalogController {
 
   // test catalog connection
   public void testConnection(Context ctx) {
+    CatalogRegisterInfo info = null;
+    CatalogMeta catalogMeta;
     try {
-      CatalogRegisterInfo info = ctx.bodyAsClass(CatalogRegisterInfo.class);
+      info = ctx.bodyAsClass(CatalogRegisterInfo.class);
       validateCatalogRegisterInfo(info);
-      CatalogMeta catalogMeta = constructCatalogMeta(info, null);
-      ctx.json(OkResponse.of(catalogService.testCatalogConnection(catalogMeta)));
+      CatalogMeta oldCatalogMeta = null;
+
+      if (catalogService.catalogExist(info.getName())) {
+        oldCatalogMeta = catalogService.getCatalogMeta(info.getName());
+        unMaskSensitiveData(info, oldCatalogMeta);
+      }
+      catalogMeta = constructCatalogMeta(info, null);
     } catch (Exception e) {
-      String errorMsg =
-          "Test Connection unsuccessful: "
-              + (e.getMessage() != null ? e.getMessage() : e.toString());
+      String errorMsg = "Invalid catalog configuration: " + ExceptionUtil.getRootCauseMessage(e);
       ctx.json(OkResponse.of(new CatalogConnectionTestResult(false, errorMsg)));
+      return;
     }
+    ctx.json(OkResponse.of(catalogService.testCatalogConnection(catalogMeta)));
   }
 
   private void validateCatalogRegisterInfo(CatalogRegisterInfo info) {
