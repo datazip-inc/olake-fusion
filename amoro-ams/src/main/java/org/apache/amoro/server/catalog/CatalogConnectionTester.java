@@ -24,6 +24,7 @@ import org.apache.amoro.api.CatalogMeta;
 import org.apache.amoro.aws.StaticAwsCredentialsProvider;
 import org.apache.amoro.properties.CatalogMetaProperties;
 import org.apache.amoro.table.TableMetaStore;
+import org.apache.amoro.utils.CatalogUtil;
 import org.apache.amoro.utils.MixedFormatCatalogUtil;
 import org.apache.iceberg.AppendFiles;
 import org.apache.iceberg.DataFile;
@@ -59,22 +60,18 @@ public class CatalogConnectionTester {
 
   private static final Schema TEST_SCHEMA =
       new Schema(
-          Types.NestedField.required(1, "_olake_id", Types.StringType.get()),
+          Types.NestedField.optional(1, "_olake_id", Types.StringType.get()),
           Types.NestedField.optional(2, "_olake_timestamp", Types.TimestampType.withZone()),
-          Types.NestedField.required(3, "_op_type", Types.StringType.get()),
+          Types.NestedField.optional(3, "_op_type", Types.StringType.get()),
           Types.NestedField.optional(4, "_cdc_timestamp", Types.TimestampType.withZone()),
-          Types.NestedField.required(5, "data", Types.StringType.get()));
+          Types.NestedField.optional(5, "data", Types.StringType.get()));
 
-  public static void runTestConnection(ServerCatalog serverCatalog) throws Exception {
-    CatalogMeta catalogMeta = serverCatalog.getMetadata();
+  public static void runTestConnection(CatalogMeta catalogMeta) throws Exception {
     String catalogName = catalogMeta.getCatalogName();
+    TableMetaStore metaStore = CatalogUtil.buildMetaStore(catalogMeta);
     String metastoreType = catalogMeta.getCatalogType();
-    TableMetaStore metaStore = serverCatalog.metaStore;
-
     // We cannot use icebergCatalog.java  because it does not support createTable operation.
     // Building raw iceberg catalog that supports createTable operation.
-
-    // create iceberg catalog properties
     Map<String, String> baseIcebergProps =
         MixedFormatCatalogUtil.withIcebergCatalogInitializeProperties(
             catalogName, metastoreType, catalogMeta.getCatalogProperties());
@@ -82,11 +79,19 @@ public class CatalogConnectionTester {
         CatalogMetaProperties.CATALOG_TYPE_GLUE.equalsIgnoreCase(metastoreType)
             ? StaticAwsCredentialsProvider.applyGlueCredentials(baseIcebergProps)
             : baseIcebergProps;
-    // create iceberg catalog
-    Catalog catalog =
-        org.apache.iceberg.CatalogUtil.buildIcebergCatalog(
-            catalogName, icebergProps, metaStore.getConfiguration());
-    createNamespaceAndTable(catalog, catalogName);
+
+    metaStore.doAs(
+        () -> {
+          Catalog catalog =
+              org.apache.iceberg.CatalogUtil.buildIcebergCatalog(
+                  catalogName, icebergProps, metaStore.getConfiguration());
+          try {
+            createNamespaceAndTable(catalog, catalogName);
+          } finally {
+            closeQuietly(catalog);
+          }
+          return null;
+        });
   }
 
   private static void createNamespaceAndTable(Catalog catalog, String catalogName)
@@ -169,5 +174,15 @@ public class CatalogConnectionTester {
       append.appendFile(dataFile);
     }
     append.commit();
+  }
+
+  private static void closeQuietly(Catalog catalog) {
+    if (catalog instanceof AutoCloseable) {
+      try {
+        ((AutoCloseable) catalog).close();
+      } catch (Exception e) {
+        LOG.warn("Failed to close catalog {}", catalog.name(), e);
+      }
+    }
   }
 }
