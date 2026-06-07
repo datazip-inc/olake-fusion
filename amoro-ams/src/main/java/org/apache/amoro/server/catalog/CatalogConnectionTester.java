@@ -116,7 +116,7 @@ public class CatalogConnectionTester {
       LOG.info("Connection test namespace {} already exists, reusing it", TEST_NAMESPACE);
     }
 
-    // Create table if it does not already exist; otherwise load the existing one.
+    // Create table if it does not already exist, otherwise load the existing one.
     if (!catalog.tableExists(tableId)) {
       try {
         catalog.createTable(tableId, TEST_SCHEMA, PartitionSpec.unpartitioned());
