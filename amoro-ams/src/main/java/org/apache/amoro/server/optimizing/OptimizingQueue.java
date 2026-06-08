@@ -981,9 +981,9 @@ public class OptimizingQueue extends PersistentBase {
       logEntry.put("logger", "OptimizingQueue");
       logEntry.put("message", failReason);
       logEntry.put("stackTrace", "");
-      String jsonLine = OBJECT_MAPPER.writeValueAsString(logEntry) + System.lineSeparator();
+      String logLine = OBJECT_MAPPER.writeValueAsString(logEntry) + System.lineSeparator();
       Files.writeString(
-          driverLogPath, jsonLine, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+          driverLogPath, logLine, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
     } catch (Exception e) {
       LOG.warn("Failed to append fail reason to driver log for process {}", processId, e);
     }
