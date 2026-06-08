@@ -37,12 +37,12 @@ import java.util.Map;
 /** Writes process-level ERROR entries to per-process {@code driver.log} files. */
 public final class DriverLogWriter {
 
-  private static final Logger LOG = LoggerFactory.getLogger(DriverLogWriter.class);
+  public static final Logger LOG = LoggerFactory.getLogger(DriverLogWriter.class);
 
-  private static final String LOG_BASE_DIR;
-  private static final String DRIVER_LOG_FILE = "driver.log";
-  private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-  private static final DateTimeFormatter LOG_TIME_FORMATTER =
+  public static final String LOG_BASE_DIR;
+  public static final String DRIVER_LOG_FILE = "driver.log";
+  public static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+  public static final DateTimeFormatter LOG_TIME_FORMATTER =
       DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS").withZone(ZoneOffset.UTC);
 
   static {
@@ -50,8 +50,6 @@ public final class DriverLogWriter {
     LOG_BASE_DIR =
         (envLogDir != null && !envLogDir.isEmpty()) ? envLogDir : "/mnt/amoro-logs/compaction";
   }
-
-  private DriverLogWriter() {}
 
   public static void appendFailReason(long processId, String logger, String failReason) {
     Path driverLogPath = Paths.get(LOG_BASE_DIR, String.valueOf(processId), DRIVER_LOG_FILE);
