@@ -976,6 +976,7 @@ public class OptimizingQueue extends PersistentBase {
       logEntry.put("level", "ERROR");
       logEntry.put("time", LOG_TIME_FORMATTER.format(Instant.now()));
       logEntry.put("processId", String.valueOf(processId));
+      // taslId is empty since its a process level log
       logEntry.put("taskId", "");
       logEntry.put("logger", "OptimizingQueue");
       logEntry.put("message", failReason);
