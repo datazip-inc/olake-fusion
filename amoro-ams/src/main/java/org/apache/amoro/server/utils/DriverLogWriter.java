@@ -35,9 +35,9 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /** Writes process-level ERROR entries to per-process {@code driver.log} files. */
-public final class CompactionDriverLogWriter {
+public final class DriverLogWriter {
 
-  private static final Logger LOG = LoggerFactory.getLogger(CompactionDriverLogWriter.class);
+  private static final Logger LOG = LoggerFactory.getLogger(DriverLogWriter.class);
 
   private static final String LOG_BASE_DIR;
   private static final String DRIVER_LOG_FILE = "driver.log";
@@ -51,7 +51,7 @@ public final class CompactionDriverLogWriter {
         (envLogDir != null && !envLogDir.isEmpty()) ? envLogDir : "/mnt/amoro-logs/compaction";
   }
 
-  private CompactionDriverLogWriter() {}
+  private DriverLogWriter() {}
 
   public static void appendFailReason(long processId, String logger, String failReason) {
     Path driverLogPath = Paths.get(LOG_BASE_DIR, String.valueOf(processId), DRIVER_LOG_FILE);

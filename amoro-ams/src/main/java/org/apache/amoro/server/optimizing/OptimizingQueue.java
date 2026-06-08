@@ -52,7 +52,7 @@ import org.apache.amoro.server.resource.OptimizerThread;
 import org.apache.amoro.server.resource.QuotaProvider;
 import org.apache.amoro.server.table.DefaultTableRuntime;
 import org.apache.amoro.server.table.blocker.TableBlocker;
-import org.apache.amoro.server.utils.CompactionDriverLogWriter;
+import org.apache.amoro.server.utils.DriverLogWriter;
 import org.apache.amoro.server.utils.IcebergTableUtil;
 import org.apache.amoro.shade.guava32.com.google.common.annotations.VisibleForTesting;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
@@ -870,7 +870,7 @@ public class OptimizingQueue extends PersistentBase {
 
     private void persistAndSetCompleted(boolean success) {
       if (!success && failedReason != null) {
-        CompactionDriverLogWriter.appendFailReason(processId, "OptimizingQueue", failedReason);
+        DriverLogWriter.appendFailReason(processId, "OptimizingQueue", failedReason);
       }
       doAsTransaction(
           () -> {
