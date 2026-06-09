@@ -14,8 +14,6 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
- * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.dashboard.controller;
@@ -65,7 +63,6 @@ import org.apache.amoro.server.catalog.CatalogManager;
 import org.apache.amoro.server.catalog.InternalCatalog;
 import org.apache.amoro.server.catalog.ServerCatalog;
 import org.apache.amoro.server.dashboard.PlatformFileManager;
-import org.apache.amoro.server.dashboard.model.CatalogConnectionTestResult;
 import org.apache.amoro.server.dashboard.model.CatalogRegisterInfo;
 import org.apache.amoro.server.dashboard.model.CatalogSettingInfo;
 import org.apache.amoro.server.dashboard.model.CatalogSettingInfo.ConfigFileItem;
@@ -81,7 +78,6 @@ import org.apache.amoro.shade.guava32.com.google.common.collect.Sets;
 import org.apache.amoro.table.TableProperties;
 import org.apache.amoro.utils.CatalogUtil;
 import org.apache.commons.lang.StringUtils;
-import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.iceberg.CatalogProperties;
 import org.apache.iceberg.aliyun.AliyunProperties;
 import org.apache.iceberg.aws.AwsClientProperties;
@@ -613,28 +609,6 @@ public class CatalogController {
     CatalogMeta catalogMeta = constructCatalogMeta(info, null);
     catalogService.createCatalog(catalogMeta);
     ctx.json(OkResponse.of(""));
-  }
-
-  // test catalog connection
-  public void testConnection(Context ctx) {
-    CatalogRegisterInfo info;
-    CatalogMeta catalogMeta;
-    try {
-      info = ctx.bodyAsClass(CatalogRegisterInfo.class);
-      validateCatalogRegisterInfo(info);
-      CatalogMeta oldCatalogMeta = null;
-
-      if (catalogService.catalogExist(info.getName())) {
-        oldCatalogMeta = catalogService.getCatalogMeta(info.getName());
-        unMaskSensitiveData(info, oldCatalogMeta);
-      }
-      catalogMeta = constructCatalogMeta(info, oldCatalogMeta);
-    } catch (Exception e) {
-      String errorMsg = "Invalid catalog configuration: " + ExceptionUtils.getRootCauseMessage(e);
-      ctx.json(OkResponse.of(new CatalogConnectionTestResult(false, errorMsg)));
-      return;
-    }
-    ctx.json(OkResponse.of(catalogService.testCatalogConnection(catalogMeta)));
   }
 
   private void validateCatalogRegisterInfo(CatalogRegisterInfo info) {

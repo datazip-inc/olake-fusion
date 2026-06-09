@@ -86,7 +86,7 @@ public class CatalogConnectionTester {
               org.apache.iceberg.CatalogUtil.buildIcebergCatalog(
                   catalogName, icebergProps, metaStore.getConfiguration());
           try {
-            createNamespaceAndTable(catalog, catalogName);
+            createAndWriteTestTable(catalog, catalogName);
           } finally {
             closeQuietly(catalog);
           }
@@ -94,53 +94,32 @@ public class CatalogConnectionTester {
         });
   }
 
-  private static void createNamespaceAndTable(Catalog catalog, String catalogName)
+  private static void createAndWriteTestTable(Catalog catalog, String catalogName)
       throws Exception {
     SupportsNamespaces nsCatalog = (SupportsNamespaces) catalog;
     Namespace ns = Namespace.of(TEST_NAMESPACE);
     TableIdentifier tableId = TableIdentifier.of(ns, TEST_TABLE);
-    // Create namespace if it does not already exist.
-    if (!nsCatalog.namespaceExists(ns)) {
-      try {
+    try {
+      if (!nsCatalog.namespaceExists(ns)) {
         nsCatalog.createNamespace(ns);
-        LOG.info("Connection test namespace {} created", TEST_NAMESPACE);
-      } catch (Exception e) {
-        LOG.error(
-            "Connection test failed while creating namespace {}: {}",
-            TEST_NAMESPACE,
-            e.getMessage(),
-            e);
-        throw e;
+        LOG.info("Connection test namespace {} created", ns);
       }
-    } else {
-      LOG.info("Connection test namespace {} already exists, reusing it", TEST_NAMESPACE);
-    }
-
-    // Create table if it does not already exist, otherwise load the existing one.
-    if (!catalog.tableExists(tableId)) {
-      try {
+      if (!catalog.tableExists(tableId)) {
         catalog.createTable(tableId, TEST_SCHEMA, PartitionSpec.unpartitioned());
         LOG.info("Connection test table {} created", tableId);
-      } catch (Exception e) {
-        LOG.error("Connection test failed while creating table {}: {}", tableId, e.getMessage(), e);
-        throw e;
       }
-    } else {
-      LOG.info("Connection test table {} already exists, reusing it", tableId);
-    }
-    try {
-      writeTestRecord(catalog, tableId);
+      writeOneTestRecord(catalog, tableId);
     } catch (Exception e) {
-      LOG.error(
-          "Connection test failed while writing test record to {}: {}", tableId, e.getMessage(), e);
+      LOG.error("Connection test failed for table {}: {}", tableId, e.getMessage(), e);
       throw e;
     }
     LOG.info("Test connection finished successfully for catalog {}", catalogName);
   }
 
-  private static void writeTestRecord(Catalog catalog, TableIdentifier tableId) throws Exception {
+  private static void writeOneTestRecord(Catalog catalog, TableIdentifier tableId)
+      throws Exception {
     Table table = catalog.loadTable(tableId);
-    appendRecord(table, createTestRecord(table.schema()));
+    appendOneRecord(table, createTestRecord(table.schema()));
     LOG.info("Test record written successfully to table {}", tableId);
   }
 
@@ -155,7 +134,7 @@ public class CatalogConnectionTester {
     return record;
   }
 
-  private static void appendRecord(Table table, Record record) throws IOException {
+  private static void appendOneRecord(Table table, Record record) throws IOException {
     Schema schema = table.schema();
     WriteResult result;
     try (UnpartitionedWriter<Record> writer =

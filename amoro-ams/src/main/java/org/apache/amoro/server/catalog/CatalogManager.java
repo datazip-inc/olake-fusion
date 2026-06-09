@@ -14,15 +14,12 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
- * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.catalog;
 
 import org.apache.amoro.AmoroTable;
 import org.apache.amoro.api.CatalogMeta;
-import org.apache.amoro.server.dashboard.model.CatalogConnectionTestResult;
 import org.apache.amoro.table.TableIdentifier;
 
 import java.util.List;
@@ -103,12 +100,4 @@ public interface CatalogManager {
    * @return managed table.
    */
   AmoroTable<?> loadTable(TableIdentifier identifier);
-
-  /**
-   * Test catalog connection.
-   *
-   * @param catalogMeta the catalog meta information used to build a temporary catalog
-   * @return connection test result with success or failure message
-   */
-  CatalogConnectionTestResult testCatalogConnection(CatalogMeta catalogMeta);
 }
