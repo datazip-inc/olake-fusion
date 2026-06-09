@@ -254,7 +254,11 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
           catalogMeta.getCatalogName(),
           e.getMessage(),
           e);
-      String errorMsg = "Test Connection unsuccessful: " + ExceptionUtils.getRootCauseMessage(e);
+      String errorMsg =
+          "Test Connection unsuccessful: "
+              + ExceptionUtils.getRootCauseMessage()
+              + "\n"
+              + ExceptionUtils.getStackTrace(e);
       throw new RuntimeException(errorMsg, e);
     }
   }
