@@ -50,7 +50,6 @@ import java.io.IOException;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Map;
-import java.util.UUID;
 
 public class CatalogConnectionTester {
 
@@ -98,51 +97,27 @@ public class CatalogConnectionTester {
   private static void createAndWriteTestTable(Catalog catalog, String catalogName)
       throws Exception {
     SupportsNamespaces nsCatalog = (SupportsNamespaces) catalog;
-    Namespace ns =
-        Namespace.of(TEST_NAMESPACE + "_" + UUID.randomUUID().toString().replace("-", ""));
+    Namespace ns = Namespace.of(TEST_NAMESPACE);
     TableIdentifier tableId = TableIdentifier.of(ns, TEST_TABLE);
-    boolean tableCreated = false;
-    Exception failure = null;
     try {
-      nsCatalog.createNamespace(ns);
-      LOG.info("Connection test namespace {} created", ns);
-      catalog.createTable(tableId, TEST_SCHEMA, PartitionSpec.unpartitioned());
-      tableCreated = true;
-      LOG.info("Connection test table {} created", tableId);
+      if (!nsCatalog.namespaceExists(ns)) {
+        nsCatalog.createNamespace(ns);
+        LOG.info("Connection test namespace {} created", ns);
+      }
+      if (!catalog.tableExists(tableId)) {
+        catalog.createTable(tableId, TEST_SCHEMA, PartitionSpec.unpartitioned());
+        LOG.info("Connection test table {} created", tableId);
+      }
       writeOneTestRecord(catalog, tableId);
     } catch (Exception e) {
-      failure = e;
-      LOG.error(
-          "Connection test failed for table {}: {}", tableId, e.getMessage(), e);
+      LOG.error("Connection test failed for table {}: {}", tableId, e.getMessage(), e);
       throw e;
-    } finally {
-      try {
-        cleanupTestObjects(catalog, nsCatalog, tableId, ns, tableCreated);
-      } catch (Exception e) {
-        if (failure != null) {
-          failure.addSuppressed(e);
-        } else {
-          throw e;
-        }
-      }
     }
     LOG.info("Test connection finished successfully for catalog {}", catalogName);
   }
 
-  private static void cleanupTestObjects(
-      Catalog catalog,
-      SupportsNamespaces nsCatalog,
-      TableIdentifier tableId,
-      Namespace ns,
-      boolean tableCreated)
+  private static void writeOneTestRecord(Catalog catalog, TableIdentifier tableId)
       throws Exception {
-    if (tableCreated) {
-      catalog.dropTable(tableId, true);
-    }
-    nsCatalog.dropNamespace(ns);
-  }
-
-  private static void writeOneTestRecord(Catalog catalog, TableIdentifier tableId) throws Exception {
     Table table = catalog.loadTable(tableId);
     appendOneRecord(table, createTestRecord(table.schema()));
     LOG.info("Test record written successfully to table {}", tableId);
