@@ -33,7 +33,6 @@ import org.apache.amoro.exception.IllegalMetadataException;
 import org.apache.amoro.exception.ObjectNotExistsException;
 import org.apache.amoro.properties.CatalogMetaProperties;
 import org.apache.amoro.server.AmoroManagementConf;
-import org.apache.amoro.server.dashboard.model.CatalogConnectionTestResult;
 import org.apache.amoro.server.dashboard.utils.AmsUtil;
 import org.apache.amoro.server.persistence.PersistentBase;
 import org.apache.amoro.server.persistence.mapper.CatalogMetaMapper;
@@ -182,6 +181,7 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
       throw new AlreadyExistsException("Catalog " + catalogMeta.getCatalogName());
     }
     fillCatalogProperties(catalogMeta);
+    validateCatalogConnection(catalogMeta);
     // Build to make sure the catalog is valid
     ServerCatalog catalog = CatalogBuilder.buildServerCatalog(catalogMeta, serverConfiguration);
     doAs(CatalogMetaMapper.class, mapper -> mapper.insertCatalog(catalog.getMetadata()));
@@ -230,6 +230,9 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
   public void updateCatalog(CatalogMeta catalogMeta) {
     ServerCatalog catalog = getServerCatalog(catalogMeta.getCatalogName());
     validateCatalogUpdate(catalog.getMetadata(), catalogMeta);
+    CatalogMeta copy = catalogMeta.deepCopy();
+    fillCatalogProperties(copy);
+    validateCatalogConnection(copy);
 
     catalog.updateMetadata(catalogMeta);
     metaCache.invalidate(catalogMeta.getCatalogName());
@@ -242,13 +245,9 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
     return serverCatalog.loadTable(identifier.getDatabase(), identifier.getTableName());
   }
 
-  @Override
-  public CatalogConnectionTestResult testCatalogConnection(CatalogMeta catalogMeta) {
+  private void validateCatalogConnection(CatalogMeta catalogMeta) {
     try {
-      CatalogMeta copy = catalogMeta.deepCopy();
-      fillCatalogProperties(copy);
-      CatalogConnectionTester.runTestConnection(copy);
-      return new CatalogConnectionTestResult(true, "Test connection successful");
+      CatalogConnectionTester.runTestConnection(catalogMeta);
     } catch (Exception e) {
       LOG.warn(
           "Catalog connection test failed for {}: {}",
@@ -256,7 +255,7 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
           e.getMessage(),
           e);
       String errorMsg = "Test Connection unsuccessful: " + ExceptionUtils.getRootCauseMessage(e);
-      return new CatalogConnectionTestResult(false, errorMsg);
+      throw new RuntimeException(errorMsg, e);
     }
   }
 

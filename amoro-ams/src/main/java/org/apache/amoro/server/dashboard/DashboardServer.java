@@ -303,7 +303,6 @@ public class DashboardServer {
             get("/{catalog}/databases/{db}/tables", tableController::getTableList);
             get("/{catalog}/databases", tableController::getDatabaseList);
             get("", tableController::getCatalogs);
-            post("/test", catalogController::testConnection);
             post("", catalogController::createCatalog);
             get("metastore/types", catalogController::getCatalogTypeList);
             get("metastore/{type}/table-formats", catalogController::getMetastoreTableFormats);

@@ -50,6 +50,7 @@ import java.io.IOException;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Map;
+import java.util.UUID;
 
 public class CatalogConnectionTester {
 
@@ -86,7 +87,7 @@ public class CatalogConnectionTester {
               org.apache.iceberg.CatalogUtil.buildIcebergCatalog(
                   catalogName, icebergProps, metaStore.getConfiguration());
           try {
-            createNamespaceAndTable(catalog, catalogName);
+            createAndWriteTestTable(catalog, catalogName);
           } finally {
             closeQuietly(catalog);
           }
@@ -94,53 +95,56 @@ public class CatalogConnectionTester {
         });
   }
 
-  private static void createNamespaceAndTable(Catalog catalog, String catalogName)
+  private static void createAndWriteTestTable(Catalog catalog, String catalogName)
       throws Exception {
     SupportsNamespaces nsCatalog = (SupportsNamespaces) catalog;
-    Namespace ns = Namespace.of(TEST_NAMESPACE);
+    Namespace ns =
+        Namespace.of(TEST_NAMESPACE + "_" + UUID.randomUUID().toString().replace("-", ""));
     TableIdentifier tableId = TableIdentifier.of(ns, TEST_TABLE);
-    // Create namespace if it does not already exist.
-    if (!nsCatalog.namespaceExists(ns)) {
-      try {
-        nsCatalog.createNamespace(ns);
-        LOG.info("Connection test namespace {} created", TEST_NAMESPACE);
-      } catch (Exception e) {
-        LOG.error(
-            "Connection test failed while creating namespace {}: {}",
-            TEST_NAMESPACE,
-            e.getMessage(),
-            e);
-        throw e;
-      }
-    } else {
-      LOG.info("Connection test namespace {} already exists, reusing it", TEST_NAMESPACE);
-    }
-
-    // Create table if it does not already exist, otherwise load the existing one.
-    if (!catalog.tableExists(tableId)) {
-      try {
-        catalog.createTable(tableId, TEST_SCHEMA, PartitionSpec.unpartitioned());
-        LOG.info("Connection test table {} created", tableId);
-      } catch (Exception e) {
-        LOG.error("Connection test failed while creating table {}: {}", tableId, e.getMessage(), e);
-        throw e;
-      }
-    } else {
-      LOG.info("Connection test table {} already exists, reusing it", tableId);
-    }
+    boolean tableCreated = false;
+    Exception failure = null;
     try {
-      writeTestRecord(catalog, tableId);
+      nsCatalog.createNamespace(ns);
+      LOG.info("Connection test namespace {} created", ns);
+      catalog.createTable(tableId, TEST_SCHEMA, PartitionSpec.unpartitioned());
+      tableCreated = true;
+      LOG.info("Connection test table {} created", tableId);
+      writeOneTestRecord(catalog, tableId);
     } catch (Exception e) {
+      failure = e;
       LOG.error(
-          "Connection test failed while writing test record to {}: {}", tableId, e.getMessage(), e);
+          "Connection test failed for table {}: {}", tableId, e.getMessage(), e);
       throw e;
+    } finally {
+      try {
+        cleanupTestObjects(catalog, nsCatalog, tableId, ns, tableCreated);
+      } catch (Exception e) {
+        if (failure != null) {
+          failure.addSuppressed(e);
+        } else {
+          throw e;
+        }
+      }
     }
     LOG.info("Test connection finished successfully for catalog {}", catalogName);
   }
 
-  private static void writeTestRecord(Catalog catalog, TableIdentifier tableId) throws Exception {
+  private static void cleanupTestObjects(
+      Catalog catalog,
+      SupportsNamespaces nsCatalog,
+      TableIdentifier tableId,
+      Namespace ns,
+      boolean tableCreated)
+      throws Exception {
+    if (tableCreated) {
+      catalog.dropTable(tableId, true);
+    }
+    nsCatalog.dropNamespace(ns);
+  }
+
+  private static void writeOneTestRecord(Catalog catalog, TableIdentifier tableId) throws Exception {
     Table table = catalog.loadTable(tableId);
-    appendRecord(table, createTestRecord(table.schema()));
+    appendOneRecord(table, createTestRecord(table.schema()));
     LOG.info("Test record written successfully to table {}", tableId);
   }
 
@@ -155,7 +159,7 @@ public class CatalogConnectionTester {
     return record;
   }
 
-  private static void appendRecord(Table table, Record record) throws IOException {
+  private static void appendOneRecord(Table table, Record record) throws IOException {
     Schema schema = table.schema();
     WriteResult result;
     try (UnpartitionedWriter<Record> writer =

@@ -14,11 +14,11 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
- * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.dashboard.controller;
+
+import static org.apache.amoro.properties.CatalogMetaProperties.CATALOG_TYPE_HIVE;
 
 import io.javalin.http.Context;
 import org.apache.amoro.Constants;
@@ -38,7 +38,6 @@ import org.apache.amoro.process.ProcessStatus;
 import org.apache.amoro.properties.CatalogMetaProperties;
 import org.apache.amoro.properties.HiveTableProperties;
 import org.apache.amoro.server.catalog.CatalogManager;
-import org.apache.amoro.server.catalog.CatalogTableListing;
 import org.apache.amoro.server.catalog.ServerCatalog;
 import org.apache.amoro.server.dashboard.ServerTableDescriptor;
 import org.apache.amoro.server.dashboard.ServerTableProperties;
@@ -56,6 +55,7 @@ import org.apache.amoro.server.optimizing.OptimizingStatus;
 import org.apache.amoro.server.persistence.TableRuntimeMeta;
 import org.apache.amoro.server.process.TableProcessMeta;
 import org.apache.amoro.server.table.TableManager;
+import org.apache.amoro.shade.guava32.com.google.common.base.Function;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
 import org.apache.amoro.shade.guava32.com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.amoro.shade.thrift.org.apache.thrift.TException;
@@ -88,6 +88,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
@@ -531,7 +532,53 @@ public class TableController {
         "catalog.database can not be empty in any element");
 
     ServerCatalog serverCatalog = catalogManager.getServerCatalog(catalog);
-    List<TableMeta> tables = CatalogTableListing.listTables(serverCatalog, db);
+    Function<TableFormat, String> formatToType =
+        format -> {
+          if (format.equals(TableFormat.MIXED_HIVE) || format.equals(TableFormat.MIXED_ICEBERG)) {
+            return TableMeta.TableType.ARCTIC.toString();
+          } else if (format.equals(TableFormat.PAIMON)) {
+            return TableMeta.TableType.PAIMON.toString();
+          } else if (format.equals(TableFormat.ICEBERG)) {
+            return TableMeta.TableType.ICEBERG.toString();
+          } else if (format.equals(TableFormat.HUDI)) {
+            return TableMeta.TableType.HUDI.toString();
+          } else {
+            return format.toString();
+          }
+        };
+
+    List<TableMeta> tables =
+        serverCatalog.listTables(db).stream()
+            .map(
+                idWithFormat ->
+                    new TableMeta(
+                        idWithFormat.getIdentifier().getTableName(),
+                        formatToType.apply(idWithFormat.getTableFormat())))
+            // Sort by table format and table name
+            .sorted(
+                (table1, table2) -> {
+                  if (Objects.equals(table1.getType(), table2.getType())) {
+                    return table1.getName().compareTo(table2.getName());
+                  } else {
+                    return table1.getType().compareTo(table2.getType());
+                  }
+                })
+            .collect(Collectors.toList());
+    String catalogType = serverCatalog.getMetadata().getCatalogType();
+    if (catalogType.equals(CATALOG_TYPE_HIVE)) {
+      CatalogMeta catalogMeta = serverCatalog.getMetadata();
+      TableMetaStore tableMetaStore = CatalogUtil.buildMetaStore(catalogMeta);
+      HMSClientPool hmsClientPool =
+          new CachedHiveClientPool(tableMetaStore, catalogMeta.getCatalogProperties());
+
+      List<String> hiveTables = HiveTableUtil.getAllHiveTables(hmsClientPool, db);
+      Set<String> mixedHiveTables =
+          tables.stream().map(TableMeta::getName).collect(Collectors.toSet());
+      hiveTables.stream()
+          .filter(e -> !mixedHiveTables.contains(e))
+          .sorted(String::compareTo)
+          .forEach(e -> tables.add(new TableMeta(e, TableMeta.TableType.HIVE.toString())));
+    }
 
     ctx.json(
         OkResponse.of(
