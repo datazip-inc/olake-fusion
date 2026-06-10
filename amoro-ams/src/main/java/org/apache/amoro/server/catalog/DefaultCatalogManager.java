@@ -44,6 +44,7 @@ import org.apache.amoro.shade.guava32.com.google.common.collect.Maps;
 import org.apache.amoro.table.TableIdentifier;
 import org.apache.amoro.utils.CatalogUtil;
 import org.apache.commons.lang3.exception.ExceptionUtils;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -256,7 +257,7 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
           e);
       String errorMsg =
           "Test Connection unsuccessful: "
-              + ExceptionUtils.getRootCauseMessage()
+              + ExceptionUtils.getRootCauseMessage(e)
               + "\n"
               + ExceptionUtils.getStackTrace(e);
       throw new RuntimeException(errorMsg, e);
