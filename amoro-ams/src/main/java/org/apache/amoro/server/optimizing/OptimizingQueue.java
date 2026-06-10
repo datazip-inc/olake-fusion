@@ -53,11 +53,11 @@ import org.apache.amoro.server.resource.QuotaProvider;
 import org.apache.amoro.server.table.DefaultTableRuntime;
 import org.apache.amoro.server.table.blocker.TableBlocker;
 import org.apache.amoro.server.utils.IcebergTableUtil;
-import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.amoro.shade.guava32.com.google.common.annotations.VisibleForTesting;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Lists;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Maps;
+import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.amoro.table.MixedTable;
 import org.apache.amoro.table.TableIdentifier;
 import org.apache.amoro.utils.CompatiblePropertyUtil;
@@ -955,20 +955,21 @@ public class OptimizingQueue extends PersistentBase {
         taskQueue.offer(taskRuntime);
       }
     }
+
     private void appendFailReasonToDriverLogs(String failedReason, long processId) {
       String envLogDir = System.getenv("LOG_DIR");
       String logBaseDir =
           (envLogDir != null && !envLogDir.isEmpty()) ? envLogDir : "/mnt/amoro-logs/compaction";
       Path driverLogPath = Paths.get(logBaseDir, String.valueOf(processId), "driver.log");
-      String time = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss:SSS")
-        .withZone(ZoneOffset.UTC
-        .format(Instant.now()));
-        )
+      String time =
+          DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS")
+              .withZone(ZoneOffset.UTC)
+              .format(Instant.now());
       try {
         Files.createDirectories(driverLogPath.getParent());
         Map<String, String> logEntry = new LinkedHashMap<>();
         logEntry.put("level", "ERROR");
-        logEntry.put("time",time);
+        logEntry.put("time", time);
         logEntry.put("processId", String.valueOf(processId));
         logEntry.put("taskId", "");
         logEntry.put("logger", "");
