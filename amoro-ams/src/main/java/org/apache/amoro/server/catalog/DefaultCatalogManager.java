@@ -43,6 +43,7 @@ import org.apache.amoro.shade.guava32.com.google.common.cache.LoadingCache;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Maps;
 import org.apache.amoro.table.TableIdentifier;
 import org.apache.amoro.utils.CatalogUtil;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -180,6 +181,7 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
       throw new AlreadyExistsException("Catalog " + catalogMeta.getCatalogName());
     }
     fillCatalogProperties(catalogMeta);
+    validateCatalogConnection(catalogMeta);
     // Build to make sure the catalog is valid
     ServerCatalog catalog = CatalogBuilder.buildServerCatalog(catalogMeta, serverConfiguration);
     doAs(CatalogMetaMapper.class, mapper -> mapper.insertCatalog(catalog.getMetadata()));
@@ -228,6 +230,9 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
   public void updateCatalog(CatalogMeta catalogMeta) {
     ServerCatalog catalog = getServerCatalog(catalogMeta.getCatalogName());
     validateCatalogUpdate(catalog.getMetadata(), catalogMeta);
+    CatalogMeta copy = catalogMeta.deepCopy();
+    fillCatalogProperties(copy);
+    validateCatalogConnection(copy);
 
     catalog.updateMetadata(catalogMeta);
     metaCache.invalidate(catalogMeta.getCatalogName());
@@ -238,6 +243,24 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
   public AmoroTable<?> loadTable(TableIdentifier identifier) {
     ServerCatalog serverCatalog = getServerCatalog(identifier.getCatalog());
     return serverCatalog.loadTable(identifier.getDatabase(), identifier.getTableName());
+  }
+
+  private void validateCatalogConnection(CatalogMeta catalogMeta) {
+    try {
+      CatalogConnectionTester.runTestConnection(catalogMeta);
+    } catch (Exception e) {
+      LOG.warn(
+          "Catalog connection test failed for {}: {}",
+          catalogMeta.getCatalogName(),
+          e.getMessage(),
+          e);
+      String errorMsg =
+          "Test Connection unsuccessful: "
+              + ExceptionUtils.getRootCauseMessage(e)
+              + "\n"
+              + ExceptionUtils.getStackTrace(e);
+      throw new RuntimeException(errorMsg, e);
+    }
   }
 
   private void validateCatalogUpdate(CatalogMeta oldMeta, CatalogMeta newMeta) {
