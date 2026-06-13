@@ -29,6 +29,7 @@ FROM apache/spark:${SPARK_JAVA_TAG}
 ARG MAVEN_MIRROR=https://repo.maven.apache.org/maven2
 ARG OPTIMIZER_JOB=optimizer-job.jar
 ARG AWS_VERSION=2.24.12
+ARG ICEBERG_VERSION=1.7.2
 ARG TARGETARCH
 USER root
 
@@ -42,6 +43,7 @@ ENV PATH="${JAVA_HOME}/bin:${PATH}"
 RUN cd $SPARK_HOME/jars \
     && wget ${MAVEN_MIRROR}/software/amazon/awssdk/bundle/${AWS_VERSION}/bundle-${AWS_VERSION}.jar \
     && wget ${MAVEN_MIRROR}/software/amazon/awssdk/url-connection-client/${AWS_VERSION}/url-connection-client-${AWS_VERSION}.jar \
+    && wget ${MAVEN_MIRROR}/org/apache/iceberg/iceberg-gcp-bundle/${ICEBERG_VERSION}/iceberg-gcp-bundle-${ICEBERG_VERSION}.jar \
     && chown spark:spark *.jar \
     && mkdir -p $SPARK_HOME/usrlib
 
@@ -49,6 +51,5 @@ RUN cd $SPARK_HOME/jars \
 RUN rm -f $SPARK_HOME/conf/log4j2.properties $SPARK_HOME/conf/log4j2.properties.template
 
 # Install our log4j2.xml with Routing appender for per-process/task log files
-COPY docker/optimizer-spark/log4j2.xml $SPARK_HOME/conf/log4j2.xml
 
 COPY $OPTIMIZER_JOB $SPARK_HOME/usrlib/optimizer-job.jar
