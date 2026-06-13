@@ -42,17 +42,20 @@ import static org.apache.amoro.properties.CatalogMetaProperties.CATALOG_TYPE_HIV
 import static org.apache.amoro.properties.CatalogMetaProperties.CATALOG_TYPE_REST;
 import static org.apache.amoro.properties.CatalogMetaProperties.KEY_WAREHOUSE;
 import static org.apache.amoro.properties.CatalogMetaProperties.STORAGE_CONFIGS_KEY_CORE_SITE;
+import static org.apache.amoro.properties.CatalogMetaProperties.STORAGE_CONFIGS_KEY_GCS_PROJECT_ID;
 import static org.apache.amoro.properties.CatalogMetaProperties.STORAGE_CONFIGS_KEY_HDFS_SITE;
 import static org.apache.amoro.properties.CatalogMetaProperties.STORAGE_CONFIGS_KEY_HIVE_SITE;
 import static org.apache.amoro.properties.CatalogMetaProperties.STORAGE_CONFIGS_KEY_OSS_ENDPOINT;
 import static org.apache.amoro.properties.CatalogMetaProperties.STORAGE_CONFIGS_KEY_REGION;
 import static org.apache.amoro.properties.CatalogMetaProperties.STORAGE_CONFIGS_KEY_S3_ENDPOINT;
 import static org.apache.amoro.properties.CatalogMetaProperties.STORAGE_CONFIGS_KEY_TYPE;
+import static org.apache.amoro.properties.CatalogMetaProperties.STORAGE_CONFIGS_VALUE_TYPE_GCS;
 import static org.apache.amoro.properties.CatalogMetaProperties.STORAGE_CONFIGS_VALUE_TYPE_HADOOP;
 import static org.apache.amoro.properties.CatalogMetaProperties.STORAGE_CONFIGS_VALUE_TYPE_LOCAL;
 import static org.apache.amoro.properties.CatalogMetaProperties.STORAGE_CONFIGS_VALUE_TYPE_OSS;
 import static org.apache.amoro.properties.CatalogMetaProperties.STORAGE_CONFIGS_VALUE_TYPE_S3;
 import static org.apache.amoro.properties.CatalogMetaProperties.TABLE_FORMATS;
+import static org.apache.amoro.server.table.internal.InternalTableConstants.GCS_FILE_IO_IMPL;
 
 import io.javalin.http.Context;
 import org.apache.amoro.TableFormat;
@@ -83,6 +86,7 @@ import org.apache.iceberg.aliyun.AliyunProperties;
 import org.apache.iceberg.aws.AwsClientProperties;
 import org.apache.iceberg.aws.glue.GlueCatalog;
 import org.apache.iceberg.aws.s3.S3FileIOProperties;
+import org.apache.iceberg.gcp.GCPProperties;
 import org.apache.iceberg.rest.RESTCatalog;
 
 import java.util.ArrayList;
@@ -195,6 +199,22 @@ public class CatalogController {
         CatalogDescriptor.of(CATALOG_TYPE_REST, STORAGE_CONFIGS_VALUE_TYPE_OSS, ICEBERG));
     VALIDATE_CATALOGS.add(
         CatalogDescriptor.of(CATALOG_TYPE_REST, STORAGE_CONFIGS_VALUE_TYPE_OSS, MIXED_ICEBERG));
+    VALIDATE_CATALOGS.add(
+        CatalogDescriptor.of(CATALOG_TYPE_AMS, STORAGE_CONFIGS_VALUE_TYPE_GCS, ICEBERG));
+    VALIDATE_CATALOGS.add(
+        CatalogDescriptor.of(CATALOG_TYPE_AMS, STORAGE_CONFIGS_VALUE_TYPE_GCS, MIXED_ICEBERG));
+    VALIDATE_CATALOGS.add(
+        CatalogDescriptor.of(CATALOG_TYPE_GLUE, STORAGE_CONFIGS_VALUE_TYPE_GCS, ICEBERG));
+    VALIDATE_CATALOGS.add(
+        CatalogDescriptor.of(CATALOG_TYPE_GLUE, STORAGE_CONFIGS_VALUE_TYPE_GCS, MIXED_ICEBERG));
+    VALIDATE_CATALOGS.add(
+        CatalogDescriptor.of(CATALOG_TYPE_CUSTOM, STORAGE_CONFIGS_VALUE_TYPE_GCS, ICEBERG));
+    VALIDATE_CATALOGS.add(
+        CatalogDescriptor.of(CATALOG_TYPE_CUSTOM, STORAGE_CONFIGS_VALUE_TYPE_GCS, MIXED_ICEBERG));
+    VALIDATE_CATALOGS.add(
+        CatalogDescriptor.of(CATALOG_TYPE_REST, STORAGE_CONFIGS_VALUE_TYPE_GCS, ICEBERG));
+    VALIDATE_CATALOGS.add(
+        CatalogDescriptor.of(CATALOG_TYPE_REST, STORAGE_CONFIGS_VALUE_TYPE_GCS, MIXED_ICEBERG));
   }
 
   private final PlatformFileManager platformFileInfoService;
@@ -239,6 +259,10 @@ public class CatalogController {
     }
     if (STORAGE_CONFIGS_VALUE_TYPE_OSS.equals(storageConfig.get(STORAGE_CONFIGS_KEY_TYPE))) {
       hiddenProperties.add(AliyunProperties.OSS_ENDPOINT);
+    }
+    if (STORAGE_CONFIGS_VALUE_TYPE_GCS.equals(storageConfig.get(STORAGE_CONFIGS_KEY_TYPE))) {
+      hiddenProperties.add(GCPProperties.GCS_PROJECT_ID);
+      hiddenProperties.add(CatalogProperties.FILE_IO_IMPL);
     }
     return hiddenProperties;
   }
@@ -441,6 +465,12 @@ public class CatalogController {
             "fs.oss.endpoint",
             STORAGE_CONFIGS_KEY_OSS_ENDPOINT);
       }
+    } else if (STORAGE_CONFIGS_VALUE_TYPE_GCS.equals(storageType)) {
+      CatalogUtil.copyProperty(
+          catalogMeta.getCatalogProperties(),
+          storageConfig,
+          GCPProperties.GCS_PROJECT_ID,
+          STORAGE_CONFIGS_KEY_GCS_PROJECT_ID);
     }
     return storageConfig;
   }
@@ -537,6 +567,13 @@ public class CatalogController {
             STORAGE_CONFIGS_KEY_OSS_ENDPOINT,
             "fs.oss.endpoint");
       }
+    } else if (storageType.equals(STORAGE_CONFIGS_VALUE_TYPE_GCS)) {
+      catalogMeta.putToCatalogProperties(CatalogProperties.FILE_IO_IMPL, GCS_FILE_IO_IMPL);
+      CatalogUtil.copyProperty(
+          info.getStorageConfig(),
+          catalogMeta.getCatalogProperties(),
+          STORAGE_CONFIGS_KEY_GCS_PROJECT_ID,
+          GCPProperties.GCS_PROJECT_ID);
     } else if (storageType.equals(STORAGE_CONFIGS_VALUE_TYPE_LOCAL)) {
       // Local storage type does not require additional storage configs.
     } else {

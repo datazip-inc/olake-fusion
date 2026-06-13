@@ -18,6 +18,8 @@
 
 package org.apache.amoro.server.utils;
 
+import static org.apache.amoro.server.table.internal.InternalTableConstants.GCS_FILE_IO_IMPL;
+import static org.apache.amoro.server.table.internal.InternalTableConstants.GCS_PROTOCOL_PREFIX;
 import static org.apache.amoro.server.table.internal.InternalTableConstants.HADOOP_FILE_IO_IMPL;
 import static org.apache.amoro.server.table.internal.InternalTableConstants.METADATA_FOLDER_NAME;
 import static org.apache.amoro.server.table.internal.InternalTableConstants.MIXED_ICEBERG_BASED_REST;
@@ -92,6 +94,8 @@ public class InternalTableUtil {
       defaultImpl = S3_FILE_IO_IMPL;
     } else if (warehouse.toLowerCase().startsWith(OSS_PROTOCOL_PREFIX)) {
       defaultImpl = OSS_FILE_IO_IMPL;
+    } else if (warehouse.toLowerCase().startsWith(GCS_PROTOCOL_PREFIX)) {
+      defaultImpl = GCS_FILE_IO_IMPL;
     }
     String ioImpl = catalogProperties.getOrDefault(CatalogProperties.FILE_IO_IMPL, defaultImpl);
     FileIO fileIO = org.apache.iceberg.CatalogUtil.loadFileIO(ioImpl, catalogProperties, conf);

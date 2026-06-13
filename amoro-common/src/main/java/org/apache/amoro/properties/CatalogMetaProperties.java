@@ -29,10 +29,12 @@ public class CatalogMetaProperties {
   public static final String STORAGE_CONFIGS_KEY_REGION = "storage.s3.region";
   public static final String STORAGE_CONFIGS_KEY_S3_ENDPOINT = "storage.s3.endpoint";
   public static final String STORAGE_CONFIGS_KEY_OSS_ENDPOINT = "storage.oss.endpoint";
+  public static final String STORAGE_CONFIGS_KEY_GCS_PROJECT_ID = "storage.gcs.project-id";
   public static final String STORAGE_CONFIGS_VALUE_TYPE_HDFS_LEGACY = "hdfs";
   public static final String STORAGE_CONFIGS_VALUE_TYPE_HADOOP = "Hadoop";
   public static final String STORAGE_CONFIGS_VALUE_TYPE_S3 = "S3";
   public static final String STORAGE_CONFIGS_VALUE_TYPE_OSS = "OSS";
+  public static final String STORAGE_CONFIGS_VALUE_TYPE_GCS = "GCS";
   public static final String STORAGE_CONFIGS_VALUE_TYPE_LOCAL = "Local";
 
   public static final String AUTH_CONFIGS_KEY_TYPE = "auth.type";

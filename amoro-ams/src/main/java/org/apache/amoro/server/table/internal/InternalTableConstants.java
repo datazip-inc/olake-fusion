@@ -36,6 +36,8 @@ public class InternalTableConstants {
   public static final String S3_PROTOCOL_PREFIX = "s3://";
   public static final String OSS_FILE_IO_IMPL = "org.apache.iceberg.aliyun.oss.OSSFileIO";
   public static final String OSS_PROTOCOL_PREFIX = "oss://";
+  public static final String GCS_FILE_IO_IMPL = "org.apache.iceberg.gcp.gcs.GCSFileIO";
+  public static final String GCS_PROTOCOL_PREFIX = "gs://";
 
   public static final String CHANGE_STORE_TABLE_NAME_SUFFIX =
       InternalMixedIcebergCatalog.CHANGE_STORE_SEPARATOR + MixedTable.CHANGE_STORE_IDENTIFIER;
