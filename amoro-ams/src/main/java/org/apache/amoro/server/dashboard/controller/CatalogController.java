@@ -471,6 +471,13 @@ public class CatalogController {
           storageConfig,
           GCPProperties.GCS_PROJECT_ID,
           STORAGE_CONFIGS_KEY_GCS_PROJECT_ID);
+      if (catalogMeta.getStorageConfigs() != null) {
+        CatalogUtil.copyProperty(
+            catalogMeta.getStorageConfigs(),
+            storageConfig,
+            STORAGE_CONFIGS_KEY_GCS_PROJECT_ID,
+            STORAGE_CONFIGS_KEY_GCS_PROJECT_ID);
+      }
     }
     return storageConfig;
   }
@@ -574,6 +581,11 @@ public class CatalogController {
           catalogMeta.getCatalogProperties(),
           STORAGE_CONFIGS_KEY_GCS_PROJECT_ID,
           GCPProperties.GCS_PROJECT_ID);
+      CatalogUtil.copyProperty(
+          info.getStorageConfig(),
+          metaStorageConfig,
+          STORAGE_CONFIGS_KEY_GCS_PROJECT_ID,
+          STORAGE_CONFIGS_KEY_GCS_PROJECT_ID);
     } else if (storageType.equals(STORAGE_CONFIGS_VALUE_TYPE_LOCAL)) {
       // Local storage type does not require additional storage configs.
     } else {

@@ -23,6 +23,7 @@ package org.apache.amoro.server.catalog;
 import org.apache.amoro.api.CatalogMeta;
 import org.apache.amoro.aws.StaticAwsCredentialsProvider;
 import org.apache.amoro.properties.CatalogMetaProperties;
+import org.apache.amoro.server.utils.IcebergCatalogFileIoUtil;
 import org.apache.amoro.table.TableMetaStore;
 import org.apache.amoro.utils.CatalogUtil;
 import org.apache.amoro.utils.MixedFormatCatalogUtil;
@@ -75,6 +76,7 @@ public class CatalogConnectionTester {
     Map<String, String> baseIcebergProps =
         MixedFormatCatalogUtil.withIcebergCatalogInitializeProperties(
             catalogName, metastoreType, catalogMeta.getCatalogProperties());
+    IcebergCatalogFileIoUtil.applyFileIoFromStorage(catalogMeta, baseIcebergProps);
     Map<String, String> icebergProps =
         CatalogMetaProperties.CATALOG_TYPE_GLUE.equalsIgnoreCase(metastoreType)
             ? StaticAwsCredentialsProvider.applyGlueCredentials(baseIcebergProps)

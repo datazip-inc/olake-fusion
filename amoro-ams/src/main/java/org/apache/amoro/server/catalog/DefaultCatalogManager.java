@@ -42,6 +42,7 @@ import org.apache.amoro.shade.guava32.com.google.common.cache.CacheLoader;
 import org.apache.amoro.shade.guava32.com.google.common.cache.LoadingCache;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Maps;
 import org.apache.amoro.table.TableIdentifier;
+import org.apache.amoro.server.utils.IcebergCatalogFileIoUtil;
 import org.apache.amoro.utils.CatalogUtil;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.jetbrains.annotations.NotNull;
@@ -193,6 +194,8 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
 
   private void fillCatalogProperties(CatalogMeta catalogMeta) {
     String type = catalogMeta.getCatalogType();
+    IcebergCatalogFileIoUtil.applyFileIoFromStorage(
+        catalogMeta, catalogMeta.getCatalogProperties());
 
     if (CATALOG_TYPE_HIVE.equals(type)) {
       String amsUri =
