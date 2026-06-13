@@ -137,6 +137,9 @@ public class CatalogConnectionTester {
     FileIO fileIO =
         IcebergCatalogFileIoUtil.loadFileIo(
             catalogMeta, icebergProps, table.io().properties(), configuration);
+    LOG.info(
+        "Connection test using FileIO implementation: {}",
+        fileIO.getClass().getName());
     try {
       appendOneRecord(table, createTestRecord(table.schema()), fileIO);
     } finally {
@@ -159,12 +162,14 @@ public class CatalogConnectionTester {
   private static void appendOneRecord(Table table, Record record, FileIO fileIO) throws IOException {
     Schema schema = table.schema();
     WriteResult result;
+    OutputFileFactory outputFileFactory =
+        OutputFileFactory.builderFor(table, 0, 0).ioSupplier(() -> fileIO).build();
     try (UnpartitionedWriter<Record> writer =
         new UnpartitionedWriter<>(
             table.spec(),
             FileFormat.PARQUET,
             new GenericAppenderFactory(schema, table.spec()),
-            OutputFileFactory.builderFor(table, 0, 0).build(),
+            outputFileFactory,
             fileIO,
             Long.MAX_VALUE)) {
       writer.write(record);
