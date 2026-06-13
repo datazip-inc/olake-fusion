@@ -20,6 +20,7 @@ package org.apache.amoro.server.utils;
 
 import static org.apache.amoro.server.table.internal.InternalTableConstants.GCS_FILE_IO_IMPL;
 import static org.apache.amoro.server.table.internal.InternalTableConstants.GCS_PROTOCOL_PREFIX;
+import static org.apache.amoro.server.table.internal.InternalTableConstants.HADOOP_FILE_IO_IMPL;
 import static org.apache.amoro.server.table.internal.InternalTableConstants.OSS_FILE_IO_IMPL;
 import static org.apache.amoro.server.table.internal.InternalTableConstants.OSS_PROTOCOL_PREFIX;
 import static org.apache.amoro.server.table.internal.InternalTableConstants.S3_FILE_IO_IMPL;
@@ -29,9 +30,12 @@ import org.apache.amoro.api.CatalogMeta;
 import org.apache.amoro.properties.CatalogMetaProperties;
 import org.apache.amoro.utils.CatalogUtil;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.CatalogProperties;
 import org.apache.iceberg.gcp.GCPProperties;
+import org.apache.iceberg.io.FileIO;
 
+import java.util.HashMap;
 import java.util.Map;
 
 /** Applies Iceberg FileIO defaults from catalog storage config, mirroring {@link InternalTableUtil}. */
@@ -88,5 +92,31 @@ public class IcebergCatalogFileIoUtil {
             GCPProperties.GCS_PROJECT_ID, catalogProperties.get(GCPProperties.GCS_PROJECT_ID));
       }
     }
+  }
+
+  /**
+   * Load Iceberg {@link FileIO} for catalog connection tests and file access. Merges catalog
+   * properties with table-level FileIO properties (e.g. vended GCS OAuth tokens from REST catalog)
+   * before loading the configured implementation.
+   */
+  public static FileIO loadFileIo(
+      CatalogMeta catalogMeta,
+      Map<String, String> icebergCatalogProperties,
+      Map<String, String> tableFileIoProperties,
+      Configuration configuration) {
+    Map<String, String> fileIoProperties = new HashMap<>();
+    if (icebergCatalogProperties != null) {
+      fileIoProperties.putAll(icebergCatalogProperties);
+    }
+    if (tableFileIoProperties != null) {
+      fileIoProperties.putAll(tableFileIoProperties);
+    }
+    applyFileIoFromStorage(catalogMeta, fileIoProperties);
+
+    String ioImpl = fileIoProperties.get(CatalogProperties.FILE_IO_IMPL);
+    if (StringUtils.isEmpty(ioImpl)) {
+      ioImpl = HADOOP_FILE_IO_IMPL;
+    }
+    return org.apache.iceberg.CatalogUtil.loadFileIO(ioImpl, fileIoProperties, configuration);
   }
 }

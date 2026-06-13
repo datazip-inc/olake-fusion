@@ -27,6 +27,7 @@ import org.apache.amoro.server.utils.IcebergCatalogFileIoUtil;
 import org.apache.amoro.table.TableMetaStore;
 import org.apache.amoro.utils.CatalogUtil;
 import org.apache.amoro.utils.MixedFormatCatalogUtil;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.AppendFiles;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.FileFormat;
@@ -40,6 +41,7 @@ import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.data.GenericAppenderFactory;
 import org.apache.iceberg.data.GenericRecord;
 import org.apache.iceberg.data.Record;
+import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.io.OutputFileFactory;
 import org.apache.iceberg.io.UnpartitionedWriter;
 import org.apache.iceberg.io.WriteResult;
@@ -87,8 +89,9 @@ public class CatalogConnectionTester {
           Catalog catalog =
               org.apache.iceberg.CatalogUtil.buildIcebergCatalog(
                   catalogName, icebergProps, metaStore.getConfiguration());
+          Configuration configuration = metaStore.getConfiguration();
           try {
-            createAndWriteTestTable(catalog, catalogName);
+            createAndWriteTestTable(catalog, catalogName, catalogMeta, icebergProps, configuration);
           } finally {
             closeQuietly(catalog);
           }
@@ -96,7 +99,12 @@ public class CatalogConnectionTester {
         });
   }
 
-  private static void createAndWriteTestTable(Catalog catalog, String catalogName)
+  private static void createAndWriteTestTable(
+      Catalog catalog,
+      String catalogName,
+      CatalogMeta catalogMeta,
+      Map<String, String> icebergProps,
+      Configuration configuration)
       throws Exception {
     SupportsNamespaces nsCatalog = (SupportsNamespaces) catalog;
     Namespace ns = Namespace.of(TEST_NAMESPACE);
@@ -110,7 +118,7 @@ public class CatalogConnectionTester {
         catalog.createTable(tableId, TEST_SCHEMA, PartitionSpec.unpartitioned());
         LOG.info("Connection test table {} created", tableId);
       }
-      writeOneTestRecord(catalog, tableId);
+      writeOneTestRecord(catalog, tableId, catalogMeta, icebergProps, configuration);
     } catch (Exception e) {
       LOG.error("Connection test failed for table {}: {}", tableId, e.getMessage(), e);
       throw e;
@@ -118,10 +126,22 @@ public class CatalogConnectionTester {
     LOG.info("Test connection finished successfully for catalog {}", catalogName);
   }
 
-  private static void writeOneTestRecord(Catalog catalog, TableIdentifier tableId)
+  private static void writeOneTestRecord(
+      Catalog catalog,
+      TableIdentifier tableId,
+      CatalogMeta catalogMeta,
+      Map<String, String> icebergProps,
+      Configuration configuration)
       throws Exception {
     Table table = catalog.loadTable(tableId);
-    appendOneRecord(table, createTestRecord(table.schema()));
+    FileIO fileIO =
+        IcebergCatalogFileIoUtil.loadFileIo(
+            catalogMeta, icebergProps, table.io().properties(), configuration);
+    try {
+      appendOneRecord(table, createTestRecord(table.schema()), fileIO);
+    } finally {
+      fileIO.close();
+    }
     LOG.info("Test record written successfully to table {}", tableId);
   }
 
@@ -136,7 +156,7 @@ public class CatalogConnectionTester {
     return record;
   }
 
-  private static void appendOneRecord(Table table, Record record) throws IOException {
+  private static void appendOneRecord(Table table, Record record, FileIO fileIO) throws IOException {
     Schema schema = table.schema();
     WriteResult result;
     try (UnpartitionedWriter<Record> writer =
@@ -145,7 +165,7 @@ public class CatalogConnectionTester {
             FileFormat.PARQUET,
             new GenericAppenderFactory(schema, table.spec()),
             OutputFileFactory.builderFor(table, 0, 0).build(),
-            table.io(),
+            fileIO,
             Long.MAX_VALUE)) {
       writer.write(record);
       result = writer.complete();
