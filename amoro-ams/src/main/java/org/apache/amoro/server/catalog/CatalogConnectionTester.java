@@ -23,7 +23,6 @@ package org.apache.amoro.server.catalog;
 import org.apache.amoro.api.CatalogMeta;
 import org.apache.amoro.aws.StaticAwsCredentialsProvider;
 import org.apache.amoro.properties.CatalogMetaProperties;
-import org.apache.amoro.server.utils.IcebergCatalogFileIoUtil;
 import org.apache.amoro.table.TableMetaStore;
 import org.apache.amoro.utils.CatalogUtil;
 import org.apache.amoro.utils.MixedFormatCatalogUtil;
@@ -78,7 +77,7 @@ public class CatalogConnectionTester {
     Map<String, String> baseIcebergProps =
         MixedFormatCatalogUtil.withIcebergCatalogInitializeProperties(
             catalogName, metastoreType, catalogMeta.getCatalogProperties());
-    IcebergCatalogFileIoUtil.applyFileIoFromStorage(catalogMeta, baseIcebergProps);
+    CatalogFileIoUtil.applyExternalCatalogFileIoProperties(catalogMeta, baseIcebergProps);
     Map<String, String> icebergProps =
         CatalogMetaProperties.CATALOG_TYPE_GLUE.equalsIgnoreCase(metastoreType)
             ? StaticAwsCredentialsProvider.applyGlueCredentials(baseIcebergProps)
@@ -134,16 +133,18 @@ public class CatalogConnectionTester {
       Configuration configuration)
       throws Exception {
     Table table = catalog.loadTable(tableId);
-    FileIO fileIO =
-        IcebergCatalogFileIoUtil.loadFileIo(
-            catalogMeta, icebergProps, table.io().properties(), configuration);
-    LOG.info(
-        "Connection test using FileIO implementation: {}",
-        fileIO.getClass().getName());
-    try {
-      appendOneRecord(table, createTestRecord(table.schema()), fileIO);
-    } finally {
-      fileIO.close();
+    if (CatalogFileIoUtil.isGcsStorage(catalogMeta)) {
+      FileIO fileIO =
+          CatalogFileIoUtil.loadGcsFileIo(
+              catalogMeta, icebergProps, table.io().properties(), configuration);
+      LOG.info("Connection test using FileIO implementation: {}", fileIO.getClass().getName());
+      try {
+        appendOneRecord(table, createTestRecord(table.schema()), fileIO);
+      } finally {
+        fileIO.close();
+      }
+    } else {
+      appendOneRecord(table, createTestRecord(table.schema()));
     }
     LOG.info("Test record written successfully to table {}", tableId);
   }
@@ -159,7 +160,29 @@ public class CatalogConnectionTester {
     return record;
   }
 
-  private static void appendOneRecord(Table table, Record record, FileIO fileIO) throws IOException {
+  private static void appendOneRecord(Table table, Record record) throws IOException {
+    Schema schema = table.schema();
+    WriteResult result;
+    try (UnpartitionedWriter<Record> writer =
+        new UnpartitionedWriter<>(
+            table.spec(),
+            FileFormat.PARQUET,
+            new GenericAppenderFactory(schema, table.spec()),
+            OutputFileFactory.builderFor(table, 0, 0).build(),
+            table.io(),
+            Long.MAX_VALUE)) {
+      writer.write(record);
+      result = writer.complete();
+    }
+    AppendFiles append = table.newFastAppend();
+    for (DataFile dataFile : result.dataFiles()) {
+      append.appendFile(dataFile);
+    }
+    append.commit();
+  }
+
+  private static void appendOneRecord(Table table, Record record, FileIO fileIO)
+      throws IOException {
     Schema schema = table.schema();
     WriteResult result;
     OutputFileFactory outputFileFactory =

@@ -62,6 +62,7 @@ import org.apache.amoro.TableFormat;
 import org.apache.amoro.api.CatalogMeta;
 import org.apache.amoro.properties.CatalogMetaProperties;
 import org.apache.amoro.server.AmoroManagementConf;
+import org.apache.amoro.server.catalog.CatalogFileIoUtil;
 import org.apache.amoro.server.catalog.CatalogManager;
 import org.apache.amoro.server.catalog.InternalCatalog;
 import org.apache.amoro.server.catalog.ServerCatalog;
@@ -263,6 +264,9 @@ public class CatalogController {
     if (STORAGE_CONFIGS_VALUE_TYPE_GCS.equals(storageConfig.get(STORAGE_CONFIGS_KEY_TYPE))) {
       hiddenProperties.add(GCPProperties.GCS_PROJECT_ID);
       hiddenProperties.add(CatalogProperties.FILE_IO_IMPL);
+      if (CATALOG_TYPE_REST.equals(type)) {
+        hiddenProperties.add(CatalogFileIoUtil.ICEBERG_ACCESS_DELEGATION_HEADER_PROPERTY);
+      }
     }
     return hiddenProperties;
   }
@@ -593,6 +597,8 @@ public class CatalogController {
     }
 
     catalogMeta.setStorageConfigs(metaStorageConfig);
+    CatalogFileIoUtil.applyExternalCatalogFileIoProperties(
+        catalogMeta, catalogMeta.getCatalogProperties());
     return catalogMeta;
   }
 

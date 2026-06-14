@@ -90,11 +90,11 @@ public class InternalTableUtil {
     Configuration conf = store.getConfiguration();
     String warehouse = meta.getCatalogProperties().get(CatalogMetaProperties.KEY_WAREHOUSE);
     String defaultImpl = HADOOP_FILE_IO_IMPL;
-    if (warehouse.toLowerCase().startsWith(S3_PROTOCOL_PREFIX)) {
+    if (warehouse != null && warehouse.toLowerCase().startsWith(S3_PROTOCOL_PREFIX)) {
       defaultImpl = S3_FILE_IO_IMPL;
-    } else if (warehouse.toLowerCase().startsWith(OSS_PROTOCOL_PREFIX)) {
+    } else if (warehouse != null && warehouse.toLowerCase().startsWith(OSS_PROTOCOL_PREFIX)) {
       defaultImpl = OSS_FILE_IO_IMPL;
-    } else if (warehouse.toLowerCase().startsWith(GCS_PROTOCOL_PREFIX)) {
+    } else if (warehouse != null && warehouse.toLowerCase().startsWith(GCS_PROTOCOL_PREFIX)) {
       defaultImpl = GCS_FILE_IO_IMPL;
     }
     String ioImpl = catalogProperties.getOrDefault(CatalogProperties.FILE_IO_IMPL, defaultImpl);
