@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 # Modified by Datazip Inc. in 2026
+#
+# Modified by Datazip Inc. in 2026
 
 ARG SPARK_VERSION=3.5.8
 # Use the explicit java17 tag to guarantee Java 17 runtime.
