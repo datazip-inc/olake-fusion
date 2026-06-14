@@ -77,7 +77,9 @@ public class CatalogConnectionTester {
     Map<String, String> baseIcebergProps =
         MixedFormatCatalogUtil.withIcebergCatalogInitializeProperties(
             catalogName, metastoreType, catalogMeta.getCatalogProperties());
-    CatalogFileIoUtil.applyExternalCatalogFileIoProperties(catalogMeta, baseIcebergProps);
+    if (CatalogFileIoUtil.isGcsStorage(catalogMeta)) {
+      CatalogFileIoUtil.applyExternalCatalogFileIoProperties(catalogMeta, baseIcebergProps);
+    }
     Map<String, String> icebergProps =
         CatalogMetaProperties.CATALOG_TYPE_GLUE.equalsIgnoreCase(metastoreType)
             ? StaticAwsCredentialsProvider.applyGlueCredentials(baseIcebergProps)

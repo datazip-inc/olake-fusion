@@ -55,7 +55,6 @@ import static org.apache.amoro.properties.CatalogMetaProperties.STORAGE_CONFIGS_
 import static org.apache.amoro.properties.CatalogMetaProperties.STORAGE_CONFIGS_VALUE_TYPE_OSS;
 import static org.apache.amoro.properties.CatalogMetaProperties.STORAGE_CONFIGS_VALUE_TYPE_S3;
 import static org.apache.amoro.properties.CatalogMetaProperties.TABLE_FORMATS;
-import static org.apache.amoro.server.table.internal.InternalTableConstants.GCS_FILE_IO_IMPL;
 
 import io.javalin.http.Context;
 import org.apache.amoro.TableFormat;
@@ -579,7 +578,6 @@ public class CatalogController {
             "fs.oss.endpoint");
       }
     } else if (storageType.equals(STORAGE_CONFIGS_VALUE_TYPE_GCS)) {
-      catalogMeta.putToCatalogProperties(CatalogProperties.FILE_IO_IMPL, GCS_FILE_IO_IMPL);
       CatalogUtil.copyProperty(
           info.getStorageConfig(),
           catalogMeta.getCatalogProperties(),
@@ -597,8 +595,6 @@ public class CatalogController {
     }
 
     catalogMeta.setStorageConfigs(metaStorageConfig);
-    CatalogFileIoUtil.applyExternalCatalogFileIoProperties(
-        catalogMeta, catalogMeta.getCatalogProperties());
     return catalogMeta;
   }
 

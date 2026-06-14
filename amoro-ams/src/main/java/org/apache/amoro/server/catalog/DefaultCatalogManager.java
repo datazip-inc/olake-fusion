@@ -193,8 +193,10 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
 
   private void fillCatalogProperties(CatalogMeta catalogMeta) {
     String type = catalogMeta.getCatalogType();
-    CatalogFileIoUtil.applyExternalCatalogFileIoProperties(
-        catalogMeta, catalogMeta.getCatalogProperties());
+    if (CatalogFileIoUtil.isGcsStorage(catalogMeta)) {
+      CatalogFileIoUtil.applyExternalCatalogFileIoProperties(
+          catalogMeta, catalogMeta.getCatalogProperties());
+    }
 
     if (CATALOG_TYPE_HIVE.equals(type)) {
       String amsUri =

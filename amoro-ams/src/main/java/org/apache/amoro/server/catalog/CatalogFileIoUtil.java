@@ -32,19 +32,13 @@ import org.apache.iceberg.io.FileIO;
 import java.util.HashMap;
 import java.util.Map;
 
-/** Iceberg FileIO setup for external catalogs, including managed REST catalogs on GCS. */
+/** GCS FileIO setup for external catalogs, including managed REST catalogs on GCS. */
 public class CatalogFileIoUtil {
 
-  /** Iceberg REST client header prefix; see {@link #ICEBERG_ACCESS_DELEGATION_HEADER_PROPERTY}. */
-  public static final String REST_HEADER_PREFIX = "header.";
-
-  public static final String ICEBERG_ACCESS_DELEGATION_HEADER = "X-Iceberg-Access-Delegation";
-
-  /** Catalog property key for requesting vended storage credentials from a managed REST catalog. */
   public static final String ICEBERG_ACCESS_DELEGATION_HEADER_PROPERTY =
-      REST_HEADER_PREFIX + ICEBERG_ACCESS_DELEGATION_HEADER;
+      "header.X-Iceberg-Access-Delegation";
 
-  public static final String VENDED_CREDENTIALS = "vended-credentials";
+  private static final String VENDED_CREDENTIALS = "vended-credentials";
 
   private CatalogFileIoUtil() {}
 
@@ -56,33 +50,11 @@ public class CatalogFileIoUtil {
         CatalogUtil.getCompatibleStorageType(catalogMeta.getStorageConfigs()));
   }
 
-  public static boolean isRestCatalog(CatalogMeta catalogMeta) {
-    if (catalogMeta == null || catalogMeta.getCatalogType() == null) {
-      return false;
-    }
-    return CatalogMetaProperties.CATALOG_TYPE_REST.equalsIgnoreCase(
-        CatalogUtil.normalizeMetastoreType(catalogMeta.getCatalogType()));
-  }
-
-  public static boolean isManagedRestGcsCatalog(CatalogMeta catalogMeta) {
-    return isRestCatalog(catalogMeta) && isGcsStorage(catalogMeta);
-  }
-
   /**
-   * Apply Iceberg FileIO properties for external catalogs: GCS {@code io-impl}/{@code
-   * gcs.project-id} and managed REST credential-vending headers when applicable.
+   * Apply GCS Iceberg FileIO properties: {@code io-impl}, optional {@code gcs.project-id}, and for
+   * REST catalogs the credential-vending header expected by managed catalogs (e.g. Unity Catalog).
    */
   public static void applyExternalCatalogFileIoProperties(
-      CatalogMeta catalogMeta, Map<String, String> properties) {
-    applyGcsFileIoProperties(catalogMeta, properties);
-    applyManagedRestCatalogProperties(catalogMeta, properties);
-  }
-
-  /**
-   * Apply GCS Iceberg FileIO properties from catalog storage config: {@code io-impl} and optional
-   * {@code gcs.project-id}.
-   */
-  public static void applyGcsFileIoProperties(
       CatalogMeta catalogMeta, Map<String, String> properties) {
     if (!isGcsStorage(catalogMeta) || properties == null) {
       return;
@@ -94,19 +66,10 @@ public class CatalogFileIoUtil {
       properties.put(
           GCPProperties.GCS_PROJECT_ID, catalogProperties.get(GCPProperties.GCS_PROJECT_ID));
     }
-  }
-
-  /**
-   * Request vended storage credentials from managed REST catalogs (e.g. Unity Catalog, BigLake).
-   * Iceberg sends {@code X-Iceberg-Access-Delegation: vended-credentials} on REST requests so the
-   * catalog server returns short-lived GCS tokens in {@code LoadTableResponse.config}.
-   */
-  public static void applyManagedRestCatalogProperties(
-      CatalogMeta catalogMeta, Map<String, String> properties) {
-    if (!isManagedRestGcsCatalog(catalogMeta) || properties == null) {
-      return;
+    if (CatalogMetaProperties.CATALOG_TYPE_REST.equalsIgnoreCase(
+        CatalogUtil.normalizeMetastoreType(catalogMeta.getCatalogType()))) {
+      properties.putIfAbsent(ICEBERG_ACCESS_DELEGATION_HEADER_PROPERTY, VENDED_CREDENTIALS);
     }
-    properties.putIfAbsent(ICEBERG_ACCESS_DELEGATION_HEADER_PROPERTY, VENDED_CREDENTIALS);
   }
 
   /**
