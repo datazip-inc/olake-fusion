@@ -44,7 +44,6 @@ RUN AMORO_VERSION=`cat pom.xml | grep 'amoro-parent' -C 3 | grep -Eo '<version>.
 FROM eclipse-temurin:17-jdk-jammy
 
 ARG MAVEN_MIRROR=https://repo.maven.apache.org/maven2
-ARG ICEBERG_VERSION=1.7.2
 
 ENV AMORO_HOME /usr/local/amoro
 ENV AMORO_CONF_DIR ${AMORO_HOME}/conf
@@ -58,8 +57,7 @@ COPY --from=builder "/usr/local/amoro" "/usr/local/amoro"
 WORKDIR ${AMORO_HOME}
 
 RUN cd ${AMORO_HOME}/lib \
-    && wget ${MAVEN_MIRROR}/mysql/mysql-connector-java/8.0.30/mysql-connector-java-8.0.30.jar \
-    && wget ${MAVEN_MIRROR}/org/apache/iceberg/iceberg-gcp-bundle/${ICEBERG_VERSION}/iceberg-gcp-bundle-${ICEBERG_VERSION}.jar
+    && wget ${MAVEN_MIRROR}/mysql/mysql-connector-java/8.0.30/mysql-connector-java-8.0.30.jar
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["help"]
