@@ -135,18 +135,18 @@ public class CatalogConnectionTester {
       Configuration configuration)
       throws Exception {
     Table table = catalog.loadTable(tableId);
-    if (CatalogFileIoUtil.isGcsStorage(catalogMeta)) {
-      FileIO fileIO =
-          CatalogFileIoUtil.loadGcsFileIo(
-              catalogMeta, icebergProps, table.io().properties(), configuration);
-      LOG.info("Connection test using FileIO implementation: {}", fileIO.getClass().getName());
-      try {
-        appendOneRecord(table, createTestRecord(table.schema()), fileIO);
-      } finally {
+    FileIO fileIO =
+        CatalogFileIoUtil.isGcsStorage(catalogMeta)
+            ? CatalogFileIoUtil.loadGcsFileIo(
+                catalogMeta, icebergProps, table.io().properties(), configuration)
+            : table.io();
+    LOG.info("Connection test using FileIO implementation: {}", fileIO.getClass().getName());
+    try {
+      appendOneRecord(table, createTestRecord(table.schema()), fileIO);
+    } finally {
+      if (CatalogFileIoUtil.isGcsStorage(catalogMeta)) {
         fileIO.close();
       }
-    } else {
-      appendOneRecord(table, createTestRecord(table.schema()));
     }
     LOG.info("Test record written successfully to table {}", tableId);
   }
@@ -160,27 +160,6 @@ public class CatalogConnectionTester {
     record.setField("_cdc_timestamp", now);
     record.setField("data", "{\"name\":\"olake\"}");
     return record;
-  }
-
-  private static void appendOneRecord(Table table, Record record) throws IOException {
-    Schema schema = table.schema();
-    WriteResult result;
-    try (UnpartitionedWriter<Record> writer =
-        new UnpartitionedWriter<>(
-            table.spec(),
-            FileFormat.PARQUET,
-            new GenericAppenderFactory(schema, table.spec()),
-            OutputFileFactory.builderFor(table, 0, 0).build(),
-            table.io(),
-            Long.MAX_VALUE)) {
-      writer.write(record);
-      result = writer.complete();
-    }
-    AppendFiles append = table.newFastAppend();
-    for (DataFile dataFile : result.dataFiles()) {
-      append.appendFile(dataFile);
-    }
-    append.commit();
   }
 
   private static void appendOneRecord(Table table, Record record, FileIO fileIO)
