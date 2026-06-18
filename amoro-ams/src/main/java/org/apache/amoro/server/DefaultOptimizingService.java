@@ -211,6 +211,23 @@ public class DefaultOptimizingService extends StatedPersistentBase
         .orElseThrow(() -> new PluginRetryAuthException("Optimizer has not been authenticated"));
   }
 
+  private boolean isOptimizerAlive(OptimizerInstance optimizer) {
+    OptimizerInstance active = authOptimizers.get(optimizer.getToken());
+    OptimizerInstance instance = active != null ? active : optimizer;
+    long touchTime = instance.getTouchTime();
+    long optimizerHeartbeatInterval = getOptimizerHeartbeatInterval(instance);
+    return System.currentTimeMillis() - touchTime > optimizerHeartbeatInterval;
+  }
+
+  private long getOptimizerHeartbeatInterval(OptimizerInstance optimizer) {
+    Map<String, String> properties = optimizer.getProperties();
+    if (properties != null
+        && properties.containsKey(OptimizerProperties.OPTIMIZER_HEART_BEAT_INTERVAL)) {
+      return Long.parseLong(properties.get(OptimizerProperties.OPTIMIZER_HEART_BEAT_INTERVAL));
+    }
+    return Duration.ofSeconds(10).toMillis();
+  }
+
   @Override
   public OptimizingTask pollTask(String authToken, int threadId) {
     LOG.debug("Optimizer {} (threadId {}) try polling task", authToken, threadId);
@@ -264,6 +281,24 @@ public class DefaultOptimizingService extends StatedPersistentBase
             });
 
     OptimizingQueue queue = getQueueByGroup(registerInfo.getGroupName());
+    // Evict live sessions in this group before registering the new one. This removes competing
+    // pods immediately when a replacement authenticates, instead of waiting for heartbeat
+    // expiry in the UI. Expired sessions are left to OptimizerKeeper.
+    if (registerInfo.getGroupName() != null) {
+      authOptimizers.values().stream()
+          .filter(optimizer -> registerInfo.getGroupName().equals(optimizer.getGroupName()))
+          .filter(this::isOptimizerAlive)
+          .map(OptimizerInstance::getToken)
+          .collect(Collectors.toCollection(ArrayList::new))
+          .forEach(
+              token -> {
+                LOG.info(
+                    "Evicting live optimizer {} in group {} before registering new session",
+                    token,
+                    registerInfo.getGroupName());
+                unregisterOptimizer(token);
+              });
+    }
     OptimizerInstance optimizer = new OptimizerInstance(registerInfo, queue.getContainerName());
     registerOptimizer(optimizer, true);
     return optimizer.getToken();
