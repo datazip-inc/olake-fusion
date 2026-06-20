@@ -86,11 +86,11 @@ public class OptimizerBootstrap {
   }
 
   private void ensureResourceGroup(ResourceGroup group) {
-    ResourceGroup existing = optimizerManager.getResourceGroup(group.getName());
-    if (existing != null && resourceGroupMatches(existing, group)) {
+    ResourceGroup current = optimizerManager.getResourceGroup(group.getName());
+    if (current != null && resourceGroupMatches(current, group)) {
       return;
     }
-    if (existing == null) {
+    if (current == null) {
       LOG.info(
           "Creating optimizer group {} on container {}", group.getName(), group.getContainer());
       optimizerManager.createResourceGroup(group);
@@ -118,13 +118,13 @@ public class OptimizerBootstrap {
         parallelism);
   }
 
-  private boolean resourceGroupMatches(ResourceGroup existing, ResourceGroup desired) {
-    Map<String, String> existingProperties =
-        existing.getProperties() == null ? new HashMap<>() : existing.getProperties();
-    Map<String, String> desiredProperties =
-        desired.getProperties() == null ? new HashMap<>() : desired.getProperties();
-    return Objects.equals(existing.getContainer(), desired.getContainer())
-        && existingProperties.equals(desiredProperties);
+  private boolean resourceGroupMatches(ResourceGroup current, ResourceGroup newGroup) {
+    Map<String, String> currentProperties =
+        current.getProperties() == null ? new HashMap<>() : current.getProperties();
+    Map<String, String> newProperties =
+        newGroup.getProperties() == null ? new HashMap<>() : newGroup.getProperties();
+    return Objects.equals(current.getContainer(), newGroup.getContainer())
+        && currentProperties.equals(newProperties);
   }
 
   private void releaseAllResourcesInGroup(String groupName) {
