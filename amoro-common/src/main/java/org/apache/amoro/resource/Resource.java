@@ -84,6 +84,10 @@ public class Resource {
     return properties;
   }
 
+  public void setProperties(Map<String, String> properties) {
+    this.properties = properties;
+  }
+
   public String getRequiredProperty(String key) {
     Preconditions.checkState(
         properties != null && properties.containsKey(key), "Cannot find %s in properties", key);

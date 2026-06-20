@@ -28,7 +28,6 @@ import org.apache.amoro.resource.ResourceType;
 import org.apache.amoro.server.AmoroManagementConf;
 import org.apache.amoro.server.DefaultOptimizingService;
 import org.apache.amoro.server.manager.AbstractOptimizerContainer;
-import org.apache.amoro.server.resource.ContainerMetadata;
 import org.apache.amoro.server.resource.Containers;
 import org.apache.amoro.server.resource.OptimizerInstance;
 import org.apache.amoro.server.resource.OptimizerManager;
@@ -47,8 +46,6 @@ import java.util.stream.Collectors;
 public class OptimizerBootstrap {
 
   private static final Logger LOG = LoggerFactory.getLogger(OptimizerBootstrap.class);
-
-  static final String CONTAINER_CONFIGS = "bootstrap.container-configs";
 
   private final Configurations serviceConfig;
   private final OptimizerManager optimizerManager;
@@ -70,124 +67,46 @@ public class OptimizerBootstrap {
       String containerName =
           serviceConfig.getString(AmoroManagementConf.OPTIMIZER_BOOTSTRAP_CONTAINER);
 
-      int parallelism =
-          serviceConfig.getInteger(AmoroManagementConf.OPTIMIZER_BOOTSTRAP_PARALLELISM);
-
       ResourceContainer container = Containers.get(containerName);
       if (!(container instanceof AbstractOptimizerContainer)) {
         LOG.error("Container {} is not an optimizer container, skipping bootstrap", containerName);
         return;
       }
       AbstractOptimizerContainer optimizerContainer = (AbstractOptimizerContainer) container;
-
-      ResourceGroup group =
-          new ResourceGroup.Builder(groupName, containerName)
-              .addProperties(readBootstrapProperties())
-              .build();
-
-      boolean groupChanged = ensureResourceGroup(group);
-      List<Resource> resources = optimizerManager.listResourcesByGroup(groupName);
-      String containerConfigs = buildContainerConfigs(containerName);
-      long heartbeatTimeout =
-          serviceConfig.getDurationInMillis(AmoroManagementConf.OPTIMIZER_HB_TIMEOUT);
-      // on what conditions we need resource recreate
-      if (!needsResourceRecreate(
-          groupChanged, groupName, parallelism, containerConfigs, heartbeatTimeout, resources)) {
-        LOG.info("Optimizer for group {} already matches config", groupName);
-        return;
-      }
-
-      LOG.info(
-          "Recreating optimizer for group {} (resources={}, parallelism={})",
-          groupName,
-          resources.size(),
-          parallelism);
-
-      for (Resource resource : resources) {
-        releaseResource(resource);
-      }
-
-      createOptimizerResource(optimizerContainer, group, parallelism, containerConfigs);
+      int parallelism =
+          serviceConfig.getInteger(AmoroManagementConf.OPTIMIZER_BOOTSTRAP_PARALLELISM);
+      ResourceGroup group = new ResourceGroup.Builder(groupName, containerName).build();
+      ensureResourceGroup(group);
+      releaseAllResourcesInGroup(groupName);
+      createOptimizerResource(optimizerContainer, group, parallelism);
     } catch (Exception e) {
       LOG.error(
           "Optimizer bootstrap failed, AMS will continue without a bootstrapped optimizer", e);
     }
   }
 
-  /** @return true if the group was created or updated */
-  private boolean ensureResourceGroup(ResourceGroup group) {
+  private void ensureResourceGroup(ResourceGroup group) {
     ResourceGroup existing = optimizerManager.getResourceGroup(group.getName());
+    if (existing != null && resourceGroupMatches(existing, group)) {
+      return;
+    }
     if (existing == null) {
       LOG.info(
           "Creating optimizer group {} on container {}", group.getName(), group.getContainer());
       optimizerManager.createResourceGroup(group);
       optimizingService.createResourceGroup(group);
-      return true;
+    } else {
+      LOG.info("Updating optimizer group {} to match config", group.getName());
+      optimizerManager.updateResourceGroup(group);
+      optimizingService.updateResourceGroup(group);
     }
-    if (resourceGroupMatches(existing, group)) {
-      return false;
-    }
-    LOG.info("Updating optimizer group {} to match config", group.getName());
-    optimizerManager.updateResourceGroup(group);
-    optimizingService.updateResourceGroup(group);
-    return true;
-  }
-
-  boolean needsResourceRecreate(
-      boolean groupChanged,
-      String groupName,
-      int parallelism,
-      String containerConfigs,
-      long heartbeatTimeout,
-      List<Resource> resources) {
-    if (groupChanged || resources.size() != 1) {
-      return true;
-    }
-
-    Resource resource = resources.get(0);
-    if (resource.getThreadCount() != parallelism) {
-      return true;
-    }
-
-    Map<String, String> properties = resource.getProperties();
-    String storedContainerConfigs = properties == null ? null : properties.get(CONTAINER_CONFIGS);
-    if (!Objects.equals(storedContainerConfigs, containerConfigs)) {
-      LOG.info("Container config changed for group {}, recreating optimizer", groupName);
-      return true;
-    }
-
-    if (!isOptimizerAlive(groupName, resource.getResourceId(), heartbeatTimeout)) {
-      LOG.info(
-          "No live optimizer for resource {} in group {}, recreating",
-          resource.getResourceId(),
-          groupName);
-      return true;
-    }
-
-    return false;
-  }
-
-  private boolean isOptimizerAlive(String groupName, String resourceId, long heartbeatTimeout) {
-    long now = System.currentTimeMillis();
-    return optimizerManager.listOptimizers(groupName).stream()
-        .filter(instance -> resourceId.equals(instance.getResourceId()))
-        .anyMatch(instance -> instance.getTouchTime() + heartbeatTimeout > now);
   }
 
   private void createOptimizerResource(
-      AbstractOptimizerContainer container,
-      ResourceGroup group,
-      int parallelism,
-      String containerConfigs) {
-    Map<String, String> properties = new HashMap<>();
-    if (group.getProperties() != null) {
-      properties.putAll(group.getProperties());
-    }
-    properties.put(CONTAINER_CONFIGS, containerConfigs);
-
+      AbstractOptimizerContainer container, ResourceGroup group, int parallelism) {
     Resource resource =
         new Resource.Builder(group.getContainer(), group.getName(), ResourceType.OPTIMIZER)
-            .setProperties(properties)
+            .setProperties(group.getProperties())
             .setThreadCount(parallelism)
             .build();
     container.requestResource(resource);
@@ -199,34 +118,6 @@ public class OptimizerBootstrap {
         parallelism);
   }
 
-  private String buildContainerConfigs(String containerName) {
-    Map<String, String> properties =
-        Containers.getMetadataList().stream()
-            .filter(metadata -> containerName.equals(metadata.getName()))
-            .findFirst()
-            .map(ContainerMetadata::getProperties)
-            .orElseGet(HashMap::new);
-
-    return properties.entrySet().stream()
-        .sorted(Map.Entry.comparingByKey())
-        .map(entry -> entry.getKey() + "=" + entry.getValue())
-        .collect(Collectors.joining("|"));
-  }
-
-  private Map<String, String> readBootstrapProperties() {
-    String prefix = AmoroManagementConf.OPTIMIZER_BOOTSTRAP_PROPERTIES_PREFIX;
-    Map<String, String> properties = new HashMap<>();
-    serviceConfig
-        .toMap()
-        .forEach(
-            (key, value) -> {
-              if (key.startsWith(prefix)) {
-                properties.put(key.substring(prefix.length()), value);
-              }
-            });
-    return properties;
-  }
-
   private boolean resourceGroupMatches(ResourceGroup existing, ResourceGroup desired) {
     Map<String, String> existingProperties =
         existing.getProperties() == null ? new HashMap<>() : existing.getProperties();
@@ -236,16 +127,29 @@ public class OptimizerBootstrap {
         && existingProperties.equals(desiredProperties);
   }
 
+  private void releaseAllResourcesInGroup(String groupName) {
+    List<Resource> resources = optimizerManager.listResourcesByGroup(groupName);
+    for (Resource resource : resources) {
+      releaseResource(resource);
+    }
+  }
+
   private void releaseResource(Resource resource) {
     String resourceId = resource.getResourceId();
+    boolean released = false;
     try {
       List<OptimizerInstance> instances =
           optimizerManager.listOptimizers(resource.getGroupName()).stream()
               .filter(instance -> resourceId.equals(instance.getResourceId()))
               .collect(Collectors.toList());
-      if (!instances.isEmpty()) {
-        resource.getProperties().putAll(instances.get(0).getProperties());
+      Map<String, String> mergedProperties = new HashMap<>();
+      if (resource.getProperties() != null) {
+        mergedProperties.putAll(resource.getProperties());
       }
+      if (!instances.isEmpty() && instances.get(0).getProperties() != null) {
+        mergedProperties.putAll(instances.get(0).getProperties());
+      }
+      resource.setProperties(mergedProperties);
 
       ResourceContainer resourceContainer = Containers.get(resource.getContainerName());
       Preconditions.checkState(
@@ -253,9 +157,11 @@ public class OptimizerBootstrap {
           "Cannot release optimizer on non-optimizer resource container %s.",
           resource.getContainerName());
       ((AbstractOptimizerContainer) resourceContainer).releaseResource(resource);
+      released = true;
     } catch (Exception e) {
-      LOG.warn("Failed to release optimizer resource {}, cleaning up metadata", resourceId, e);
-    } finally {
+      LOG.warn("Failed to release optimizer resource {}", resourceId, e);
+    }
+    if (released) {
       cleanupResource(resource.getGroupName(), resourceId);
     }
   }
@@ -267,7 +173,8 @@ public class OptimizerBootstrap {
     try {
       optimizingService.deleteOptimizer(groupName, resourceId);
     } catch (Exception e) {
-      LOG.debug("Optimizer {} was not registered in optimizing service", resourceId);
+      LOG.warn(
+          "Failed to delete optimizer {} from optimizing service during cleanup", resourceId, e);
     }
     try {
       optimizerManager.deleteResource(resourceId);
@@ -277,7 +184,7 @@ public class OptimizerBootstrap {
     try {
       optimizerManager.deleteOptimizer(groupName, resourceId);
     } catch (Exception e) {
-      LOG.debug("Optimizer {} was not found in database", resourceId);
+      LOG.warn("Failed to delete optimizer {} from database during cleanup", resourceId, e);
     }
   }
 }
