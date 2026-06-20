@@ -535,10 +535,6 @@ public class AmoroManagementConf {
           .defaultValue(1)
           .withDescription("Parallelism (thread count) for the bootstrapped Spark optimizer.");
 
-  /** Prefix for free-form bootstrap properties that become ResourceGroup.properties. */
-  public static final String OPTIMIZER_BOOTSTRAP_PROPERTIES_PREFIX =
-      "optimizer.bootstrap.properties.";
-
   public static final ConfigOption<Duration> OPTIMIZING_REFRESH_GROUP_INTERVAL =
       ConfigOptions.key("self-optimizing.refresh-group-interval")
           .durationType()
