@@ -80,9 +80,6 @@ services:
           -d '{"user":"admin","password":"password"}'
         echo ""
 
-        # Optimizer group + Spark job: created/recreated by AMS on startup
-        # (ams.optimizer.bootstrap.* in config.yaml). fusion-init only creates the catalog.
-
         # ---- Catalog ----
         echo "Checking catalog..."
         CATALOGS=$$(curl -s -b /tmp/cookies.txt \
