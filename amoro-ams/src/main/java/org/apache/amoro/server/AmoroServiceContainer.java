@@ -259,8 +259,8 @@ public class AmoroServiceContainer {
     addHandlerChain(InlineTableExecutors.getInstance().getTagsAutoCreatingExecutor());
     tableService.initialize();
     LOG.info("AMS table service have been initialized");
-    tableManager.setTableService(tableService);ry
-    try{
+    tableManager.setTableService(tableService);
+    try {
       new OptimizerBootstrap(serviceConfig, optimizerManager, optimizingService).run();
     } catch (Exception e) {
       LOG.error("Failed to start optimizer bootstrap", e);
