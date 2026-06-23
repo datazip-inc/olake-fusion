@@ -263,7 +263,7 @@ public class AmoroServiceContainer {
     try{
       new OptimizerBootstrap(serviceConfig, optimizerManager, optimizingService).run();
     } catch (Exception e) {
-      LOG.error("Error in starting optimizer bootstrap", e);
+      LOG.error("Failed to start optimizer bootstrap", e);
     }
     initThriftService();
     startThriftService();
