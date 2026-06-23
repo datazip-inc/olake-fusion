@@ -67,7 +67,7 @@ ams:
       group-name: "spark-container"
       container: "sparkContainer"
       parallelism: 1
-      properties: {}
+      memory-mb: 1024
 
   blocker:
     timeout: 1min # 60000

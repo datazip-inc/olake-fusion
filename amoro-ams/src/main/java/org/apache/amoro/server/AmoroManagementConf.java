@@ -535,6 +535,14 @@ public class AmoroManagementConf {
           .defaultValue(1)
           .withDescription("Parallelism (thread count) for the bootstrapped Spark optimizer.");
 
+  public static final ConfigOption<Integer> OPTIMIZER_BOOTSTRAP_MEMORY_MB =
+      ConfigOptions.key("optimizer.bootstrap.memory-mb")
+          .intType()
+          .defaultValue(0)
+          .withDescription(
+              "Total memory in MB for the bootstrapped optimizer resource. "
+                  + "When 0, container-specific defaults or group properties apply.");
+
   public static final ConfigOption<Duration> OPTIMIZING_REFRESH_GROUP_INTERVAL =
       ConfigOptions.key("self-optimizing.refresh-group-interval")
           .durationType()

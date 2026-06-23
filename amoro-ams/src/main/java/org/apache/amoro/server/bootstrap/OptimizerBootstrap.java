@@ -75,10 +75,11 @@ public class OptimizerBootstrap {
       AbstractOptimizerContainer optimizerContainer = (AbstractOptimizerContainer) container;
       int parallelism =
           serviceConfig.getInteger(AmoroManagementConf.OPTIMIZER_BOOTSTRAP_PARALLELISM);
+      int memoryMb = serviceConfig.getInteger(AmoroManagementConf.OPTIMIZER_BOOTSTRAP_MEMORY_MB);
       ResourceGroup group = new ResourceGroup.Builder(groupName, containerName).build();
       ensureResourceGroup(group);
       releaseAllResourcesInGroup(groupName);
-      createOptimizerResource(optimizerContainer, group, parallelism);
+      createOptimizerResource(optimizerContainer, group, parallelism, memoryMb);
     } catch (Exception e) {
       LOG.error(
           "Optimizer bootstrap failed, AMS will continue without a bootstrapped optimizer", e);
@@ -103,11 +104,12 @@ public class OptimizerBootstrap {
   }
 
   private void createOptimizerResource(
-      AbstractOptimizerContainer container, ResourceGroup group, int parallelism) {
+      AbstractOptimizerContainer container, ResourceGroup group, int parallelism, int memoryMb) {
     Resource resource =
         new Resource.Builder(group.getContainer(), group.getName(), ResourceType.OPTIMIZER)
             .setProperties(group.getProperties())
             .setThreadCount(parallelism)
+            .setMemoryMb(memoryMb)
             .build();
     container.requestResource(resource);
     optimizerManager.createResource(resource);
@@ -180,11 +182,6 @@ public class OptimizerBootstrap {
       optimizerManager.deleteResource(resourceId);
     } catch (Exception e) {
       LOG.warn("Failed to delete resource {} from database", resourceId, e);
-    }
-    try {
-      optimizerManager.deleteOptimizer(groupName, resourceId);
-    } catch (Exception e) {
-      LOG.warn("Failed to delete optimizer {} from database during cleanup", resourceId, e);
     }
   }
 }
