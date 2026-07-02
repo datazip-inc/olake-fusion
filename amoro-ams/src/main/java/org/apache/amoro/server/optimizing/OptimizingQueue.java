@@ -140,6 +140,14 @@ public class OptimizingQueue extends PersistentBase {
   }
 
   private void initTableRuntime(DefaultTableRuntime tableRuntime) {
+    // Recover tables stranded in PLANNING to PENDING
+    if (tableRuntime.getOptimizingStatus() == OptimizingStatus.PLANNING) {
+      LOG.warn(
+          "Found orphaned PLANNING status for table {} on startup; resetting to PENDING status for re-scheduling.",
+          tableRuntime.getTableIdentifier());
+      tableRuntime.planFailed();
+    }
+
     TableOptimizingProcess process = null;
     if (tableRuntime.getOptimizingStatus().isProcessing() && tableRuntime.getProcessId() != 0) {
       TableProcessMeta meta =
