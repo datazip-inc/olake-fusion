@@ -372,21 +372,6 @@ public class DefaultTableRuntime extends AbstractTableRuntime
     store().begin().updateStatusCode(code -> OptimizingStatus.PENDING.getCode()).commit();
   }
 
-  /**
-   * Recovers tables stranded in {@link OptimizingStatus#PLANNING} to {@link
-   * OptimizingStatus#PENDING};
-   */
-  public void recoverOrphanedPlanning() {
-    store()
-        .begin()
-        .updateStatusCode(
-            code ->
-                code == OptimizingStatus.PLANNING.getCode()
-                    ? OptimizingStatus.PENDING.getCode()
-                    : code)
-        .commit();
-  }
-
   public void beginProcess(OptimizingProcess optimizingProcess) {
     OptimizingStatus originalStatus = getOptimizingStatus();
     this.optimizingProcess = optimizingProcess;

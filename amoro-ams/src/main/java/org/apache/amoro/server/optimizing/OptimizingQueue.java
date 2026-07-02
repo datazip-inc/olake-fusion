@@ -145,7 +145,7 @@ public class OptimizingQueue extends PersistentBase {
       LOG.warn(
           "Found orphaned PLANNING status for table {} on startup; resetting to PENDING status for re-scheduling.",
           tableRuntime.getTableIdentifier());
-      tableRuntime.recoverOrphanedPlanning();
+      tableRuntime.planFailed();
     }
 
     TableOptimizingProcess process = null;
