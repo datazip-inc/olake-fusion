@@ -140,6 +140,14 @@ public class OptimizingQueue extends PersistentBase {
   }
 
   private void initTableRuntime(DefaultTableRuntime tableRuntime) {
+    // Recover tables stranded in PLANNING to PENDING
+    if (tableRuntime.getOptimizingStatus() == OptimizingStatus.PLANNING) {
+      LOG.warn(
+          "Found orphaned PLANNING status for table {} on startup; resetting to PENDING status for re-scheduling.",
+          tableRuntime.getTableIdentifier());
+      tableRuntime.recoverOrphanedPlanning();
+    }
+
     TableOptimizingProcess process = null;
     if (tableRuntime.getOptimizingStatus().isProcessing() && tableRuntime.getProcessId() != 0) {
       TableProcessMeta meta =
@@ -338,14 +346,6 @@ public class OptimizingQueue extends PersistentBase {
 
   private TableOptimizingProcess planInternal(DefaultTableRuntime tableRuntime) {
     tableRuntime.beginPlanning();
-    try {
-      LOG.warn(
-          "[repro] sleeping 60s in PLANNING for table {} — kill AMS now to reproduce stuck-planning",
-          tableRuntime.getTableIdentifier());
-      Thread.sleep(60_000);
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-    }
     try {
       ServerTableIdentifier identifier = tableRuntime.getTableIdentifier();
       AmoroTable<?> table = catalogManager.loadTable(identifier.getIdentifier());
