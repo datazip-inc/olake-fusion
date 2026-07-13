@@ -368,6 +368,14 @@ public class OptimizingQueue extends PersistentBase {
     }
   }
 
+  public TaskRuntime<?> getTaskRuntime(OptimizingTaskId taskId) {
+    return findProcess(taskId).getTaskRuntime(taskId);
+  }
+
+  public OptimizingType getOptimizingType(OptimizingTaskId taskId) {
+    return findProcess(taskId).getOptimizingType();
+  }
+
   public void ackTask(OptimizingTaskId taskId, OptimizerThread thread) {
     findProcess(taskId).ackTask(taskId, thread);
   }

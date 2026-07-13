@@ -49,9 +49,13 @@ import org.apache.amoro.server.resource.OptimizerInstance;
 import org.apache.amoro.server.resource.OptimizerManager;
 import org.apache.amoro.server.resource.OptimizerThread;
 import org.apache.amoro.server.resource.QuotaProvider;
+import org.apache.amoro.optimizing.MetricsSummary;
+import org.apache.amoro.optimizing.OptimizingType;
+import org.apache.amoro.optimizing.RewriteStageTask;
 import org.apache.amoro.server.table.DefaultTableRuntime;
 import org.apache.amoro.server.table.RuntimeHandlerChain;
 import org.apache.amoro.server.table.TableService;
+import org.apache.amoro.server.utils.Telemetry;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Sets;
 import org.apache.amoro.shade.guava32.com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -228,6 +232,16 @@ public class DefaultOptimizingService extends StatedPersistentBase
   public void ackTask(String authToken, int threadId, OptimizingTaskId taskId) {
     LOG.info("Ack task {} by optimizer {} (threadId {})", taskId, authToken, threadId);
     OptimizingQueue queue = getQueueByToken(authToken);
+    OptimizingType optimizingType = queue.getOptimizingType(taskId);
+    TaskRuntime<?> taskRuntime = queue.getTaskRuntime(taskId);
+    long tableSize = 0;
+    if (taskRuntime.getTaskDescriptor() instanceof RewriteStageTask) {
+      MetricsSummary summary = ((RewriteStageTask) taskRuntime.getTaskDescriptor()).getSummary();
+      if (summary != null) {
+        tableSize = summary.getInputFilesStatistics().getTotalSize();
+      }
+    }
+    Telemetry.getInstance().trackCompactionStarted(optimizingType, tableSize);
     queue.ackTask(taskId, getAuthenticatedOptimizer(authToken).getThread(threadId));
   }
 
