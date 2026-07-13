@@ -36,6 +36,7 @@ import org.apache.amoro.server.AmoroManagementConf;
 import org.apache.amoro.server.dashboard.utils.AmsUtil;
 import org.apache.amoro.server.persistence.PersistentBase;
 import org.apache.amoro.server.persistence.mapper.CatalogMetaMapper;
+import org.apache.amoro.server.utils.Telemetry;
 import org.apache.amoro.shade.guava32.com.google.common.annotations.VisibleForTesting;
 import org.apache.amoro.shade.guava32.com.google.common.cache.CacheBuilder;
 import org.apache.amoro.shade.guava32.com.google.common.cache.CacheLoader;
@@ -187,6 +188,7 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
     doAs(CatalogMetaMapper.class, mapper -> mapper.insertCatalog(catalog.getMetadata()));
     disposeCatalog(catalogMeta.getCatalogName());
     serverCatalogMap.put(catalogMeta.getCatalogName(), catalog);
+    Telemetry.getInstance().trackCatalogAdded(catalogMeta.getCatalogType());
     LOG.info(
         "Create catalog {}, type:{}", catalogMeta.getCatalogName(), catalogMeta.getCatalogType());
   }

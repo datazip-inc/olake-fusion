@@ -217,11 +217,6 @@ public class Telemetry {
     // EXPLICIT TRACKER TRIGGERS
     // =========================================================================
 
-    public enum CatalogSource {
-        IMPORTED_FROM_OLAKE,
-        ADDED_NEW
-    }
-
     public void trackCompactionStarted(OptimizingType compactionType, long tableSize) {
         CompletableFuture.runAsync(() -> {
             Map<String, Object> props = Map.of(
@@ -242,10 +237,9 @@ public class Telemetry {
         });
     }
 
-    public void trackCatalogAdded(CatalogSource catalogSource, String catalogType) {
+    public void trackCatalogAdded(String catalogType) {
         CompletableFuture.runAsync(() -> {
             Map<String, Object> props = Map.of(
-                    "catalog_source", catalogSource.name(),
                     "catalog_type", catalogType);
             sendEvent("catalog_added", props);
         });

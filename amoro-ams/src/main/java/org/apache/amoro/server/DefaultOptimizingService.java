@@ -254,6 +254,18 @@ public class DefaultOptimizingService extends StatedPersistentBase
         taskResult.getTaskId(),
         taskResult.getErrorMessage() == null ? "SUCCESS" : "FAIL");
     OptimizingQueue queue = getQueueByToken(authToken);
+    OptimizingTaskId taskId = taskResult.getTaskId();
+    OptimizingType optimizingType = queue.getOptimizingType(taskId);
+    TaskRuntime<?> taskRuntime = queue.getTaskRuntime(taskId);
+    long tableSize = 0;
+    if (taskRuntime.getTaskDescriptor() instanceof RewriteStageTask) {
+      MetricsSummary summary = ((RewriteStageTask) taskRuntime.getTaskDescriptor()).getSummary();
+      if (summary != null) {
+        tableSize = summary.getInputFilesStatistics().getTotalSize();
+      }
+    }
+    boolean success = taskResult.getErrorMessage() == null;
+    Telemetry.getInstance().trackCompactionCompleted(optimizingType, tableSize, success);
     OptimizerThread thread =
         getAuthenticatedOptimizer(authToken).getThread(taskResult.getThreadId());
     queue.completeTask(thread, taskResult);
