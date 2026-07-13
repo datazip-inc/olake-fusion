@@ -182,13 +182,13 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
       throw new AlreadyExistsException("Catalog " + catalogMeta.getCatalogName());
     }
     fillCatalogProperties(catalogMeta);
+    Telemetry.getInstance().trackCatalogAdded(catalogMeta.getCatalogType());
     validateCatalogConnection(catalogMeta);
     // Build to make sure the catalog is valid
     ServerCatalog catalog = CatalogBuilder.buildServerCatalog(catalogMeta, serverConfiguration);
     doAs(CatalogMetaMapper.class, mapper -> mapper.insertCatalog(catalog.getMetadata()));
     disposeCatalog(catalogMeta.getCatalogName());
     serverCatalogMap.put(catalogMeta.getCatalogName(), catalog);
-    Telemetry.getInstance().trackCatalogAdded(catalogMeta.getCatalogType());
     LOG.info(
         "Create catalog {}, type:{}", catalogMeta.getCatalogName(), catalogMeta.getCatalogType());
   }
