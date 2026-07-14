@@ -208,6 +208,7 @@ public class TableController {
 
     ctx.json(OkResponse.of(enabled));
   }
+  
   /**
    * get hive table detail.
    *
