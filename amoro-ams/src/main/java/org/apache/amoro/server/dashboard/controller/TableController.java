@@ -589,35 +589,36 @@ public class TableController {
                           formatToType.apply(idWithFormat.getTableFormat()));
                   try {
                     ServerTableIdentifier serverTableId =
-                        tableManager.getServerTableIdentifier(
-                            idWithFormat.getIdentifier().buildTableIdentifier());
-                    if (serverTableId != null) {
-                      TableRuntimeMeta tableRuntimeMeta =
-                          tableManager.getTableRuntimeMata(serverTableId);
-                      if (tableRuntimeMeta != null && tableRuntimeMeta.getTableSummary() != null) {
-                        tableMeta.setHealthScore(
-                            tableRuntimeMeta.getTableSummary().getHealthScore());
-                      }
-                      if (tableRuntimeMeta != null && tableRuntimeMeta.getTableConfig() != null) {
-                        tableMeta.setOptimizingEnabled(
-                            TableConfigurations.parseTableConfig(tableRuntimeMeta.getTableConfig())
-                                .getOptimizingConfig()
-                                .isEnabled());
-                      }
-                      if (tableRuntimeMeta
-                          .getTableConfig()
-                          .containsKey(TableProperties.OLAKE_TABLE_IDENTIFIER)) {
-                        tableMeta.setOlakeCreated(true);
-                      } else {
-                        tableMeta.setOlakeCreated(false);
-                      }
-                    }
+                        Objects.requireNonNull(
+                            tableManager.getServerTableIdentifier(
+                                idWithFormat.getIdentifier().buildTableIdentifier()),
+                            "ServerTableIdentifier not found");
+
+                    TableRuntimeMeta tableRuntimeMeta =
+                        Objects.requireNonNull(
+                            tableManager.getTableRuntimeMata(serverTableId),
+                            "TableRuntimeMeta not found");
+                    tableMeta.setHealthScore(
+                        Objects.requireNonNull(
+                                tableRuntimeMeta.getTableSummary(), "TableSummary not found")
+                            .getHealthScore());
+
+                    Map<String, String> tableConfig =
+                        Objects.requireNonNull(
+                            tableRuntimeMeta.getTableConfig(), "TableConfig not found");
+
+                    tableMeta.setOptimizingEnabled(
+                        TableConfigurations.parseTableConfig(tableConfig)
+                            .getOptimizingConfig()
+                            .isEnabled());
+
+                    tableMeta.setOlakeCreated(
+                        tableConfig.containsKey(TableProperties.OLAKE_TABLE_IDENTIFIER));
                   } catch (Exception e) {
-                    LOG.warn(
-                        "Failed to get health score for table: {}",
-                        idWithFormat.getIdentifier(),
-                        e);
+                    throw new IllegalStateException(
+                        "Failed to build TableMeta for table " + idWithFormat.getIdentifier(), e);
                   }
+
                   return tableMeta;
                 })
             // Sort by table format and table name

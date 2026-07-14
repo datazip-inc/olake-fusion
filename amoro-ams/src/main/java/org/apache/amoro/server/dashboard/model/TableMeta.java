@@ -30,16 +30,11 @@ public class TableMeta {
   public String type;
   public Integer healthScore = -1;
 
-  @JsonProperty("self-optimizing.enabled")
+  @JsonProperty("enabled")
   public Boolean optimizingEnabled;
-
-  @JsonProperty(TableProperties.OLAKE_TABLE_IDENTIFIER)
-  public String olakeTableIdentifier;
 
   @JsonProperty(TableProperties.OLAKE_CREATED)
   public Boolean olakeCreated = false;
-
-  public TableMeta() {}
 
   public TableMeta(String name, String type) {
     this.name = name;
@@ -62,24 +57,12 @@ public class TableMeta {
     this.type = type;
   }
 
-  public Integer getHealthScore() {
-    return healthScore;
-  }
-
   public void setHealthScore(Integer healthScore) {
     this.healthScore = healthScore;
   }
 
-  public Boolean getOptimizingEnabled() {
-    return optimizingEnabled;
-  }
-
   public void setOptimizingEnabled(Boolean optimizingEnabled) {
     this.optimizingEnabled = optimizingEnabled;
-  }
-
-  public Boolean getOlakeCreated() {
-    return olakeCreated;
   }
 
   public void setOlakeCreated(Boolean olakeCreated) {
