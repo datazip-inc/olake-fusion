@@ -14,15 +14,25 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.dashboard.model;
+
+import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.util.Objects;
 
 public class TableMeta {
   public String name;
   public String type;
+  public Integer healthScore = -1;
+
+  @JsonProperty("self-optimizing.enabled")
+  public Boolean optimizingEnabled;
+
+  public TableMeta() {}
 
   public TableMeta(String name, String type) {
     this.name = name;
@@ -43,6 +53,22 @@ public class TableMeta {
 
   public void setType(String type) {
     this.type = type;
+  }
+
+  public Integer getHealthScore() {
+    return healthScore;
+  }
+
+  public void setHealthScore(Integer healthScore) {
+    this.healthScore = healthScore;
+  }
+
+  public Boolean getOptimizingEnabled() {
+    return optimizingEnabled;
+  }
+
+  public void setOptimizingEnabled(Boolean optimizingEnabled) {
+    this.optimizingEnabled = optimizingEnabled;
   }
 
   @Override
