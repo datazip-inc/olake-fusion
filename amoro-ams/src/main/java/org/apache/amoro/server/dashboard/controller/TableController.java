@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.dashboard.controller;
@@ -550,10 +552,31 @@ public class TableController {
     List<TableMeta> tables =
         serverCatalog.listTables(db).stream()
             .map(
-                idWithFormat ->
-                    new TableMeta(
-                        idWithFormat.getIdentifier().getTableName(),
-                        formatToType.apply(idWithFormat.getTableFormat())))
+                idWithFormat -> {
+                  TableMeta tableMeta =
+                      new TableMeta(
+                          idWithFormat.getIdentifier().getTableName(),
+                          formatToType.apply(idWithFormat.getTableFormat()));
+                  try {
+                    ServerTableIdentifier serverTableId =
+                        tableManager.getServerTableIdentifier(
+                            idWithFormat.getIdentifier().buildTableIdentifier());
+                    if (serverTableId != null) {
+                      TableRuntimeMeta tableRuntimeMeta =
+                          tableManager.getTableRuntimeMata(serverTableId);
+                      if (tableRuntimeMeta != null && tableRuntimeMeta.getTableSummary() != null) {
+                        tableMeta.setHealthScore(
+                            tableRuntimeMeta.getTableSummary().getHealthScore());
+                      }
+                    }
+                  } catch (Exception e) {
+                    LOG.warn(
+                        "Failed to get health score for table: {}",
+                        idWithFormat.getIdentifier(),
+                        e);
+                  }
+                  return tableMeta;
+                })
             // Sort by table format and table name
             .sorted(
                 (table1, table2) -> {
