@@ -56,6 +56,7 @@ import org.apache.amoro.server.dashboard.utils.CommonUtil;
 import org.apache.amoro.server.optimizing.OptimizingStatus;
 import org.apache.amoro.server.persistence.TableRuntimeMeta;
 import org.apache.amoro.server.process.TableProcessMeta;
+import org.apache.amoro.server.table.TableConfigurations;
 import org.apache.amoro.server.table.TableManager;
 import org.apache.amoro.shade.guava32.com.google.common.base.Function;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
@@ -567,6 +568,12 @@ public class TableController {
                       if (tableRuntimeMeta != null && tableRuntimeMeta.getTableSummary() != null) {
                         tableMeta.setHealthScore(
                             tableRuntimeMeta.getTableSummary().getHealthScore());
+                      }
+                      if (tableRuntimeMeta != null && tableRuntimeMeta.getTableConfig() != null) {
+                        tableMeta.setOptimizingEnabled(
+                            TableConfigurations.parseTableConfig(tableRuntimeMeta.getTableConfig())
+                                .getOptimizingConfig()
+                                .isEnabled());
                       }
                     }
                   } catch (Exception e) {
