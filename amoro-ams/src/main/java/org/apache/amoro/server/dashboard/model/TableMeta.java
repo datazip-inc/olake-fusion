@@ -21,6 +21,7 @@
 package org.apache.amoro.server.dashboard.model;
 
 import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.annotation.JsonProperty;
+import org.apache.amoro.table.TableProperties;
 
 import java.util.Objects;
 
@@ -31,6 +32,12 @@ public class TableMeta {
 
   @JsonProperty("self-optimizing.enabled")
   public Boolean optimizingEnabled;
+
+  @JsonProperty(TableProperties.OLAKE_TABLE_IDENTIFIER)
+  public String olakeTableIdentifier;
+
+  @JsonProperty(TableProperties.OLAKE_CREATED)
+  public Boolean olakeCreated = false;
 
   public TableMeta() {}
 
@@ -69,6 +76,14 @@ public class TableMeta {
 
   public void setOptimizingEnabled(Boolean optimizingEnabled) {
     this.optimizingEnabled = optimizingEnabled;
+  }
+
+  public Boolean getOlakeCreated() {
+    return olakeCreated;
+  }
+
+  public void setOlakeCreated(Boolean olakeCreated) {
+    this.olakeCreated = olakeCreated;
   }
 
   @Override

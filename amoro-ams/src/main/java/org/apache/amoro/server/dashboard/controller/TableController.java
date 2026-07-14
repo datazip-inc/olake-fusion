@@ -603,6 +603,13 @@ public class TableController {
                                 .getOptimizingConfig()
                                 .isEnabled());
                       }
+                      if (tableRuntimeMeta
+                          .getTableConfig()
+                          .containsKey(TableProperties.OLAKE_TABLE_IDENTIFIER)) {
+                        tableMeta.setOlakeCreated(true);
+                      } else {
+                        tableMeta.setOlakeCreated(false);
+                      }
                     }
                   } catch (Exception e) {
                     LOG.warn(
