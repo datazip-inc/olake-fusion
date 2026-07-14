@@ -251,6 +251,9 @@ public class DashboardServer {
                 "/catalogs/{catalog}/dbs/{db}/tables/{table}/details",
                 tableController::getTableDetail);
             get(
+                "/catalogs/{catalog}/dbs/{db}/tables/{table}/optimizing-enabled",
+                tableController::getTableOptimizingEnabled);
+            get(
                 "/catalogs/{catalog}/dbs/{db}/tables/{table}/hive/details",
                 tableController::getHiveTableDetail);
             post(

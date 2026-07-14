@@ -23,6 +23,7 @@ package org.apache.amoro.server.dashboard.controller;
 import static org.apache.amoro.properties.CatalogMetaProperties.CATALOG_TYPE_HIVE;
 
 import io.javalin.http.Context;
+import org.apache.amoro.AmoroTable;
 import org.apache.amoro.Constants;
 import org.apache.amoro.ServerTableIdentifier;
 import org.apache.amoro.TableFormat;
@@ -180,6 +181,33 @@ public class TableController {
     ctx.json(OkResponse.of(serverTableMeta));
   }
 
+  /**
+   * get table self-optimizing enabled status.
+   *
+   * @param ctx
+   */
+  public void getTableOptimizingEnabled(Context ctx) {
+    String catalog = ctx.pathParam("catalog");
+    String database = ctx.pathParam("db");
+    String tableName = ctx.pathParam("table");
+
+    Preconditions.checkArgument(
+        StringUtils.isNotBlank(catalog)
+            && StringUtils.isNotBlank(database)
+            && StringUtils.isNotBlank(tableName),
+        "catalog, db and table can not be empty");
+    Preconditions.checkState(catalogManager.catalogExist(catalog), "invalid catalog!");
+
+    ServerCatalog serverCatalog = catalogManager.getServerCatalog(catalog);
+    AmoroTable<?> amoroTable = serverCatalog.loadTable(database, tableName);
+
+    boolean enabled =
+        TableConfigurations.parseTableConfig(amoroTable.properties())
+            .getOptimizingConfig()
+            .isEnabled();
+
+    ctx.json(OkResponse.of(enabled));
+  }
   /**
    * get hive table detail.
    *
