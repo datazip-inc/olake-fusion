@@ -1,4 +1,28 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.amoro.server.utils;
+
+import org.apache.amoro.optimizing.OptimizingType;
+import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.URI;
@@ -16,233 +40,242 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
-import org.apache.amoro.optimizing.OptimizingType;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 public class Telemetry {
-    private static final Logger LOG = LoggerFactory.getLogger(Telemetry.class);
-    
-    private static final String TRACK_URL = "https://analytics.olake.io/mp/track";
-    private static final String IP_NOT_FOUND_PLACEHOLDER = "NA";
-    private static final String USER_ID_FILE = "user_id.txt";
+  private static final Logger LOG = LoggerFactory.getLogger(Telemetry.class);
 
-    private final HttpClient httpClient;
-    private final ObjectMapper objectMapper;
-    
-    private String ipAddress = IP_NOT_FOUND_PLACEHOLDER;
-    private String userID;
-    private PlatformInfo platform;
-    private LocationInfo locationInfo;
+  // replace with url for fusion:
+  private static final String TRACK_URL = "https://analytics.olake.io/mp/track";
+  private static final String IP_NOT_FOUND_PLACEHOLDER = "NA";
+  private static final String USER_ID_FILE = "user_id.txt";
 
-    // Direct translations of Go structs using Java Records
-    public record PlatformInfo(String os, String arch, String version, String deviceCpu) {}
+  private final HttpClient httpClient;
+  private final ObjectMapper objectMapper;
 
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public record LocationInfo(String country, String region, String city) {}
+  private String ipAddress = IP_NOT_FOUND_PLACEHOLDER;
+  private String userID;
+  private PlatformInfo platform;
+  private LocationInfo locationInfo;
 
-    // Thread-safe Singleton Setup
-    private static final class InstanceHolder {
-        private static final Telemetry INSTANCE = new Telemetry();
-    }
+  // Direct translations of Go structs using Java Records
+  public record PlatformInfo(String os, String arch, String version, String deviceCpu) {}
 
-    public static Telemetry getInstance() {
-        return InstanceHolder.INSTANCE;
-    }
+  @JsonIgnoreProperties(ignoreUnknown = true)
+  public record LocationInfo(String country, String region, String city) {}
 
-    private Telemetry() {
-        this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(5))
-                .build();
-        this.objectMapper = new ObjectMapper();
-        
-        // Emulate Go's "go func() { Init() }" by executing concurrently at startup
-        initAsync();
-    }
+  // Thread-safe Singleton Setup
+  private static final class InstanceHolder {
+    private static final Telemetry INSTANCE = new Telemetry();
+  }
 
-    // =========================================================================
-    // INFRASTRUCTURE & METADATA UTILITIES (Placed before trackers)
-    // =========================================================================
+  public static Telemetry getInstance() {
+    return InstanceHolder.INSTANCE;
+  }
 
-    private void initAsync() {
-        CompletableFuture.runAsync(() -> {
-            try {
-                String disabledEnv = System.getenv("TELEMETRY_DISABLED");
-                if (disabledEnv != null && Boolean.parseBoolean(disabledEnv)) {
-                    return;
-                }
+  private Telemetry() {
+    this.httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+    this.objectMapper = new ObjectMapper();
 
-                this.ipAddress = fetchOutboundIP();
-                this.userID = resolveUserID();
-                this.platform = gatherPlatformInfo();
-                this.locationInfo = fetchLocationFromIP(this.ipAddress);
-            } catch (Exception e) {
-                LOG.debug("Failed to initialize telemetry context safely: {}", e.getMessage());
+    initAsync();
+  }
+
+  // =========================================================================
+  // INFRASTRUCTURE & METADATA UTILITIES (Placed before trackers)
+  // =========================================================================
+
+  private void initAsync() {
+    CompletableFuture.runAsync(
+        () -> {
+          try {
+            String disabledEnv = System.getenv("TELEMETRY_DISABLED");
+            if (disabledEnv != null && Boolean.parseBoolean(disabledEnv)) {
+              return;
             }
+
+            this.ipAddress = fetchOutboundIP();
+            this.userID = resolveUserID();
+            this.platform = gatherPlatformInfo();
+            this.locationInfo = fetchLocationFromIP(this.ipAddress);
+          } catch (Exception e) {
+            LOG.debug("Failed to initialize telemetry context safely: {}", e.getMessage());
+          }
         });
+  }
+
+  private String fetchOutboundIP() {
+    try {
+      HttpRequest request =
+          HttpRequest.newBuilder()
+              .uri(URI.create("https://api.ipify.org?format=text"))
+              .timeout(Duration.ofSeconds(5))
+              .GET()
+              .build();
+      HttpResponse<String> response =
+          httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+      if (response.statusCode() == 200) {
+        return response.body().trim();
+      }
+    } catch (Exception e) {
+      LOG.debug("Failed to fetch outbound IP: {}", e.getMessage());
+    }
+    return IP_NOT_FOUND_PLACEHOLDER;
+  }
+
+  private LocationInfo fetchLocationFromIP(String ip) {
+    if (IP_NOT_FOUND_PLACEHOLDER.equals(ip)) {
+      return new LocationInfo("NA", "NA", "NA");
+    }
+    try {
+      HttpRequest request =
+          HttpRequest.newBuilder()
+              .uri(URI.create("https://ipinfo.io/" + ip + "/json"))
+              .timeout(Duration.ofSeconds(5))
+              .GET()
+              .build();
+      HttpResponse<String> response =
+          httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+      if (response.statusCode() == 200) {
+        return objectMapper.readValue(response.body(), LocationInfo.class);
+      }
+    } catch (Exception e) {
+      LOG.debug("Failed to fetch location context for IP {}: {}", ip, e.getMessage());
+    }
+    return new LocationInfo("NA", "NA", "NA");
+  }
+
+  private PlatformInfo gatherPlatformInfo() {
+    String os = System.getProperty("os.name", "Unknown").toLowerCase();
+    String arch = System.getProperty("os.arch", "Unknown");
+    int cores = Runtime.getRuntime().availableProcessors();
+
+    String driverVersion = System.getenv("DRIVER_VERSION");
+    if (driverVersion == null || driverVersion.isEmpty()) {
+      driverVersion = "Not Available";
     }
 
-    private String fetchOutboundIP() {
-        try {
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create("https://api.ipify.org?format=text"))
-                    .timeout(Duration.ofSeconds(5))
-                    .GET()
-                    .build();
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() == 200) {
-                return response.body().trim();
-            }
-        } catch (Exception e) {
-            LOG.debug("Failed to fetch outbound IP: {}", e.getMessage());
+    return new PlatformInfo(os, arch, driverVersion, cores + " cores");
+  }
+
+  private String resolveUserID() {
+    // Attempts to read config location dynamically via system property or defaults to user home
+    String configPathStr = System.getProperty("amoro.config.path", System.getProperty("user.home"));
+    Path idPath = Paths.get(configPathStr, USER_ID_FILE);
+
+    try {
+      if (Files.exists(idPath)) {
+        return Files.readString(idPath, StandardCharsets.UTF_8).trim().replace("\"", "");
+      }
+
+      // Fallback generation matching Go's crypto/sha256 timestamp hash logic
+      MessageDigest digest = MessageDigest.getInstance("SHA-256");
+      String seed = String.valueOf(System.currentTimeMillis());
+      byte[] encodedHash = digest.digest(seed.getBytes(StandardCharsets.UTF_8));
+
+      // Convert to Hex String up to 32 characters
+      StringBuilder hexString = new StringBuilder();
+      for (byte b : encodedHash) {
+        String hex = Integer.toHexString(0xff & b);
+        if (hex.length() == 1) {
+          hexString.append('0');
         }
-        return IP_NOT_FOUND_PLACEHOLDER;
+        hexString.append(hex);
+      }
+      String generatedID = hexString.substring(0, 32);
+
+      // Persist locally
+      Files.writeString(idPath, generatedID, StandardCharsets.UTF_8);
+      return generatedID;
+    } catch (IOException | NoSuchAlgorithmException e) {
+      LOG.debug("Failed to parse or save telemetry user id file, using transient identity.", e);
+      return "transient-" + java.util.UUID.randomUUID().toString().substring(0, 8);
+    }
+  }
+
+  /** Core abstract event transport processing logic matching Go's (t *Telemetry) sendEvent */
+  private void sendEvent(String eventName, Map<String, Object> props) {
+    if (platform == null) {
+      return; // Engine initialization was skipped or telemetry is intentionally disabled
     }
 
-    private LocationInfo fetchLocationFromIP(String ip) {
-        if (IP_NOT_FOUND_PLACEHOLDER.equals(ip)) {
-            return new LocationInfo("NA", "NA", "NA");
-        }
-        try {
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create("https://ipinfo.io/" + ip + "/json"))
-                    .timeout(Duration.ofSeconds(5))
-                    .GET()
-                    .build();
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() == 200) {
-                return objectMapper.readValue(response.body(), LocationInfo.class);
-            }
-        } catch (Exception e) {
-            LOG.debug("Failed to fetch location context for IP {}: {}", ip, e.getMessage());
-        }
-        return new LocationInfo("NA", "NA", "NA");
+    try {
+      Map<String, Object> enrichedProperties = new HashMap<>(props);
+      enrichedProperties.put("os", platform.os());
+      enrichedProperties.put("arch", platform.arch());
+      enrichedProperties.put("olake_version", platform.version());
+      enrichedProperties.put("num_cpu", platform.deviceCpu());
+      enrichedProperties.put("ip_address", ipAddress);
+      enrichedProperties.put("location", locationInfo);
+      enrichedProperties.put("distinct_id", userID);
+      enrichedProperties.put("time", System.currentTimeMillis() / 1000L);
+      enrichedProperties.put("event_original_name", eventName);
+
+      Map<String, Object> baseBody = new HashMap<>();
+      baseBody.put("event", eventName);
+      baseBody.put("properties", enrichedProperties);
+
+      String jsonPayload = objectMapper.writeValueAsString(baseBody);
+
+      HttpRequest request =
+          HttpRequest.newBuilder()
+              .uri(URI.create(TRACK_URL))
+              .header("Content-Type", "application/json")
+              .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
+              .timeout(Duration.ofSeconds(5))
+              .build();
+
+      // Dispatches entirely non-blocking to protect execution runtime pipelines
+      httpClient
+          .sendAsync(request, HttpResponse.BodyHandlers.discarding())
+          .exceptionally(
+              err -> {
+                LOG.debug("Async tracking dispatch failed gracefully: {}", err.getMessage());
+                return null;
+              });
+
+    } catch (Exception e) {
+      LOG.debug("Telemetry delivery structure failure: {}", e.getMessage());
     }
+  }
 
-    private PlatformInfo gatherPlatformInfo() {
-        String os = System.getProperty("os.name", "Unknown").toLowerCase();
-        String arch = System.getProperty("os.arch", "Unknown");
-        int cores = Runtime.getRuntime().availableProcessors();
-        
-        String driverVersion = System.getenv("DRIVER_VERSION");
-        if (driverVersion == null || driverVersion.isEmpty()) {
-            driverVersion = "Not Available";
-        }
+  // =========================================================================
+  // EXPLICIT TRACKER TRIGGERS
+  // =========================================================================
 
-        return new PlatformInfo(os, arch, driverVersion, cores + " cores");
-    }
+  private static final double BYTES_PER_GB = 1024.0 * 1024.0 * 1024.0;
 
-    private String resolveUserID() {
-        // Attempts to read config location dynamically via system property or defaults to user home
-        String configPathStr = System.getProperty("amoro.config.path", System.getProperty("user.home"));
-        Path idPath = Paths.get(configPathStr, USER_ID_FILE);
+  private static double bytesToGb(long bytes) {
+    return bytes / BYTES_PER_GB;
+  }
 
-        try {
-            if (Files.exists(idPath)) {
-                return Files.readString(idPath, StandardCharsets.UTF_8).trim().replace("\"", "");
-            }
-
-            // Fallback generation matching Go's crypto/sha256 timestamp hash logic
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            String seed = String.valueOf(System.currentTimeMillis());
-            byte[] encodedHash = digest.digest(seed.getBytes(StandardCharsets.UTF_8));
-            
-            // Convert to Hex String up to 32 characters
-            StringBuilder hexString = new StringBuilder();
-            for (byte b : encodedHash) {
-                String hex = Integer.toHexString(0xff & b);
-                if (hex.length() == 1) hexString.append('0');
-                hexString.append(hex);
-            }
-            String generatedID = hexString.substring(0, 32);
-
-            // Persist locally
-            Files.writeString(idPath, generatedID, StandardCharsets.UTF_8);
-            return generatedID;
-        } catch (IOException | NoSuchAlgorithmException e) {
-            LOG.debug("Failed to parse or save telemetry user id file, using transient identity.", e);
-            return "transient-" + java.util.UUID.randomUUID().toString().substring(0, 8);
-        }
-    }
-
-    /**
-     * Core abstract event transport processing logic matching Go's (t *Telemetry) sendEvent
-     */
-    private void sendEvent(String eventName, Map<String, Object> props) {
-        if (platform == null) {
-            return; // Engine initialization was skipped or telemetry is intentionally disabled
-        }
-
-        try {
-            Map<String, Object> enrichedProperties = new HashMap<>(props);
-            enrichedProperties.put("os", platform.os());
-            enrichedProperties.put("arch", platform.arch());
-            enrichedProperties.put("olake_version", platform.version());
-            enrichedProperties.put("num_cpu", platform.deviceCpu());
-            enrichedProperties.put("ip_address", ipAddress);
-            enrichedProperties.put("location", locationInfo);
-            enrichedProperties.put("distinct_id", userID);
-            enrichedProperties.put("time", System.currentTimeMillis() / 1000L);
-            enrichedProperties.put("event_original_name", eventName);
-
-            Map<String, Object> baseBody = new HashMap<>();
-            baseBody.put("event", eventName);
-            baseBody.put("properties", enrichedProperties);
-
-            String jsonPayload = objectMapper.writeValueAsString(baseBody);
-
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(TRACK_URL))
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
-                    .timeout(Duration.ofSeconds(5))
-                    .build();
-
-            // Dispatches entirely non-blocking to protect execution runtime pipelines
-            httpClient.sendAsync(request, HttpResponse.BodyHandlers.discarding())
-                    .exceptionally(err -> {
-                        LOG.debug("Async tracking dispatch failed gracefully: {}", err.getMessage());
-                        return null;
-                    });
-
-        } catch (Exception e) {
-            LOG.debug("Telemetry delivery structure failure: {}", e.getMessage());
-        }
-    }
-
-    // =========================================================================
-    // EXPLICIT TRACKER TRIGGERS
-    // =========================================================================
-
-    public void trackCompactionStarted(OptimizingType compactionType, long tableSize) {
-        CompletableFuture.runAsync(() -> {
-            Map<String, Object> props = Map.of(
-                    "compaction_type", compactionType.name(),
-                    "table_size", tableSize);
-            sendEvent("compaction_started", props);
+  public void trackCompactionStarted(OptimizingType compactionType, long tableSize) {
+    CompletableFuture.runAsync(
+        () -> {
+          Map<String, Object> props =
+              Map.of("compaction_type", compactionType.name(), "table_size", bytesToGb(tableSize));
+          sendEvent("Compaction started - Fusion", props);
         });
-    }
+  }
 
-    public void trackCompactionCompleted(
-            OptimizingType compactionType, long tableSize, boolean success) {
-        CompletableFuture.runAsync(() -> {
-            Map<String, Object> props = Map.of(
-                    "compaction_type", compactionType.name(),
-                    "table_size", tableSize,
-                    "compaction_status", success ? "SUCCESS" : "FAILED");
-            sendEvent("compaction_completed", props);
+  public void trackCompactionCompleted(
+      OptimizingType compactionType, long tableSize, boolean success) {
+    CompletableFuture.runAsync(
+        () -> {
+          Map<String, Object> props =
+              Map.of(
+                  "compaction_type",
+                  compactionType.name(),
+                  "table_size",
+                  bytesToGb(tableSize),
+                  "compaction_status",
+                  success ? "SUCCESS" : "FAILED");
+          sendEvent("Compaction completed - Fusion", props);
         });
-    }
+  }
 
-    public void trackCatalogAdded(String catalogType) {
-        CompletableFuture.runAsync(() -> {
-            Map<String, Object> props = Map.of(
-                    "catalog_type", catalogType);
-            sendEvent("catalog_added", props);
+  public void trackCatalogAdded(String catalogType) {
+    CompletableFuture.runAsync(
+        () -> {
+          Map<String, Object> props = Map.of("catalog_type", catalogType);
+          sendEvent("Catalog Added - Fusion", props);
         });
-    }
-
+  }
 }
