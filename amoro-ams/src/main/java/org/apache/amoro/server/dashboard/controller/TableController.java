@@ -27,6 +27,7 @@ import org.apache.amoro.AmoroTable;
 import org.apache.amoro.Constants;
 import org.apache.amoro.ServerTableIdentifier;
 import org.apache.amoro.TableFormat;
+import org.apache.amoro.TableIDWithFormat;
 import org.apache.amoro.api.CatalogMeta;
 import org.apache.amoro.api.OptimizingService;
 import org.apache.amoro.client.OptimizingClientPools;
@@ -91,6 +92,7 @@ import org.apache.iceberg.SnapshotRef;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -100,8 +102,12 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -119,6 +125,13 @@ public class TableController extends PersistentBase {
       new ConcurrentHashMap<>();
   private final ScheduledExecutorService tableUpgradeExecutor;
 
+  // Bounded pool used to enrich the table list concurrently. Enrichment loads each
+  // table's live properties (metadata.json), which is IO-bound, so a pool wider than
+  // the CPU count keeps the /tables listing fast even for hundreds of tables.
+  private static final int TABLE_LIST_LOAD_PARALLELISM =
+      Math.min(32, Math.max(8, Runtime.getRuntime().availableProcessors() * 4));
+  private final ExecutorService tableListLoadExecutor;
+
   public TableController(
       CatalogManager catalogManager,
       TableManager tableManager,
@@ -135,6 +148,10 @@ public class TableController extends PersistentBase {
                 .setDaemon(false)
                 .setNameFormat("async-hive-table-upgrade-%d")
                 .build());
+    this.tableListLoadExecutor =
+        Executors.newFixedThreadPool(
+            TABLE_LIST_LOAD_PARALLELISM,
+            new ThreadFactoryBuilder().setDaemon(true).setNameFormat("table-list-load-%d").build());
   }
 
   /**
@@ -583,82 +600,44 @@ public class TableController extends PersistentBase {
           }
         };
 
-    List<TableMeta> tables =
-        serverCatalog.listTables(db).stream()
+    // Enrich each table concurrently: enrichment loads live table properties
+    // (metadata.json), which is IO-bound, so fanning the loads out across a bounded
+    // pool keeps the listing fast even for hundreds of tables while still returning
+    // the up-to-date optimizing-enabled status.
+    List<TableIDWithFormat> tableIds = serverCatalog.listTables(db);
+    List<Callable<TableMeta>> tasks =
+        tableIds.stream()
             .map(
-                idWithFormat -> {
-                  TableMeta tableMeta =
-                      new TableMeta(
-                          idWithFormat.getIdentifier().getTableName(),
-                          formatToType.apply(idWithFormat.getTableFormat()));
-                  try {
-                    ServerTableIdentifier serverTableId =
-                        Objects.requireNonNull(
-                            tableManager.getServerTableIdentifier(
-                                idWithFormat.getIdentifier().buildTableIdentifier()),
-                            "ServerTableIdentifier not found");
-
-                    TableRuntimeMeta tableRuntimeMeta =
-                        Objects.requireNonNull(
-                            tableManager.getTableRuntimeMata(serverTableId),
-                            "TableRuntimeMeta not found");
-                    tableMeta.setHealthScore(tableRuntimeMeta.getTableSummary().getHealthScore());
-
-                    Map<String, String> tableProperties =
-                        serverCatalog
-                            .loadTable(db, idWithFormat.getIdentifier().getTableName())
-                            .properties();
-
-                    tableMeta.setOptimizingEnabled(
-                        TableConfigurations.parseTableConfig(tableProperties)
-                            .getOptimizingConfig()
-                            .isEnabled());
-
-                    tableMeta.setOlakeCreated(
-                        tableProperties.containsKey(TableProperties.OLAKE_TABLE_IDENTIFIER));
-
-                    List<TableProcessMeta> latestProcesses =
-                        getAs(
-                            TableProcessMapper.class,
-                            mapper ->
-                                mapper.listLatestOptimizingProcessPerType(serverTableId.getId()));
-                    for (TableProcessMeta processMeta : latestProcesses) {
-                      CompactionInfo compactionInfo =
-                          new CompactionInfo(
-                              processMeta.getProcessId(),
-                              processMeta.getFinishTime(),
-                              processMeta.getStatus().name());
-                      switch (OptimizingType.valueOf(processMeta.getProcessType())) {
-                        case MINOR:
-                          tableMeta.setLastMinorCompaction(compactionInfo);
-                          break;
-                        case MAJOR:
-                          tableMeta.setLastMajorCompaction(compactionInfo);
-                          break;
-                        case FULL:
-                          tableMeta.setLastFullCompaction(compactionInfo);
-                          break;
-                        default:
-                          break;
-                      }
-                    }
-                  } catch (Exception e) {
-                    throw new IllegalStateException(
-                        "Failed to build TableMeta for table " + idWithFormat.getIdentifier(), e);
-                  }
-
-                  return tableMeta;
-                })
-            // Sort by table format and table name
-            .sorted(
-                (table1, table2) -> {
-                  if (Objects.equals(table1.getType(), table2.getType())) {
-                    return table1.getName().compareTo(table2.getName());
-                  } else {
-                    return table1.getType().compareTo(table2.getType());
-                  }
-                })
+                idWithFormat ->
+                    (Callable<TableMeta>)
+                        () -> buildTableMeta(serverCatalog, db, idWithFormat, formatToType))
             .collect(Collectors.toList());
+
+    List<TableMeta> tables = new ArrayList<>(tableIds.size());
+    try {
+      for (Future<TableMeta> future : tableListLoadExecutor.invokeAll(tasks)) {
+        tables.add(future.get());
+      }
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new IllegalStateException("Interrupted while building table list", e);
+    } catch (ExecutionException e) {
+      Throwable cause = e.getCause();
+      if (cause instanceof RuntimeException) {
+        throw (RuntimeException) cause;
+      }
+      throw new IllegalStateException("Failed to build table list", cause);
+    }
+
+    // Sort by table format and table name
+    tables.sort(
+        (table1, table2) -> {
+          if (Objects.equals(table1.getType(), table2.getType())) {
+            return table1.getName().compareTo(table2.getName());
+          } else {
+            return table1.getType().compareTo(table2.getType());
+          }
+        });
     String catalogType = serverCatalog.getMetadata().getCatalogType();
     if (catalogType.equals(CATALOG_TYPE_HIVE)) {
       CatalogMeta catalogMeta = serverCatalog.getMetadata();
@@ -680,6 +659,74 @@ public class TableController extends PersistentBase {
             tables.stream()
                 .filter(t -> StringUtils.isBlank(keywords) || t.getName().contains(keywords))
                 .collect(Collectors.toList())));
+  }
+
+  /**
+   * Builds a {@link TableMeta} enriched with health score, optimizing-enabled status, olake-created
+   * flag and the latest compaction info per type. The optimizing-enabled and olake-created values
+   * are read from the live table properties (metadata.json) so they reflect changes immediately,
+   * rather than from the periodically-refreshed cached table config.
+   */
+  private TableMeta buildTableMeta(
+      ServerCatalog serverCatalog,
+      String db,
+      TableIDWithFormat idWithFormat,
+      Function<TableFormat, String> formatToType) {
+    TableMeta tableMeta =
+        new TableMeta(
+            idWithFormat.getIdentifier().getTableName(),
+            formatToType.apply(idWithFormat.getTableFormat()));
+    try {
+      ServerTableIdentifier serverTableId =
+          Objects.requireNonNull(
+              tableManager.getServerTableIdentifier(
+                  idWithFormat.getIdentifier().buildTableIdentifier()),
+              "ServerTableIdentifier not found");
+
+      TableRuntimeMeta tableRuntimeMeta =
+          Objects.requireNonNull(
+              tableManager.getTableRuntimeMata(serverTableId), "TableRuntimeMeta not found");
+      tableMeta.setHealthScore(tableRuntimeMeta.getTableSummary().getHealthScore());
+
+      Map<String, String> tableProperties =
+          serverCatalog.loadTable(db, idWithFormat.getIdentifier().getTableName()).properties();
+
+      tableMeta.setOptimizingEnabled(
+          TableConfigurations.parseTableConfig(tableProperties).getOptimizingConfig().isEnabled());
+
+      tableMeta.setOlakeCreated(
+          tableProperties.containsKey(TableProperties.OLAKE_TABLE_IDENTIFIER));
+
+      List<TableProcessMeta> latestProcesses =
+          getAs(
+              TableProcessMapper.class,
+              mapper -> mapper.listLatestOptimizingProcessPerType(serverTableId.getId()));
+      for (TableProcessMeta processMeta : latestProcesses) {
+        CompactionInfo compactionInfo =
+            new CompactionInfo(
+                processMeta.getProcessId(),
+                processMeta.getFinishTime(),
+                processMeta.getStatus().name());
+        switch (OptimizingType.valueOf(processMeta.getProcessType())) {
+          case MINOR:
+            tableMeta.setLastMinorCompaction(compactionInfo);
+            break;
+          case MAJOR:
+            tableMeta.setLastMajorCompaction(compactionInfo);
+            break;
+          case FULL:
+            tableMeta.setLastFullCompaction(compactionInfo);
+            break;
+          default:
+            break;
+        }
+      }
+    } catch (Exception e) {
+      throw new IllegalStateException(
+          "Failed to build TableMeta for table " + idWithFormat.getIdentifier(), e);
+    }
+
+    return tableMeta;
   }
 
   /**
