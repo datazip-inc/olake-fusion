@@ -37,6 +37,7 @@ import org.apache.amoro.hive.catalog.MixedHiveCatalog;
 import org.apache.amoro.hive.utils.HiveTableUtil;
 import org.apache.amoro.hive.utils.UpgradeHiveTableUtil;
 import org.apache.amoro.mixed.CatalogLoader;
+import org.apache.amoro.optimizing.OptimizingType;
 import org.apache.amoro.process.ProcessStatus;
 import org.apache.amoro.properties.CatalogMetaProperties;
 import org.apache.amoro.properties.HiveTableProperties;
@@ -601,10 +602,7 @@ public class TableController extends PersistentBase {
                         Objects.requireNonNull(
                             tableManager.getTableRuntimeMata(serverTableId),
                             "TableRuntimeMeta not found");
-                    tableMeta.setHealthScore(
-                        Objects.requireNonNull(
-                                tableRuntimeMeta.getTableSummary(), "TableSummary not found")
-                            .getHealthScore());
+                    tableMeta.setHealthScore(tableRuntimeMeta.getTableSummary().getHealthScore());
 
                     Map<String, String> tableConfig =
                         Objects.requireNonNull(
@@ -618,43 +616,30 @@ public class TableController extends PersistentBase {
                     tableMeta.setOlakeCreated(
                         tableConfig.containsKey(TableProperties.OLAKE_TABLE_IDENTIFIER));
 
-                    List<TableProcessMeta> minorProcessList =
+                    List<TableProcessMeta> latestProcesses =
                         getAs(
                             TableProcessMapper.class,
-                            mapper -> mapper.listProcessMeta(serverTableId.getId(), "MINOR", null));
-                    if (minorProcessList != null && !minorProcessList.isEmpty()) {
-                      TableProcessMeta processMeta = minorProcessList.get(0);
-                      tableMeta.setLastMinorCompaction(
+                            mapper ->
+                                mapper.listLatestOptimizingProcessPerType(serverTableId.getId()));
+                    for (TableProcessMeta processMeta : latestProcesses) {
+                      CompactionInfo compactionInfo =
                           new CompactionInfo(
                               processMeta.getProcessId(),
                               processMeta.getFinishTime(),
-                              processMeta.getStatus().name()));
-                    }
-
-                    List<TableProcessMeta> majorProcessList =
-                        getAs(
-                            TableProcessMapper.class,
-                            mapper -> mapper.listProcessMeta(serverTableId.getId(), "MAJOR", null));
-                    if (majorProcessList != null && !majorProcessList.isEmpty()) {
-                      TableProcessMeta processMeta = majorProcessList.get(0);
-                      tableMeta.setLastMajorCompaction(
-                          new CompactionInfo(
-                              processMeta.getProcessId(),
-                              processMeta.getFinishTime(),
-                              processMeta.getStatus().name()));
-                    }
-
-                    List<TableProcessMeta> fullProcessList =
-                        getAs(
-                            TableProcessMapper.class,
-                            mapper -> mapper.listProcessMeta(serverTableId.getId(), "FULL", null));
-                    if (fullProcessList != null && !fullProcessList.isEmpty()) {
-                      TableProcessMeta processMeta = fullProcessList.get(0);
-                      tableMeta.setLastFullCompaction(
-                          new CompactionInfo(
-                              processMeta.getProcessId(),
-                              processMeta.getFinishTime(),
-                              processMeta.getStatus().name()));
+                              processMeta.getStatus().name());
+                      switch (OptimizingType.valueOf(processMeta.getProcessType())) {
+                        case MINOR:
+                          tableMeta.setLastMinorCompaction(compactionInfo);
+                          break;
+                        case MAJOR:
+                          tableMeta.setLastMajorCompaction(compactionInfo);
+                          break;
+                        case FULL:
+                          tableMeta.setLastFullCompaction(compactionInfo);
+                          break;
+                        default:
+                          break;
+                      }
                     }
                   } catch (Exception e) {
                     throw new IllegalStateException(

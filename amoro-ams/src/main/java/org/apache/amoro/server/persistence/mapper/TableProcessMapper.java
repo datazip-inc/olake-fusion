@@ -134,6 +134,17 @@ public interface TableProcessMapper {
       @Param("status") ProcessStatus optimizingStatus);
 
   @Select(
+      "SELECT process_id, process_type, status, finish_time "
+          + "FROM table_process t "
+          + "WHERE table_id = #{tableId} "
+          + "AND process_type IN ('MINOR', 'MAJOR', 'FULL') "
+          + "AND process_id = ("
+          + "  SELECT MAX(process_id) FROM table_process "
+          + "  WHERE table_id = t.table_id AND process_type = t.process_type)")
+  @ResultMap("tableProcessMap")
+  List<TableProcessMeta> listLatestOptimizingProcessPerType(@Param("tableId") long tableId);
+
+  @Select(
       "SELECT max(process_id) FROM table_process "
           + "WHERE table_id in (#{tables::number[]}) "
           + "GROUP BY table_id ")
