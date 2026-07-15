@@ -21,7 +21,6 @@
 package org.apache.amoro.server.dashboard.model;
 
 import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.annotation.JsonProperty;
-import org.apache.amoro.table.TableProperties;
 
 import java.util.Objects;
 
@@ -33,7 +32,7 @@ public class TableMeta {
   @JsonProperty("enabled")
   public Boolean optimizingEnabled;
 
-  @JsonProperty(TableProperties.OLAKE_CREATED)
+  @JsonProperty("olake_created")
   public Boolean olakeCreated = false;
 
   @JsonProperty("lite")

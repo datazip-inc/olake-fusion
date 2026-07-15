@@ -369,8 +369,6 @@ public class TableProperties {
 
   public static final String OLAKE_TABLE_IDENTIFIER = "olake_2pc";
 
-  public static final String OLAKE_CREATED = "olake_created";
-
   static {
     READ_PROTECTED_PROPERTIES.add(TableProperties.BASE_TABLE_MAX_TRANSACTION_ID);
     READ_PROTECTED_PROPERTIES.add(TableProperties.PARTITION_OPTIMIZED_SEQUENCE);
