@@ -46,7 +46,7 @@ public class TableMeta {
 
   public static class CompactionInfo {
     @JsonProperty("run_id")
-    private Long processId;
+    private String processId;
 
     @JsonProperty("finish_time")
     private Long finishTime;
@@ -55,7 +55,7 @@ public class TableMeta {
     private String status;
 
     public CompactionInfo(Long processId, Long finishTime, String status) {
-      this.processId = processId;
+      this.processId = processId == null ? null : String.valueOf(processId);
       this.finishTime = finishTime;
       this.status = status;
     }
