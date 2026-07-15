@@ -604,17 +604,18 @@ public class TableController extends PersistentBase {
                             "TableRuntimeMeta not found");
                     tableMeta.setHealthScore(tableRuntimeMeta.getTableSummary().getHealthScore());
 
-                    Map<String, String> tableConfig =
-                        Objects.requireNonNull(
-                            tableRuntimeMeta.getTableConfig(), "TableConfig not found");
+                    Map<String, String> tableProperties =
+                        serverCatalog
+                            .loadTable(db, idWithFormat.getIdentifier().getTableName())
+                            .properties();
 
                     tableMeta.setOptimizingEnabled(
-                        TableConfigurations.parseTableConfig(tableConfig)
+                        TableConfigurations.parseTableConfig(tableProperties)
                             .getOptimizingConfig()
                             .isEnabled());
 
                     tableMeta.setOlakeCreated(
-                        tableConfig.containsKey(TableProperties.OLAKE_TABLE_IDENTIFIER));
+                        tableProperties.containsKey(TableProperties.OLAKE_TABLE_IDENTIFIER));
 
                     List<TableProcessMeta> latestProcesses =
                         getAs(
