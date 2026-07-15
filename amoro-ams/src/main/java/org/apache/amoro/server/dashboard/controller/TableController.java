@@ -46,6 +46,7 @@ import org.apache.amoro.server.dashboard.ServerTableDescriptor;
 import org.apache.amoro.server.dashboard.ServerTableProperties;
 import org.apache.amoro.server.dashboard.model.HiveTableInfo;
 import org.apache.amoro.server.dashboard.model.TableMeta;
+import org.apache.amoro.server.dashboard.model.TableMeta.CompactionInfo;
 import org.apache.amoro.server.dashboard.model.TableOperation;
 import org.apache.amoro.server.dashboard.model.UpgradeHiveMeta;
 import org.apache.amoro.server.dashboard.model.UpgradeRunningInfo;
@@ -55,7 +56,9 @@ import org.apache.amoro.server.dashboard.response.PageResult;
 import org.apache.amoro.server.dashboard.utils.AmsUtil;
 import org.apache.amoro.server.dashboard.utils.CommonUtil;
 import org.apache.amoro.server.optimizing.OptimizingStatus;
+import org.apache.amoro.server.persistence.PersistentBase;
 import org.apache.amoro.server.persistence.TableRuntimeMeta;
+import org.apache.amoro.server.persistence.mapper.TableProcessMapper;
 import org.apache.amoro.server.process.TableProcessMeta;
 import org.apache.amoro.server.table.TableConfigurations;
 import org.apache.amoro.server.table.TableManager;
@@ -103,7 +106,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /** The controller that handles table requests. */
-public class TableController {
+public class TableController extends PersistentBase {
   private static final Logger LOG = LoggerFactory.getLogger(TableController.class);
   private static final long UPGRADE_INFO_EXPIRE_INTERVAL = 60 * 60 * 1000;
 
@@ -614,6 +617,45 @@ public class TableController {
 
                     tableMeta.setOlakeCreated(
                         tableConfig.containsKey(TableProperties.OLAKE_TABLE_IDENTIFIER));
+
+                    List<TableProcessMeta> minorProcessList =
+                        getAs(
+                            TableProcessMapper.class,
+                            mapper -> mapper.listProcessMeta(serverTableId.getId(), "MINOR", null));
+                    if (minorProcessList != null && !minorProcessList.isEmpty()) {
+                      TableProcessMeta processMeta = minorProcessList.get(0);
+                      tableMeta.setLastMinorCompaction(
+                          new CompactionInfo(
+                              processMeta.getProcessId(),
+                              processMeta.getFinishTime(),
+                              processMeta.getStatus().name()));
+                    }
+
+                    List<TableProcessMeta> majorProcessList =
+                        getAs(
+                            TableProcessMapper.class,
+                            mapper -> mapper.listProcessMeta(serverTableId.getId(), "MAJOR", null));
+                    if (majorProcessList != null && !majorProcessList.isEmpty()) {
+                      TableProcessMeta processMeta = majorProcessList.get(0);
+                      tableMeta.setLastMajorCompaction(
+                          new CompactionInfo(
+                              processMeta.getProcessId(),
+                              processMeta.getFinishTime(),
+                              processMeta.getStatus().name()));
+                    }
+
+                    List<TableProcessMeta> fullProcessList =
+                        getAs(
+                            TableProcessMapper.class,
+                            mapper -> mapper.listProcessMeta(serverTableId.getId(), "FULL", null));
+                    if (fullProcessList != null && !fullProcessList.isEmpty()) {
+                      TableProcessMeta processMeta = fullProcessList.get(0);
+                      tableMeta.setLastFullCompaction(
+                          new CompactionInfo(
+                              processMeta.getProcessId(),
+                              processMeta.getFinishTime(),
+                              processMeta.getStatus().name()));
+                    }
                   } catch (Exception e) {
                     throw new IllegalStateException(
                         "Failed to build TableMeta for table " + idWithFormat.getIdentifier(), e);

@@ -36,6 +36,32 @@ public class TableMeta {
   @JsonProperty(TableProperties.OLAKE_CREATED)
   public Boolean olakeCreated = false;
 
+  @JsonProperty("lite")
+  public CompactionInfo lastMinorCompaction;
+
+  @JsonProperty("medium")
+  public CompactionInfo lastMajorCompaction;
+
+  @JsonProperty("full")
+  public CompactionInfo lastFullCompaction;
+
+  public static class CompactionInfo {
+    @JsonProperty("run_id")
+    private Long processId;
+
+    @JsonProperty("finish_time")
+    private Long finishTime;
+
+    @JsonProperty("status")
+    private String status;
+
+    public CompactionInfo(Long processId, Long finishTime, String status) {
+      this.processId = processId;
+      this.finishTime = finishTime;
+      this.status = status;
+    }
+  }
+
   public TableMeta(String name, String type) {
     this.name = name;
     this.type = type;
@@ -67,6 +93,18 @@ public class TableMeta {
 
   public void setOlakeCreated(Boolean olakeCreated) {
     this.olakeCreated = olakeCreated;
+  }
+
+  public void setLastMinorCompaction(CompactionInfo lastMinorCompaction) {
+    this.lastMinorCompaction = lastMinorCompaction;
+  }
+
+  public void setLastMajorCompaction(CompactionInfo lastMajorCompaction) {
+    this.lastMajorCompaction = lastMajorCompaction;
+  }
+
+  public void setLastFullCompaction(CompactionInfo lastFullCompaction) {
+    this.lastFullCompaction = lastFullCompaction;
   }
 
   @Override
