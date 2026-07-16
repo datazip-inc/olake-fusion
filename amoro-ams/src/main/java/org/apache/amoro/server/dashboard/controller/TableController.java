@@ -125,11 +125,8 @@ public class TableController extends PersistentBase {
       new ConcurrentHashMap<>();
   private final ScheduledExecutorService tableUpgradeExecutor;
 
-  // Bounded pool used to enrich the table list concurrently. Enrichment loads each
-  // table's live properties (metadata.json), which is IO-bound, so a pool wider than
-  // the CPU count keeps the /tables listing fast even for hundreds of tables.
   private static final int TABLE_LIST_LOAD_PARALLELISM =
-      Math.min(32, Math.max(8, Runtime.getRuntime().availableProcessors() * 4));
+      Runtime.getRuntime().availableProcessors() * 2;
   private final ExecutorService tableListLoadExecutor;
 
   public TableController(
@@ -600,10 +597,7 @@ public class TableController extends PersistentBase {
           }
         };
 
-    // Enrich each table concurrently: enrichment loads live table properties
-    // (metadata.json), which is IO-bound, so fanning the loads out across a bounded
-    // pool keeps the listing fast even for hundreds of tables while still returning
-    // the up-to-date optimizing-enabled status.
+    // Fill each table concurrently
     List<TableIDWithFormat> tableIds = serverCatalog.listTables(db);
     List<Callable<TableMeta>> tasks =
         tableIds.stream()
@@ -663,9 +657,7 @@ public class TableController extends PersistentBase {
 
   /**
    * Builds a {@link TableMeta} enriched with health score, optimizing-enabled status, olake-created
-   * flag and the latest compaction info per type. The optimizing-enabled and olake-created values
-   * are read from the live table properties (metadata.json) so they reflect changes immediately,
-   * rather than from the periodically-refreshed cached table config.
+   * flag and the latest compaction info per type.
    */
   private TableMeta buildTableMeta(
       ServerCatalog serverCatalog,
