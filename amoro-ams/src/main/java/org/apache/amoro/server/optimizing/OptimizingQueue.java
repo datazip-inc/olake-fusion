@@ -110,9 +110,6 @@ public class OptimizingQueue extends PersistentBase {
   private final Executor planExecutor;
   // Keep all planning table identifiers
   private final Set<ServerTableIdentifier> planningTables = new HashSet<>();
-  private final Map<ServerTableIdentifier, Long> planFailureCooldownUntil =
-      new ConcurrentHashMap<>();
-  private static final long PLAN_FAILURE_COOLDOWN_MS = 60_000L; // current: 1 min, tune if needed
   private final Lock scheduleLock = new ReentrantLock();
   private final Condition planningCompleted = scheduleLock.newCondition();
   private final int maxPlanningParallelism;
@@ -276,7 +273,6 @@ public class OptimizingQueue extends PersistentBase {
     if (planningTables.size() < maxPlanningParallelism) {
       Set<ServerTableIdentifier> skipTables = new HashSet<>(planningTables);
       skipBlockedTables(skipTables);
-      skipCooldownTables(skipTables);
       Optional.ofNullable(scheduler.scheduleTable(skipTables))
           .ifPresent(tableRuntime -> triggerAsyncPlanning(tableRuntime, skipTables, startTime));
     }
@@ -302,12 +298,6 @@ public class OptimizingQueue extends PersistentBase {
         .forEach(skipTables::add);
   }
 
-  private void skipCooldownTables(Set<ServerTableIdentifier> skipTables) {
-    long now = System.currentTimeMillis();
-    planFailureCooldownUntil.entrySet().removeIf(e -> e.getValue() <= now);
-    skipTables.addAll(planFailureCooldownUntil.keySet());
-  }
-
   private void triggerAsyncPlanning(
       DefaultTableRuntime tableRuntime, Set<ServerTableIdentifier> skipTables, long startTime) {
     LOG.info(
@@ -320,11 +310,6 @@ public class OptimizingQueue extends PersistentBase {
             (process, throwable) -> {
               if (throwable != null) {
                 LOG.error("Failed to plan table {}", tableRuntime.getTableIdentifier(), throwable);
-                planFailureCooldownUntil.put(
-                    tableRuntime.getTableIdentifier(),
-                    System.currentTimeMillis() + PLAN_FAILURE_COOLDOWN_MS);
-              } else {
-                planFailureCooldownUntil.remove(tableRuntime.getTableIdentifier());
               }
               long currentTime = System.currentTimeMillis();
               scheduleLock.lock();
@@ -386,10 +371,6 @@ public class OptimizingQueue extends PersistentBase {
 
   public TaskRuntime<?> getTaskRuntime(OptimizingTaskId taskId) {
     return findProcess(taskId).getTaskRuntime(taskId);
-  }
-
-  public OptimizingType getOptimizingType(OptimizingTaskId taskId) {
-    return findProcess(taskId).getOptimizingType();
   }
 
   public void ackTask(OptimizingTaskId taskId, OptimizerThread thread) {
