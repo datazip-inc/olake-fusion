@@ -43,7 +43,6 @@ import java.util.concurrent.CompletableFuture;
 public class Telemetry {
   private static final Logger LOG = LoggerFactory.getLogger(Telemetry.class);
 
-  // replace with url for fusion:
   private static final String TRACK_URL = "https://analytics.olake.io/mp/track";
   private static final String IP_NOT_FOUND_PLACEHOLDER = "NA";
   private static final String USER_ID_FILE = "user_id.txt";
@@ -56,7 +55,6 @@ public class Telemetry {
   private PlatformInfo platform;
   private LocationInfo locationInfo;
 
-  // Direct translations of Go structs using Java Records
   public record PlatformInfo(String os, String arch, String version, String deviceCpu) {}
 
   @JsonIgnoreProperties(ignoreUnknown = true)
@@ -77,10 +75,6 @@ public class Telemetry {
 
     initAsync();
   }
-
-  // =========================================================================
-  // INFRASTRUCTURE & METADATA UTILITIES (Placed before trackers)
-  // =========================================================================
 
   private void initAsync() {
     CompletableFuture.runAsync(
@@ -156,7 +150,6 @@ public class Telemetry {
   }
 
   private String resolveUserID() {
-    // Attempts to read config location dynamically via system property or defaults to user home
     String configPathStr = System.getProperty("amoro.config.path", System.getProperty("user.home"));
     Path idPath = Paths.get(configPathStr, USER_ID_FILE);
 
@@ -165,7 +158,6 @@ public class Telemetry {
         return Files.readString(idPath, StandardCharsets.UTF_8).trim().replace("\"", "");
       }
 
-      // Fallback generation matching Go's crypto/sha256 timestamp hash logic
       MessageDigest digest = MessageDigest.getInstance("SHA-256");
       String seed = String.valueOf(System.currentTimeMillis());
       byte[] encodedHash = digest.digest(seed.getBytes(StandardCharsets.UTF_8));
@@ -180,8 +172,6 @@ public class Telemetry {
         hexString.append(hex);
       }
       String generatedID = hexString.substring(0, 32);
-
-      // Persist locally
       Files.writeString(idPath, generatedID, StandardCharsets.UTF_8);
       return generatedID;
     } catch (IOException | NoSuchAlgorithmException e) {
@@ -190,7 +180,6 @@ public class Telemetry {
     }
   }
 
-  /** Core abstract event transport processing logic matching Go's (t *Telemetry) sendEvent */
   private void sendEvent(String eventName, Map<String, Object> props) {
     if (platform == null) {
       return; // Engine initialization was skipped or telemetry is intentionally disabled
@@ -198,15 +187,15 @@ public class Telemetry {
 
     try {
       Map<String, Object> enrichedProperties = new HashMap<>(props);
-      enrichedProperties.put("os", platform.os());
-      enrichedProperties.put("arch", platform.arch());
-      enrichedProperties.put("olake_version", platform.version());
-      enrichedProperties.put("num_cpu", platform.deviceCpu());
-      enrichedProperties.put("ip_address", ipAddress);
-      enrichedProperties.put("location", locationInfo);
-      enrichedProperties.put("distinct_id", userID);
-      enrichedProperties.put("time", System.currentTimeMillis() / 1000L);
-      enrichedProperties.put("event_original_name", eventName);
+      enrichedProperties.put("OS", platform.os());
+      enrichedProperties.put("Arch", platform.arch());
+      enrichedProperties.put("Olake-Fusion_Version", platform.version());
+      enrichedProperties.put("Num_CPU", platform.deviceCpu());
+      enrichedProperties.put("IP_Address", ipAddress);
+      enrichedProperties.put("Location", locationInfo);
+      enrichedProperties.put("Distinct_ID", userID);
+      enrichedProperties.put("Time", System.currentTimeMillis() / 1000L);
+      enrichedProperties.put("Event_Original_Name", eventName);
 
       Map<String, Object> baseBody = new HashMap<>();
       baseBody.put("event", eventName);
@@ -236,10 +225,6 @@ public class Telemetry {
     }
   }
 
-  // =========================================================================
-  // EXPLICIT TRACKER TRIGGERS
-  // =========================================================================
-
   private static final double BYTES_PER_GB = 1024.0 * 1024.0 * 1024.0;
 
   private static double bytesToGb(long bytes) {
@@ -247,35 +232,26 @@ public class Telemetry {
   }
 
   public void trackCompactionStarted(OptimizingType compactionType, long tableSize) {
-    CompletableFuture.runAsync(
-        () -> {
-          Map<String, Object> props =
-              Map.of("compaction_type", compactionType.name(), "table_size", bytesToGb(tableSize));
-          sendEvent("Compaction started - Fusion", props);
-        });
+    Map<String, Object> props =
+        Map.of("Optimization_Type", compactionType.name(), "table_size", bytesToGb(tableSize));
+    sendEvent("Optimization Started - Fusion", props);
   }
 
   public void trackCompactionCompleted(
       OptimizingType compactionType, long tableSize, boolean success) {
-    CompletableFuture.runAsync(
-        () -> {
-          Map<String, Object> props =
-              Map.of(
-                  "compaction_type",
-                  compactionType.name(),
-                  "table_size",
-                  bytesToGb(tableSize),
-                  "compaction_status",
-                  success ? "SUCCESS" : "FAILED");
-          sendEvent("Compaction completed - Fusion", props);
-        });
+    Map<String, Object> props =
+        Map.of(
+            "Optimization_Type",
+            compactionType.name(),
+            "table_size",
+            bytesToGb(tableSize),
+            "Optimization_Status",
+            success ? "SUCCESS" : "FAILED");
+    sendEvent("Optimization Completed - Fusion", props);
   }
 
   public void trackCatalogAdded(String catalogType) {
-    CompletableFuture.runAsync(
-        () -> {
-          Map<String, Object> props = Map.of("catalog_type", catalogType);
-          sendEvent("Catalog Added - Fusion", props);
-        });
+    Map<String, Object> props = Map.of("Catalog_Type", catalogType);
+    sendEvent("Catalog Added - Fusion", props);
   }
 }

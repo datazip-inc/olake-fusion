@@ -232,16 +232,14 @@ public class DefaultOptimizingService extends StatedPersistentBase
   public void ackTask(String authToken, int threadId, OptimizingTaskId taskId) {
     LOG.info("Ack task {} by optimizer {} (threadId {})", taskId, authToken, threadId);
     OptimizingQueue queue = getQueueByToken(authToken);
-    OptimizingType optimizingType = queue.getOptimizingType(taskId);
-    TaskRuntime<?> taskRuntime = queue.getTaskRuntime(taskId);
-    long tableSize = 0;
-    if (taskRuntime.getTaskDescriptor() instanceof RewriteStageTask) {
-      MetricsSummary summary = ((RewriteStageTask) taskRuntime.getTaskDescriptor()).getSummary();
-      if (summary != null) {
-        tableSize = summary.getInputFilesStatistics().getTotalSize();
-      }
+    try {
+      OptimizingType optimizingType = queue.getOptimizingType(taskId);
+      TaskRuntime<?> taskRuntime = queue.getTaskRuntime(taskId);
+      Telemetry.getInstance()
+          .trackCompactionStarted(optimizingType, getInputTableSize(taskRuntime));
+    } catch (Exception e) {
+      LOG.warn("Failed to track compaction started for task {}", taskId, e);
     }
-    Telemetry.getInstance().trackCompactionStarted(optimizingType, tableSize);
     queue.ackTask(taskId, getAuthenticatedOptimizer(authToken).getThread(threadId));
   }
 
@@ -255,20 +253,28 @@ public class DefaultOptimizingService extends StatedPersistentBase
         taskResult.getErrorMessage() == null ? "SUCCESS" : "FAIL");
     OptimizingQueue queue = getQueueByToken(authToken);
     OptimizingTaskId taskId = taskResult.getTaskId();
-    OptimizingType optimizingType = queue.getOptimizingType(taskId);
-    TaskRuntime<?> taskRuntime = queue.getTaskRuntime(taskId);
-    long tableSize = 0;
-    if (taskRuntime.getTaskDescriptor() instanceof RewriteStageTask) {
-      MetricsSummary summary = ((RewriteStageTask) taskRuntime.getTaskDescriptor()).getSummary();
-      if (summary != null) {
-        tableSize = summary.getInputFilesStatistics().getTotalSize();
-      }
-    }
     boolean success = taskResult.getErrorMessage() == null;
-    Telemetry.getInstance().trackCompactionCompleted(optimizingType, tableSize, success);
+    try {
+      OptimizingType optimizingType = queue.getOptimizingType(taskId);
+      TaskRuntime<?> taskRuntime = queue.getTaskRuntime(taskId);
+      Telemetry.getInstance()
+          .trackCompactionCompleted(optimizingType, getInputTableSize(taskRuntime), success);
+    } catch (Exception e) {
+      LOG.warn("Failed to track compaction completed for task {}", taskId, e);
+    }
     OptimizerThread thread =
         getAuthenticatedOptimizer(authToken).getThread(taskResult.getThreadId());
     queue.completeTask(thread, taskResult);
+  }
+
+  private static long getInputTableSize(TaskRuntime<?> taskRuntime) {
+    if (taskRuntime.getTaskDescriptor() instanceof RewriteStageTask) {
+      MetricsSummary summary = ((RewriteStageTask) taskRuntime.getTaskDescriptor()).getSummary();
+      if (summary != null) {
+        return summary.getInputFilesStatistics().getTotalSize();
+      }
+    }
+    return 0;
   }
 
   @Override
