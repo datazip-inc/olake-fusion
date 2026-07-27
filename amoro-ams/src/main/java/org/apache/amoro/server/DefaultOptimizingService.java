@@ -34,6 +34,9 @@ import org.apache.amoro.exception.ForbiddenException;
 import org.apache.amoro.exception.IllegalTaskStateException;
 import org.apache.amoro.exception.ObjectNotExistsException;
 import org.apache.amoro.exception.PluginRetryAuthException;
+import org.apache.amoro.optimizing.MetricsSummary;
+import org.apache.amoro.optimizing.OptimizingType;
+import org.apache.amoro.optimizing.RewriteStageTask;
 import org.apache.amoro.resource.ResourceGroup;
 import org.apache.amoro.server.catalog.CatalogManager;
 import org.apache.amoro.server.optimizing.OptimizingProcess;
@@ -49,9 +52,6 @@ import org.apache.amoro.server.resource.OptimizerInstance;
 import org.apache.amoro.server.resource.OptimizerManager;
 import org.apache.amoro.server.resource.OptimizerThread;
 import org.apache.amoro.server.resource.QuotaProvider;
-import org.apache.amoro.optimizing.MetricsSummary;
-import org.apache.amoro.optimizing.OptimizingType;
-import org.apache.amoro.optimizing.RewriteStageTask;
 import org.apache.amoro.server.table.DefaultTableRuntime;
 import org.apache.amoro.server.table.RuntimeHandlerChain;
 import org.apache.amoro.server.table.TableService;
@@ -237,10 +237,10 @@ public class DefaultOptimizingService extends StatedPersistentBase
       TaskRuntime<?> taskRuntime = queue.getTaskRuntime(taskId);
       Telemetry.getInstance()
           .trackCompactionStarted(optimizingType, getInputTableSize(taskRuntime));
+      queue.ackTask(taskId, getAuthenticatedOptimizer(authToken).getThread(threadId));
     } catch (Exception e) {
       LOG.warn("Failed to track compaction started for task {}", taskId, e);
     }
-    queue.ackTask(taskId, getAuthenticatedOptimizer(authToken).getThread(threadId));
   }
 
   @Override
@@ -259,12 +259,12 @@ public class DefaultOptimizingService extends StatedPersistentBase
       TaskRuntime<?> taskRuntime = queue.getTaskRuntime(taskId);
       Telemetry.getInstance()
           .trackCompactionCompleted(optimizingType, getInputTableSize(taskRuntime), success);
+      OptimizerThread thread =
+          getAuthenticatedOptimizer(authToken).getThread(taskResult.getThreadId());
+      queue.completeTask(thread, taskResult);
     } catch (Exception e) {
       LOG.warn("Failed to track compaction completed for task {}", taskId, e);
     }
-    OptimizerThread thread =
-        getAuthenticatedOptimizer(authToken).getThread(taskResult.getThreadId());
-    queue.completeTask(thread, taskResult);
   }
 
   private static long getInputTableSize(TaskRuntime<?> taskRuntime) {
