@@ -93,7 +93,6 @@ public class Telemetry {
         () -> {
           try {
             if (isTelemetryDisabled()) return;
-            
             this.ipAddress = fetchOutboundIP();
             this.userID = resolveUserID();
             this.platform = gatherPlatformInfo();
@@ -154,7 +153,7 @@ public class Telemetry {
   }
 
   private String resolveUserID() {
-    String configPathStr = System.getProperty("user.home"); 
+    String configPathStr = System.getProperty("user.home");
     Path idPath = Paths.get(configPathStr, USER_ID_FILE);
 
     try {
@@ -232,15 +231,18 @@ public class Telemetry {
     return bytes / BYTES_PER_GB;
   }
 
-  public void optimizationTypeHelper(String optimizationTypeName){
-    if (optimizationTypeName == "MINOR") return "LITE";
-    else if (optimizationTypeName == "MAJOR") return "MEDIUM";
+  public String optimizationTypeHelper(String optimizationTypeName) {
+    if (optimizationTypeName.equals("MINOR")) return "LITE";
+    else if (optimizationTypeName.equals("MAJOR")) return "MEDIUM";
     else return optimizationTypeName;
   }
 
   public void trackOptimizationStarted(OptimizingType optimizationType, long tableSize) {
     Map<String, Object> props =
-        Map.of("Optimization_Type", optimizationTypeHelper(optimizationType.name()), "table_size", bytesToGb(tableSize));
+        Map.of("optimization_type", 
+                optimizationTypeHelper(optimizationType.name()), 
+                "table_size", 
+                bytesToGb(tableSize));
     sendEvent("Optimization Started - Fusion", props);
   }
 
