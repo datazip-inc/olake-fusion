@@ -46,6 +46,8 @@ public class Telemetry {
   private static final Logger LOG = LoggerFactory.getLogger(Telemetry.class);
 
   private static final String TRACK_URL = "https://analytics.olake.io/mp/track";
+  private static final String IPINFO_URL = "https://ipinfo.io/";
+  private static final String IPIFY_URL = "https://api.ipify.org?format=text";
   private static final String IP_NOT_FOUND_PLACEHOLDER = "NA";
   private static final String USER_ID_FILE = "user_id.txt";
 
@@ -57,7 +59,7 @@ public class Telemetry {
   private PlatformInfo platform;
   private LocationInfo locationInfo;
 
-  public record PlatformInfo(String os, String arch, String version, String deviceCpu) {}
+  public record PlatformInfo(String os, String arch, String deviceCpu) {}
 
   @JsonIgnoreProperties(ignoreUnknown = true)
   public record LocationInfo(String country, String region, String city) {}
@@ -78,15 +80,20 @@ public class Telemetry {
     initAsync();
   }
 
+  public boolean isTelemetryDisabled() {
+    String disabledEnv = System.getenv("TELEMETRY_DISABLED");
+    if (disabledEnv != null && Boolean.parseBoolean(disabledEnv)) {
+      return true;
+    }
+    return false;
+  }
+
   private void initAsync() {
     CompletableFuture.runAsync(
         () -> {
           try {
-            String disabledEnv = System.getenv("TELEMETRY_DISABLED");
-            if (disabledEnv != null && Boolean.parseBoolean(disabledEnv)) {
-              return;
-            }
-
+            if (isTelemetryDisabled()) return;
+            
             this.ipAddress = fetchOutboundIP();
             this.userID = resolveUserID();
             this.platform = gatherPlatformInfo();
@@ -101,7 +108,7 @@ public class Telemetry {
     try {
       HttpRequest request =
           HttpRequest.newBuilder()
-              .uri(URI.create("https://api.ipify.org?format=text"))
+              .uri(URI.create(IPIFY_URL))
               .timeout(Duration.ofSeconds(5))
               .GET()
               .build();
@@ -123,7 +130,7 @@ public class Telemetry {
     try {
       HttpRequest request =
           HttpRequest.newBuilder()
-              .uri(URI.create("https://ipinfo.io/" + ip + "/json"))
+              .uri(URI.create(IPINFO_URL + ip + "/json"))
               .timeout(Duration.ofSeconds(5))
               .GET()
               .build();
@@ -143,16 +150,11 @@ public class Telemetry {
     String arch = System.getProperty("os.arch", "Unknown");
     int cores = Runtime.getRuntime().availableProcessors();
 
-    String driverVersion = System.getenv("DRIVER_VERSION");
-    if (driverVersion == null || driverVersion.isEmpty()) {
-      driverVersion = "Not Available";
-    }
-
-    return new PlatformInfo(os, arch, driverVersion, cores + " cores");
+    return new PlatformInfo(os, arch, cores + " cores");
   }
 
   private String resolveUserID() {
-    String configPathStr = System.getProperty("amoro.config.path", System.getProperty("user.home"));
+    String configPathStr = System.getProperty("user.home"); 
     Path idPath = Paths.get(configPathStr, USER_ID_FILE);
 
     try {
@@ -183,21 +185,18 @@ public class Telemetry {
   }
 
   private void sendEvent(String eventName, Map<String, Object> props) {
-    if (platform == null) {
-      return; // Engine initialization was skipped or telemetry is intentionally disabled
-    }
+    if (isTelemetryDisabled()) return;
 
     try {
       Map<String, Object> enrichedProperties = new HashMap<>(props);
-      enrichedProperties.put("OS", platform.os());
-      enrichedProperties.put("Arch", platform.arch());
-      enrichedProperties.put("Olake-Fusion_Version", platform.version());
-      enrichedProperties.put("Num_CPU", platform.deviceCpu());
-      enrichedProperties.put("IP_Address", ipAddress);
-      enrichedProperties.put("Location", locationInfo);
-      enrichedProperties.put("Distinct_ID", userID);
-      enrichedProperties.put("Time", System.currentTimeMillis() / 1000L);
-      enrichedProperties.put("Event_Original_Name", eventName);
+      enrichedProperties.put("os", platform.os());
+      enrichedProperties.put("arch", platform.arch());
+      enrichedProperties.put("num_cpu", platform.deviceCpu());
+      enrichedProperties.put("ip_address", ipAddress);
+      enrichedProperties.put("location", locationInfo);
+      enrichedProperties.put("distinct_id", userID);
+      enrichedProperties.put("time", System.currentTimeMillis() / 1000L);
+      enrichedProperties.put("event_original_name", eventName);
 
       Map<String, Object> baseBody = new HashMap<>();
       baseBody.put("event", eventName);
@@ -233,18 +232,24 @@ public class Telemetry {
     return bytes / BYTES_PER_GB;
   }
 
-  public void trackCompactionStarted(OptimizingType compactionType, long tableSize) {
+  public void optimizationTypeHelper(String optimizationTypeName){
+    if (optimizationTypeName == "MINOR") return "LITE";
+    else if (optimizationTypeName == "MAJOR") return "MEDIUM";
+    else return optimizationTypeName;
+  }
+
+  public void trackOptimizationStarted(OptimizingType optimizationType, long tableSize) {
     Map<String, Object> props =
-        Map.of("Optimization_Type", compactionType.name(), "table_size", bytesToGb(tableSize));
+        Map.of("Optimization_Type", optimizationTypeHelper(optimizationType.name()), "table_size", bytesToGb(tableSize));
     sendEvent("Optimization Started - Fusion", props);
   }
 
-  public void trackCompactionCompleted(
-      OptimizingType compactionType, long tableSize, boolean success) {
+  public void trackOptimizationCompleted(
+      OptimizingType optimizationType, long tableSize, boolean success) {
     Map<String, Object> props =
         Map.of(
             "Optimization_Type",
-            compactionType.name(),
+            optimizationTypeHelper(optimizationType.name()),
             "table_size",
             bytesToGb(tableSize),
             "Optimization_Status",

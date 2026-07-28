@@ -235,11 +235,11 @@ public class DefaultOptimizingService extends StatedPersistentBase
     try {
       OptimizingType optimizingType = queue.getOptimizingType(taskId);
       TaskRuntime<?> taskRuntime = queue.getTaskRuntime(taskId);
-      Telemetry.getInstance()
-          .trackCompactionStarted(optimizingType, getInputTableSize(taskRuntime));
       queue.ackTask(taskId, getAuthenticatedOptimizer(authToken).getThread(threadId));
+      Telemetry.getInstance()
+          .trackOptimizationStarted(optimizingType, getInputTableSize(taskRuntime));
     } catch (Exception e) {
-      LOG.warn("Failed to track compaction started for task {}", taskId, e);
+      LOG.warn("Failed to track optimization started for task {}", taskId, e);
     }
   }
 
@@ -258,12 +258,12 @@ public class DefaultOptimizingService extends StatedPersistentBase
       OptimizingType optimizingType = queue.getOptimizingType(taskId);
       TaskRuntime<?> taskRuntime = queue.getTaskRuntime(taskId);
       Telemetry.getInstance()
-          .trackCompactionCompleted(optimizingType, getInputTableSize(taskRuntime), success);
+          .trackOptimizationCompleted(optimizingType, getInputTableSize(taskRuntime), success);
       OptimizerThread thread =
           getAuthenticatedOptimizer(authToken).getThread(taskResult.getThreadId());
       queue.completeTask(thread, taskResult);
     } catch (Exception e) {
-      LOG.warn("Failed to track compaction completed for task {}", taskId, e);
+      LOG.warn("Failed to track optimization completed for task {}", taskId, e);
     }
   }
 
