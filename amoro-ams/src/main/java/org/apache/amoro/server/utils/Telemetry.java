@@ -239,10 +239,11 @@ public class Telemetry {
 
   public void trackOptimizationStarted(OptimizingType optimizationType, long tableSize) {
     Map<String, Object> props =
-        Map.of("optimization_type", 
-                optimizationTypeHelper(optimizationType.name()), 
-                "table_size", 
-                bytesToGb(tableSize));
+      Map.of(
+          "optimization_type",
+          optimizationTypeHelper(optimizationType.name()),
+          "table_size",
+          bytesToGb(tableSize));
     sendEvent("Optimization Started - Fusion", props);
   }
 
