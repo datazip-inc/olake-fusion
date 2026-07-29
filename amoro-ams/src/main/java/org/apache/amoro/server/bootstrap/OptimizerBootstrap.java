@@ -20,18 +20,6 @@
 
 package org.apache.amoro.server.bootstrap;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
-
 import org.apache.amoro.config.Configurations;
 import org.apache.amoro.resource.Resource;
 import org.apache.amoro.resource.ResourceContainer;
@@ -48,16 +36,29 @@ import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+
 /**
- * Ensures: the configured OG and a single optimizer exist when AMS starts, then keeps a
- * live optimizer running via a periodic keeper that resubmits it if it dies or fails to start.
+ * Ensures: the configured OG and a single optimizer exist when AMS starts, then keeps a live
+ * optimizer running via a periodic keeper that resubmits it if it dies or fails to start.
  */
 public class OptimizerBootstrap {
 
   private static final Logger LOG = LoggerFactory.getLogger(OptimizerBootstrap.class);
 
   private static final long KEEP_ALIVE_INTERVAL_MS = TimeUnit.MINUTES.toMillis(1);
-  // if the optimizer does not register within this time, it is considered failed and will be resubmitted.
+  // if the optimizer does not register within this time, it is considered failed and will be
+  // resubmitted.
   private static final long STARTUP_GRACE_MS = TimeUnit.MINUTES.toMillis(4);
 
   private final Configurations serviceConfig;
@@ -91,8 +92,7 @@ public class OptimizerBootstrap {
           serviceConfig.getString(AmoroManagementConf.OPTIMIZER_BOOTSTRAP_CONTAINER);
 
       if (StringUtils.isBlank(groupName) || StringUtils.isBlank(containerName)) {
-        LOG.info(
-            "Optimizer bootstrap is not configured (group-name/container missing), skipping.");
+        LOG.info("Optimizer bootstrap is not configured (group-name/container missing), skipping.");
         return;
       }
 
@@ -135,8 +135,8 @@ public class OptimizerBootstrap {
   }
 
   /**
-   * Ensures the bootstrapped group has a live optimizer: releases resources whose optimizer
-   * has died (and whose startup grace has elapsed) and submits a replacement when none is healthy.
+   * Ensures the bootstrapped group has a live optimizer: releases resources whose optimizer has
+   * died (and whose startup grace has elapsed) and submits a replacement when none is healthy.
    */
   private void reconcile() {
     try {
@@ -285,3 +285,4 @@ public class OptimizerBootstrap {
     }
   }
 }
+
