@@ -20,6 +20,18 @@
 
 package org.apache.amoro.server.bootstrap;
 
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+
 import org.apache.amoro.config.Configurations;
 import org.apache.amoro.resource.Resource;
 import org.apache.amoro.resource.ResourceContainer;
@@ -36,37 +48,17 @@ import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
-
 /**
- * Ensures the configured optimizer group and resource exist when AMS starts, and keeps a live
- * optimizer running via a periodic keeper that resubmits it if it dies or fails to start.
+ * Ensures: the configured OG and a single optimizer exist when AMS starts, then keeps a
+ * live optimizer running via a periodic keeper that resubmits it if it dies or fails to start.
  */
 public class OptimizerBootstrap {
 
   private static final Logger LOG = LoggerFactory.getLogger(OptimizerBootstrap.class);
 
-  /**
-   * How often the keeper reconciles the group. 1 minute matches Amoro's other reconciling
-   * background processes (e.g. refresh-tables and refresh-external-catalogs).
-   */
   private static final long KEEP_ALIVE_INTERVAL_MS = TimeUnit.MINUTES.toMillis(1);
-
-  /**
-   * Grace a freshly submitted optimizer gets to register before the keeper treats it as failed and
-   * resubmits it. Must exceed the worst-case optimizer (Spark-on-K8s) startup time.
-   */
-  private static final long STARTUP_GRACE_MS = TimeUnit.MINUTES.toMillis(5);
+  // if the optimizer does not register within this time, it is considered failed and will be resubmitted.
+  private static final long STARTUP_GRACE_MS = TimeUnit.MINUTES.toMillis(4);
 
   private final Configurations serviceConfig;
   private final OptimizerManager optimizerManager;
@@ -81,7 +73,7 @@ public class OptimizerBootstrap {
   private int memoryMb;
   private ResourceGroup group;
 
-  private ScheduledExecutorService keeper;
+  private ScheduledExecutorService optimizerKeeper;
 
   public OptimizerBootstrap(
       Configurations serviceConfig,
@@ -119,22 +111,22 @@ public class OptimizerBootstrap {
       Resource resource = createOptimizerResource(optimizerContainer, group, parallelism, memoryMb);
       submittedAt.put(resource.getResourceId(), System.currentTimeMillis());
 
-      startKeeper();
+      startOptimizerKeeper();
     } catch (Exception e) {
       LOG.error(
           "Optimizer bootstrap failed, AMS will continue without a bootstrapped optimizer", e);
     }
   }
 
-  private void startKeeper() {
-    keeper =
+  private void startOptimizerKeeper() {
+    optimizerKeeper =
         Executors.newSingleThreadScheduledExecutor(
             runnable -> {
               Thread thread = new Thread(runnable, "optimizer-bootstrap-keeper");
               thread.setDaemon(true);
               return thread;
             });
-    keeper.scheduleWithFixedDelay(
+    optimizerKeeper.scheduleWithFixedDelay(
         this::reconcile, KEEP_ALIVE_INTERVAL_MS, KEEP_ALIVE_INTERVAL_MS, TimeUnit.MILLISECONDS);
     LOG.info(
         "Optimizer bootstrap keeper started for group {} (interval {} ms)",
@@ -143,9 +135,8 @@ public class OptimizerBootstrap {
   }
 
   /**
-   * Ensures the bootstrapped group has a single live optimizer: releases resources whose optimizer
+   * Ensures the bootstrapped group has a live optimizer: releases resources whose optimizer
    * has died (and whose startup grace has elapsed) and submits a replacement when none is healthy.
-   * Never touches healthy optimizers, so manual scale-outs are preserved.
    */
   private void reconcile() {
     try {
@@ -200,9 +191,9 @@ public class OptimizerBootstrap {
   }
 
   public void dispose() {
-    if (keeper != null) {
-      keeper.shutdownNow();
-      keeper = null;
+    if (optimizerKeeper != null) {
+      optimizerKeeper.shutdownNow();
+      optimizerKeeper = null;
     }
   }
 
@@ -273,8 +264,7 @@ public class OptimizerBootstrap {
           e);
     }
     // Always clear the DB row and in-memory registration so the group is left with
-    // exactly the single fresh optimizer created afterwards, even if the physical
-    // release (e.g. killing a stale/already-gone job) failed.
+    // exactly the single fresh optimizer created afterwards
     cleanupResource(resource.getGroupName(), resourceId);
   }
 

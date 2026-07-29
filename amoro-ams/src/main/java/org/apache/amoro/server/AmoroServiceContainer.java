@@ -280,7 +280,7 @@ public class AmoroServiceContainer {
 
   public void disposeOptimizingService() {
     if (optimizerBootstrap != null) {
-      LOG.info("Stopping optimizer bootstrap watchdog...");
+      LOG.info("Stopping optimizer bootstrap keeper...");
       optimizerBootstrap.dispose();
       optimizerBootstrap = null;
     }
