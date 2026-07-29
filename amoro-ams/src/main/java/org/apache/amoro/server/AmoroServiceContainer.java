@@ -114,6 +114,7 @@ public class AmoroServiceContainer {
   private OptimizerManager optimizerManager;
   private TableService tableService;
   private DefaultOptimizingService optimizingService;
+  private OptimizerBootstrap optimizerBootstrap;
   private ProcessService processService;
   private TerminalManager terminalManager;
   private Configurations serviceConfig;
@@ -261,7 +262,9 @@ public class AmoroServiceContainer {
     LOG.info("AMS table service have been initialized");
     tableManager.setTableService(tableService);
     try {
-      new OptimizerBootstrap(serviceConfig, optimizerManager, optimizingService).run();
+      optimizerBootstrap =
+          new OptimizerBootstrap(serviceConfig, optimizerManager, optimizingService);
+      optimizerBootstrap.run();
     } catch (Exception e) {
       LOG.error("Failed to start optimizer bootstrap", e);
     }
@@ -276,6 +279,11 @@ public class AmoroServiceContainer {
   }
 
   public void disposeOptimizingService() {
+    if (optimizerBootstrap != null) {
+      LOG.info("Stopping optimizer bootstrap watchdog...");
+      optimizerBootstrap.dispose();
+      optimizerBootstrap = null;
+    }
     if (tableManagementServer != null) {
       LOG.info(
           "Stopping table management server[serving:{}] ...", tableManagementServer.isServing());

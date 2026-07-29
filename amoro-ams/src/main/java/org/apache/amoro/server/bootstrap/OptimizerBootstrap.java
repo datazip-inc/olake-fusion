@@ -37,19 +37,51 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-/** Ensures the configured optimizer group and resource exist when AMS starts. */
+/**
+ * Ensures the configured optimizer group and resource exist when AMS starts, and keeps a live
+ * optimizer running via a periodic keeper that resubmits it if it dies or fails to start.
+ */
 public class OptimizerBootstrap {
 
   private static final Logger LOG = LoggerFactory.getLogger(OptimizerBootstrap.class);
 
+  /**
+   * How often the keeper reconciles the group. 1 minute matches Amoro's other reconciling
+   * background processes (e.g. refresh-tables and refresh-external-catalogs).
+   */
+  private static final long KEEP_ALIVE_INTERVAL_MS = TimeUnit.MINUTES.toMillis(1);
+
+  /**
+   * Grace a freshly submitted optimizer gets to register before the keeper treats it as failed and
+   * resubmits it. Must exceed the worst-case optimizer (Spark-on-K8s) startup time.
+   */
+  private static final long STARTUP_GRACE_MS = TimeUnit.MINUTES.toMillis(5);
+
   private final Configurations serviceConfig;
   private final OptimizerManager optimizerManager;
   private final DefaultOptimizingService optimizingService;
+
+  /** resourceId -> epoch millis when we submitted it, used as a startup grace window. */
+  private final Map<String, Long> submittedAt = new ConcurrentHashMap<>();
+
+  private String groupName;
+  private AbstractOptimizerContainer optimizerContainer;
+  private int parallelism;
+  private int memoryMb;
+  private ResourceGroup group;
+
+  private ScheduledExecutorService keeper;
 
   public OptimizerBootstrap(
       Configurations serviceConfig,
@@ -62,27 +94,115 @@ public class OptimizerBootstrap {
 
   public void run() {
     try {
-      String groupName =
-          serviceConfig.getString(AmoroManagementConf.OPTIMIZER_BOOTSTRAP_GROUP_NAME);
+      groupName = serviceConfig.getString(AmoroManagementConf.OPTIMIZER_BOOTSTRAP_GROUP_NAME);
       String containerName =
           serviceConfig.getString(AmoroManagementConf.OPTIMIZER_BOOTSTRAP_CONTAINER);
+
+      if (StringUtils.isBlank(groupName) || StringUtils.isBlank(containerName)) {
+        LOG.info(
+            "Optimizer bootstrap is not configured (group-name/container missing), skipping.");
+        return;
+      }
 
       ResourceContainer container = Containers.get(containerName);
       if (!(container instanceof AbstractOptimizerContainer)) {
         LOG.error("Container {} is not an optimizer container, skipping bootstrap", containerName);
         return;
       }
-      AbstractOptimizerContainer optimizerContainer = (AbstractOptimizerContainer) container;
-      int parallelism =
-          serviceConfig.getInteger(AmoroManagementConf.OPTIMIZER_BOOTSTRAP_PARALLELISM);
-      int memoryMb = serviceConfig.getInteger(AmoroManagementConf.OPTIMIZER_BOOTSTRAP_MEMORY_MB);
-      ResourceGroup group = new ResourceGroup.Builder(groupName, containerName).build();
+      optimizerContainer = (AbstractOptimizerContainer) container;
+      parallelism = serviceConfig.getInteger(AmoroManagementConf.OPTIMIZER_BOOTSTRAP_PARALLELISM);
+      memoryMb = serviceConfig.getInteger(AmoroManagementConf.OPTIMIZER_BOOTSTRAP_MEMORY_MB);
+      group = new ResourceGroup.Builder(groupName, containerName).build();
+
       ensureResourceGroup(group);
       releaseAllResourcesInGroup(groupName);
-      createOptimizerResource(optimizerContainer, group, parallelism, memoryMb);
+      Resource resource = createOptimizerResource(optimizerContainer, group, parallelism, memoryMb);
+      submittedAt.put(resource.getResourceId(), System.currentTimeMillis());
+
+      startKeeper();
     } catch (Exception e) {
       LOG.error(
           "Optimizer bootstrap failed, AMS will continue without a bootstrapped optimizer", e);
+    }
+  }
+
+  private void startKeeper() {
+    keeper =
+        Executors.newSingleThreadScheduledExecutor(
+            runnable -> {
+              Thread thread = new Thread(runnable, "optimizer-bootstrap-keeper");
+              thread.setDaemon(true);
+              return thread;
+            });
+    keeper.scheduleWithFixedDelay(
+        this::reconcile, KEEP_ALIVE_INTERVAL_MS, KEEP_ALIVE_INTERVAL_MS, TimeUnit.MILLISECONDS);
+    LOG.info(
+        "Optimizer bootstrap keeper started for group {} (interval {} ms)",
+        groupName,
+        KEEP_ALIVE_INTERVAL_MS);
+  }
+
+  /**
+   * Ensures the bootstrapped group has a single live optimizer: releases resources whose optimizer
+   * has died (and whose startup grace has elapsed) and submits a replacement when none is healthy.
+   * Never touches healthy optimizers, so manual scale-outs are preserved.
+   */
+  private void reconcile() {
+    try {
+      long now = System.currentTimeMillis();
+
+      Set<String> liveResourceIds =
+          optimizerManager.listOptimizers(groupName).stream()
+              .map(OptimizerInstance::getResourceId)
+              .filter(StringUtils::isNotBlank)
+              .collect(Collectors.toSet());
+
+      List<Resource> resources = optimizerManager.listResourcesByGroup(groupName);
+      Set<String> knownResourceIds = new HashSet<>();
+      boolean hasHealthyOptimizer = false;
+      for (Resource resource : resources) {
+        String resourceId = resource.getResourceId();
+        if (liveResourceIds.contains(resourceId)) {
+          submittedAt.remove(resourceId);
+          hasHealthyOptimizer = true;
+          knownResourceIds.add(resourceId);
+        } else if (isWithinStartupGrace(resourceId, now)) {
+          hasHealthyOptimizer = true;
+          knownResourceIds.add(resourceId);
+        } else {
+          LOG.warn(
+              "Optimizer resource {} in group {} has no live optimizer and its startup grace "
+                  + "elapsed; releasing it for resubmission.",
+              resourceId,
+              groupName);
+          releaseResource(resource);
+          submittedAt.remove(resourceId);
+        }
+      }
+
+      if (!hasHealthyOptimizer) {
+        Resource resource =
+            createOptimizerResource(optimizerContainer, group, parallelism, memoryMb);
+        submittedAt.put(resource.getResourceId(), now);
+        knownResourceIds.add(resource.getResourceId());
+      }
+      // Drop tracking for any resource no longer relevant (e.g. released elsewhere) to keep the
+      // grace map bounded.
+      submittedAt.keySet().retainAll(knownResourceIds);
+    } catch (Exception e) {
+      LOG.error("Optimizer bootstrap keeper reconcile failed, will retry next tick", e);
+    }
+  }
+
+  private boolean isWithinStartupGrace(String resourceId, long now) {
+    Long since = submittedAt.get(resourceId);
+    return since != null && now - since < STARTUP_GRACE_MS;
+  }
+
+  public void dispose() {
+    if (keeper != null) {
+      keeper.shutdownNow();
+      keeper = null;
     }
   }
 
@@ -103,7 +223,7 @@ public class OptimizerBootstrap {
     }
   }
 
-  private void createOptimizerResource(
+  private Resource createOptimizerResource(
       AbstractOptimizerContainer container, ResourceGroup group, int parallelism, int memoryMb) {
     Resource resource =
         new Resource.Builder(group.getContainer(), group.getName(), ResourceType.OPTIMIZER)
@@ -118,6 +238,7 @@ public class OptimizerBootstrap {
         resource.getResourceId(),
         group.getName(),
         parallelism);
+    return resource;
   }
 
   private boolean resourceGroupMatches(ResourceGroup current, ResourceGroup newGroup) {
@@ -138,34 +259,23 @@ public class OptimizerBootstrap {
 
   private void releaseResource(Resource resource) {
     String resourceId = resource.getResourceId();
-    boolean released = false;
     try {
-      List<OptimizerInstance> instances =
-          optimizerManager.listOptimizers(resource.getGroupName()).stream()
-              .filter(instance -> resourceId.equals(instance.getResourceId()))
-              .collect(Collectors.toList());
-      Map<String, String> mergedProperties = new HashMap<>();
-      if (resource.getProperties() != null) {
-        mergedProperties.putAll(resource.getProperties());
-      }
-      if (!instances.isEmpty() && instances.get(0).getProperties() != null) {
-        mergedProperties.putAll(instances.get(0).getProperties());
-      }
-      resource.setProperties(mergedProperties);
-
       ResourceContainer resourceContainer = Containers.get(resource.getContainerName());
       Preconditions.checkState(
           resourceContainer instanceof AbstractOptimizerContainer,
           "Cannot release optimizer on non-optimizer resource container %s.",
           resource.getContainerName());
       ((AbstractOptimizerContainer) resourceContainer).releaseResource(resource);
-      released = true;
     } catch (Exception e) {
-      LOG.warn("Failed to release optimizer resource {}", resourceId, e);
+      LOG.warn(
+          "Failed to release optimizer resource {}, cleaning up its metadata anyway",
+          resourceId,
+          e);
     }
-    if (released) {
-      cleanupResource(resource.getGroupName(), resourceId);
-    }
+    // Always clear the DB row and in-memory registration so the group is left with
+    // exactly the single fresh optimizer created afterwards, even if the physical
+    // release (e.g. killing a stale/already-gone job) failed.
+    cleanupResource(resource.getGroupName(), resourceId);
   }
 
   private void cleanupResource(String groupName, String resourceId) {
