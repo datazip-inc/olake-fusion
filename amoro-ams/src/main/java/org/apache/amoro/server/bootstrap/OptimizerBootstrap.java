@@ -48,10 +48,8 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-/**
- * Ensures: the configured OG and a single optimizer exist when AMS starts, then keeps a live
- * optimizer running via a periodic keeper that resubmits it if it dies or fails to start.
- */
+// Ensures: the configured OG and a single optimizer exist when AMS starts, then keeps a live
+// optimizer running via a periodic keeper that resubmits it if it dies or fails to start.
 public class OptimizerBootstrap {
 
   private static final Logger LOG = LoggerFactory.getLogger(OptimizerBootstrap.class);
@@ -65,7 +63,6 @@ public class OptimizerBootstrap {
   private final OptimizerManager optimizerManager;
   private final DefaultOptimizingService optimizingService;
 
-  /** resourceId -> epoch millis when we submitted it, used as a startup grace window. */
   private final Map<String, Long> submittedAt = new ConcurrentHashMap<>();
 
   private String groupName;
@@ -134,10 +131,8 @@ public class OptimizerBootstrap {
         KEEP_ALIVE_INTERVAL_MS);
   }
 
-  /**
-   * Ensures the bootstrapped group has a live optimizer: releases resources whose optimizer has
-   * died (and whose startup grace has elapsed) and submits a replacement when none is healthy.
-   */
+  // Ensures the bootstrapped OG has a live optimizer: releases resources whose optimizer has
+  // died (and whose startup grace has elapsed) and submits a replacement when none is healthy.
   private void reconcile() {
     try {
       long now = System.currentTimeMillis();
