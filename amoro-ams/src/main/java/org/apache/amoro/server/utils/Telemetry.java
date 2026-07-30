@@ -35,13 +35,14 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
-// TODO: Add spark metrics  (Spark Driver Memory, Spark Executor Memory, Spark Executor Cores,
-// Desired Parallelism)
+//TODO: Add spark metrics  (Spark Driver Memory, Spark Executor Memory, Spark Executor Cores, Desired Parallelism)
 
 public class Telemetry {
   private static final Logger LOG = LoggerFactory.getLogger(Telemetry.class);
@@ -51,18 +52,18 @@ public class Telemetry {
   private static final String IPIFY_URL = "https://api.ipify.org?format=text";
   private static final String IP_NOT_FOUND_PLACEHOLDER = "NA";
   private static final String USER_ID_FILE = "user_id.txt";
-  private static final String SHARED_USER_ID_FILE = "/tmp/olake-config/telemetry/user_id";
+  private static final String SHARED_USER_ID_FILE = "/tmp/olake-config/telemetry/user_id";  
   private static final String USER_ID_FILE_ENV = "USER_ID_FILE_ENV";
 
-  private static final long TIMEOUT_MINS = 10L;
+  private static final long TIMEOUT_MINS = 10L; 
 
   private final HttpClient httpClient;
   private final ObjectMapper objectMapper;
 
   private String ipAddress = IP_NOT_FOUND_PLACEHOLDER;
-  private String userID;
   private PlatformInfo platform;
   private LocationInfo locationInfo;
+
 
   public record PlatformInfo(String os, String arch, String deviceCpu) {}
 
@@ -79,8 +80,7 @@ public class Telemetry {
   }
 
   private Telemetry() {
-    this.httpClient =
-        HttpClient.newBuilder().connectTimeout(Duration.ofMinutes(TIMEOUT_MINS)).build();
+    this.httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofMinutes(TIMEOUT_MINS)).build();
     this.objectMapper = new ObjectMapper();
 
     initAsync();
@@ -98,7 +98,7 @@ public class Telemetry {
     CompletableFuture.runAsync(
         () -> {
           try {
-            if (isTelemetryDisabled()) return;
+            if (isTelemetryDisabled()) { return; }
             this.ipAddress = fetchOutboundIP();
             this.userID = resolveUserID();
             this.platform = gatherPlatformInfo();
@@ -177,9 +177,9 @@ public class Telemetry {
     }
     return null;
   }
-
+  
   private void sendEvent(String eventName, Map<String, Object> props) {
-    if (isTelemetryDisabled()) return;
+    if (isTelemetryDisabled()) { return; }
 
     try {
       Map<String, Object> enrichedProperties = new HashMap<>(props);
@@ -205,8 +205,8 @@ public class Telemetry {
               .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
               .timeout(Duration.ofMinutes(TIMEOUT_MINS))
               .build();
-
-      httpClient
+      
+        httpClient
           .sendAsync(request, HttpResponse.BodyHandlers.discarding())
           .exceptionally(
               err -> {
@@ -226,18 +226,18 @@ public class Telemetry {
   }
 
   public String optimizationTypeHelper(String optimizationTypeName) {
-    if (optimizationTypeName.equals("MINOR")) return "LITE";
-    else if (optimizationTypeName.equals("MAJOR")) return "MEDIUM";
-    else return optimizationTypeName;
+    if (optimizationTypeName.equals("MINOR")) { return "LITE"; }
+    else if (optimizationTypeName.equals("MAJOR")) { return "MEDIUM"; }
+    else { return optimizationTypeName; }
   }
 
   public void trackOptimizationStarted(OptimizingType optimizationType, long tableSize) {
     Map<String, Object> props =
-        Map.of(
-            "optimization_type",
-            optimizationTypeHelper(optimizationType.name()),
-            "table_size",
-            bytesToGb(tableSize));
+      Map.of(
+          "optimization_type",
+          optimizationTypeHelper(optimizationType.name()),
+          "table_size",
+          bytesToGb(tableSize));
     sendEvent("Optimization Started - Fusion", props);
   }
 
