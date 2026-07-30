@@ -228,10 +228,7 @@ public class DefaultOptimizingService extends StatedPersistentBase
   public void ackTask(String authToken, int threadId, OptimizingTaskId taskId) {
     LOG.info("Ack task {} by optimizer {} (threadId {})", taskId, authToken, threadId);
     OptimizingQueue queue = getQueueByToken(authToken);
-    try {
-      queue.ackTask(taskId, getAuthenticatedOptimizer(authToken).getThread(threadId));
-    } catch (Exception e) {
-    }
+    queue.ackTask(taskId, getAuthenticatedOptimizer(authToken).getThread(threadId));
   }
 
   @Override
@@ -245,12 +242,9 @@ public class DefaultOptimizingService extends StatedPersistentBase
     OptimizingQueue queue = getQueueByToken(authToken);
     OptimizingTaskId taskId = taskResult.getTaskId();
     boolean success = taskResult.getErrorMessage() == null;
-    try {
-      OptimizerThread thread =
-          getAuthenticatedOptimizer(authToken).getThread(taskResult.getThreadId());
-      queue.completeTask(thread, taskResult);
-    } catch (Exception e) {
-    }
+    OptimizerThread thread =
+        getAuthenticatedOptimizer(authToken).getThread(taskResult.getThreadId());
+    queue.completeTask(thread, taskResult);
   }
 
   @Override

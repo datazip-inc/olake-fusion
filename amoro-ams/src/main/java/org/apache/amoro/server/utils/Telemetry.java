@@ -50,9 +50,7 @@ public class Telemetry {
   private static final String IPINFO_URL = "https://ipinfo.io/";
   private static final String IPIFY_URL = "https://api.ipify.org?format=text";
   private static final String IP_NOT_FOUND_PLACEHOLDER = "NA";
-  private static final String USER_ID_FILE = "user_id.txt";
   private static final String SHARED_USER_ID_FILE = "/tmp/olake-config/telemetry/user_id";
-  private static final String USER_ID_FILE_ENV = "USER_ID_FILE_ENV";
 
   private static final long TIMEOUT_MINS = 10L;
 
@@ -62,6 +60,7 @@ public class Telemetry {
   private String ipAddress = IP_NOT_FOUND_PLACEHOLDER;
   private PlatformInfo platform;
   private LocationInfo locationInfo;
+  private volatile String userID;
 
   public record PlatformInfo(String os, String arch, String deviceCpu) {}
 
@@ -160,12 +159,7 @@ public class Telemetry {
   }
 
   private String resolveUserID() {
-    String configuredPath = System.getenv(USER_ID_FILE_ENV);
-    Path shared =
-        Paths.get(
-            (configuredPath != null && !configuredPath.isBlank())
-                ? configuredPath.trim()
-                : SHARED_USER_ID_FILE);
+    Path shared = Paths.get(SHARED_USER_ID_FILE);
     try {
       if (Files.exists(shared)) {
         String id = Files.readString(shared, StandardCharsets.UTF_8).trim().replace("\"", "");
@@ -191,7 +185,7 @@ public class Telemetry {
       enrichedProperties.put("num_cpu", platform.deviceCpu());
       enrichedProperties.put("ip_address", ipAddress);
       enrichedProperties.put("location", locationInfo);
-      enrichedProperties.put("distinct_id", userID);
+      enrichedProperties.put("distinct_id", userID != null ? userID : resolveUserID());
       enrichedProperties.put("time", System.currentTimeMillis() / 1000L);
       enrichedProperties.put("event_original_name", eventName);
 
@@ -228,7 +222,7 @@ public class Telemetry {
     return bytes / BYTES_PER_GB;
   }
 
-  public String optimizationTypeHelper(String optimizationTypeName) {
+  private String optimizationTypeHelper(String optimizationTypeName) {
     if (optimizationTypeName.equals("MINOR")) {
       return "LITE";
     } else if (optimizationTypeName.equals("MAJOR")) {
@@ -256,7 +250,7 @@ public class Telemetry {
             optimizationTypeHelper(optimizationType.name()),
             "table_size",
             bytesToGb(tableSize),
-            "Optimization_Status",
+            "optimization_status",
             success ? "SUCCESS" : "FAILED");
     sendEvent("Optimization Completed - Fusion", props);
   }

@@ -567,6 +567,7 @@ public class OptimizingQueue extends PersistentBase {
           this.status = ProcessStatus.CLOSED;
           this.endTime = System.currentTimeMillis();
           persistAndSetCompleted(false);
+          trackCompleted(false);
         }
       } finally {
         lock.unlock();
@@ -778,13 +779,11 @@ public class OptimizingQueue extends PersistentBase {
           buildCommit().commit();
           if (allTasksPrepared()) {
             status = ProcessStatus.SUCCESS;
-            Telemetry.getInstance()
-                .trackOptimizationCompleted(optimizingType, tableRuntime.getTableSize(), true);
+            trackCompleted(true);
           } else if (taskMap.values().stream()
               .anyMatch(task -> task.getStatus() == TaskRuntime.Status.FAILED)) {
             status = ProcessStatus.FAILED;
-            Telemetry.getInstance()
-                .trackOptimizationCompleted(optimizingType, tableRuntime.getTableSize(), false);
+            trackCompleted(false);
           } else {
             status = ProcessStatus.CLOSED;
           }
@@ -798,14 +797,22 @@ public class OptimizingQueue extends PersistentBase {
         } catch (Throwable t) {
           LOG.error("{} Commit optimizing failed ", tableRuntime.getTableIdentifier(), t);
           status = ProcessStatus.FAILED;
-          Telemetry.getInstance()
-              .trackOptimizationCompleted(optimizingType, tableRuntime.getTableSize(), false);
+          trackCompleted(false);
           failedReason = ExceptionUtil.getErrorMessage(t, 4000);
           endTime = System.currentTimeMillis();
           persistAndSetCompleted(false);
         }
       } finally {
         lock.unlock();
+      }
+    }
+
+    private void trackCompleted(boolean success) {
+      try {
+        Telemetry.getInstance()
+            .trackOptimizationCompleted(optimizingType, inputTableSize(), success);
+      } catch (Exception e) {
+        LOG.debug("Failed to track optimization completed for process {}", processId, e);
       }
     }
 
@@ -889,7 +896,19 @@ public class OptimizingQueue extends PersistentBase {
                   mapper -> mapper.insertTaskRuntimes(Lists.newArrayList(taskMap.values()))),
           () -> TaskFilesPersistence.persistTaskInputs(processId, taskMap.values()),
           () -> tableRuntime.beginProcess(this));
-      Telemetry.getInstance().trackOptimizationStarted(optimizingType, tableRuntime.getTableSize());
+      Telemetry.getInstance().trackOptimizationStarted(optimizingType, getInputTableSize());
+    }
+
+    private long inputTableSize() {
+      try {
+        MetricsSummary summary = getSummary();
+        if (summary != null && summary.getInputFilesStatistics() != null) {
+          return summary.getInputFilesStatistics().getTotalSize();
+        }
+      } catch (Exception e) {
+        LOG.debug("Failed to compute input table size for telemetry, process {}", processId, e);
+      }
+      return 0;
     }
 
     private void persistAndSetCompleted(boolean success) {
