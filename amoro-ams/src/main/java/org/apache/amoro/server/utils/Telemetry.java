@@ -35,12 +35,13 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+
+// TODO: Add spark metrics  (Spark Driver Memory, Spark Executor Memory, Spark Executor Cores,
+// Desired Parallelism)
 
 public class Telemetry {
   private static final Logger LOG = LoggerFactory.getLogger(Telemetry.class);
@@ -50,6 +51,10 @@ public class Telemetry {
   private static final String IPIFY_URL = "https://api.ipify.org?format=text";
   private static final String IP_NOT_FOUND_PLACEHOLDER = "NA";
   private static final String USER_ID_FILE = "user_id.txt";
+  private static final String SHARED_USER_ID_FILE = "/tmp/olake-config/telemetry/user_id";
+  private static final String USER_ID_FILE_ENV = "USER_ID_FILE_ENV";
+
+  private static final long TIMEOUT_MINS = 10L;
 
   private final HttpClient httpClient;
   private final ObjectMapper objectMapper;
@@ -74,7 +79,8 @@ public class Telemetry {
   }
 
   private Telemetry() {
-    this.httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+    this.httpClient =
+        HttpClient.newBuilder().connectTimeout(Duration.ofMinutes(TIMEOUT_MINS)).build();
     this.objectMapper = new ObjectMapper();
 
     initAsync();
@@ -108,7 +114,7 @@ public class Telemetry {
       HttpRequest request =
           HttpRequest.newBuilder()
               .uri(URI.create(IPIFY_URL))
-              .timeout(Duration.ofSeconds(5))
+              .timeout(Duration.ofMinutes(TIMEOUT_MINS))
               .GET()
               .build();
       HttpResponse<String> response =
@@ -130,7 +136,7 @@ public class Telemetry {
       HttpRequest request =
           HttpRequest.newBuilder()
               .uri(URI.create(IPINFO_URL + ip + "/json"))
-              .timeout(Duration.ofSeconds(5))
+              .timeout(Duration.ofMinutes(TIMEOUT_MINS))
               .GET()
               .build();
       HttpResponse<String> response =
@@ -153,34 +159,23 @@ public class Telemetry {
   }
 
   private String resolveUserID() {
-    String configPathStr = System.getProperty("user.home");
-    Path idPath = Paths.get(configPathStr, USER_ID_FILE);
-
+    String configuredPath = System.getenv(USER_ID_FILE_ENV);
+    Path shared =
+        Paths.get(
+            (configuredPath != null && !configuredPath.isBlank())
+                ? configuredPath.trim()
+                : SHARED_USER_ID_FILE);
     try {
-      if (Files.exists(idPath)) {
-        return Files.readString(idPath, StandardCharsets.UTF_8).trim().replace("\"", "");
-      }
-
-      MessageDigest digest = MessageDigest.getInstance("SHA-256");
-      String seed = String.valueOf(System.currentTimeMillis());
-      byte[] encodedHash = digest.digest(seed.getBytes(StandardCharsets.UTF_8));
-
-      // Convert to Hex String up to 32 characters
-      StringBuilder hexString = new StringBuilder();
-      for (byte b : encodedHash) {
-        String hex = Integer.toHexString(0xff & b);
-        if (hex.length() == 1) {
-          hexString.append('0');
+      if (Files.exists(shared)) {
+        String id = Files.readString(shared, StandardCharsets.UTF_8).trim().replace("\"", "");
+        if (!id.isEmpty()) {
+          return id;
         }
-        hexString.append(hex);
       }
-      String generatedID = hexString.substring(0, 32);
-      Files.writeString(idPath, generatedID, StandardCharsets.UTF_8);
-      return generatedID;
-    } catch (IOException | NoSuchAlgorithmException e) {
-      LOG.debug("Failed to parse or save telemetry user id file, using transient identity.", e);
-      return "transient-" + java.util.UUID.randomUUID().toString().substring(0, 8);
+    } catch (IOException e) {
+      LOG.debug("Failed to read shared telemetry user id at {}: {}", shared, e.getMessage());
     }
+    return null;
   }
 
   private void sendEvent(String eventName, Map<String, Object> props) {
@@ -208,10 +203,9 @@ public class Telemetry {
               .uri(URI.create(TRACK_URL))
               .header("Content-Type", "application/json")
               .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
-              .timeout(Duration.ofSeconds(5))
+              .timeout(Duration.ofMinutes(TIMEOUT_MINS))
               .build();
 
-      // Dispatches entirely non-blocking to protect execution runtime pipelines
       httpClient
           .sendAsync(request, HttpResponse.BodyHandlers.discarding())
           .exceptionally(
@@ -239,11 +233,11 @@ public class Telemetry {
 
   public void trackOptimizationStarted(OptimizingType optimizationType, long tableSize) {
     Map<String, Object> props =
-      Map.of(
-          "optimization_type",
-          optimizationTypeHelper(optimizationType.name()),
-          "table_size",
-          bytesToGb(tableSize));
+        Map.of(
+            "optimization_type",
+            optimizationTypeHelper(optimizationType.name()),
+            "table_size",
+            bytesToGb(tableSize));
     sendEvent("Optimization Started - Fusion", props);
   }
 
@@ -251,7 +245,7 @@ public class Telemetry {
       OptimizingType optimizationType, long tableSize, boolean success) {
     Map<String, Object> props =
         Map.of(
-            "Optimization_Type",
+            "optimization_type",
             optimizationTypeHelper(optimizationType.name()),
             "table_size",
             bytesToGb(tableSize),
@@ -261,7 +255,7 @@ public class Telemetry {
   }
 
   public void trackCatalogAdded(String catalogType) {
-    Map<String, Object> props = Map.of("Catalog_Type", catalogType);
+    Map<String, Object> props = Map.of("catalog_type", catalogType);
     sendEvent("Catalog Added - Fusion", props);
   }
 }

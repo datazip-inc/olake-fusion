@@ -53,6 +53,7 @@ import org.apache.amoro.server.resource.QuotaProvider;
 import org.apache.amoro.server.table.DefaultTableRuntime;
 import org.apache.amoro.server.table.blocker.TableBlocker;
 import org.apache.amoro.server.utils.IcebergTableUtil;
+import org.apache.amoro.server.utils.Telemetry;
 import org.apache.amoro.shade.guava32.com.google.common.annotations.VisibleForTesting;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Lists;
@@ -366,14 +367,6 @@ public class OptimizingQueue extends PersistentBase {
       LOG.error("Planning table {} failed", tableRuntime.getTableIdentifier(), throwable);
       throw throwable;
     }
-  }
-
-  public TaskRuntime<?> getTaskRuntime(OptimizingTaskId taskId) {
-    return findProcess(taskId).getTaskRuntime(taskId);
-  }
-
-  public OptimizingType getOptimizingType(OptimizingTaskId taskId) {
-    return findProcess(taskId).getOptimizingType();
   }
 
   public void ackTask(OptimizingTaskId taskId, OptimizerThread thread) {
@@ -785,9 +778,13 @@ public class OptimizingQueue extends PersistentBase {
           buildCommit().commit();
           if (allTasksPrepared()) {
             status = ProcessStatus.SUCCESS;
+            Telemetry.getInstance()
+                .trackOptimizationCompleted(optimizingType, tableRuntime.getTableSize(), true);
           } else if (taskMap.values().stream()
               .anyMatch(task -> task.getStatus() == TaskRuntime.Status.FAILED)) {
             status = ProcessStatus.FAILED;
+            Telemetry.getInstance()
+                .trackOptimizationCompleted(optimizingType, tableRuntime.getTableSize(), false);
           } else {
             status = ProcessStatus.CLOSED;
           }
@@ -801,6 +798,8 @@ public class OptimizingQueue extends PersistentBase {
         } catch (Throwable t) {
           LOG.error("{} Commit optimizing failed ", tableRuntime.getTableIdentifier(), t);
           status = ProcessStatus.FAILED;
+          Telemetry.getInstance()
+              .trackOptimizationCompleted(optimizingType, tableRuntime.getTableSize(), false);
           failedReason = ExceptionUtil.getErrorMessage(t, 4000);
           endTime = System.currentTimeMillis();
           persistAndSetCompleted(false);
@@ -890,6 +889,7 @@ public class OptimizingQueue extends PersistentBase {
                   mapper -> mapper.insertTaskRuntimes(Lists.newArrayList(taskMap.values()))),
           () -> TaskFilesPersistence.persistTaskInputs(processId, taskMap.values()),
           () -> tableRuntime.beginProcess(this));
+      Telemetry.getInstance().trackOptimizationStarted(optimizingType, tableRuntime.getTableSize());
     }
 
     private void persistAndSetCompleted(boolean success) {

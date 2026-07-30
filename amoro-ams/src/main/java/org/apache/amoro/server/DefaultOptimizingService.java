@@ -34,9 +34,6 @@ import org.apache.amoro.exception.ForbiddenException;
 import org.apache.amoro.exception.IllegalTaskStateException;
 import org.apache.amoro.exception.ObjectNotExistsException;
 import org.apache.amoro.exception.PluginRetryAuthException;
-import org.apache.amoro.optimizing.MetricsSummary;
-import org.apache.amoro.optimizing.OptimizingType;
-import org.apache.amoro.optimizing.RewriteStageTask;
 import org.apache.amoro.resource.ResourceGroup;
 import org.apache.amoro.server.catalog.CatalogManager;
 import org.apache.amoro.server.optimizing.OptimizingProcess;
@@ -55,7 +52,6 @@ import org.apache.amoro.server.resource.QuotaProvider;
 import org.apache.amoro.server.table.DefaultTableRuntime;
 import org.apache.amoro.server.table.RuntimeHandlerChain;
 import org.apache.amoro.server.table.TableService;
-import org.apache.amoro.server.utils.Telemetry;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Sets;
 import org.apache.amoro.shade.guava32.com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -233,13 +229,8 @@ public class DefaultOptimizingService extends StatedPersistentBase
     LOG.info("Ack task {} by optimizer {} (threadId {})", taskId, authToken, threadId);
     OptimizingQueue queue = getQueueByToken(authToken);
     try {
-      OptimizingType optimizingType = queue.getOptimizingType(taskId);
-      TaskRuntime<?> taskRuntime = queue.getTaskRuntime(taskId);
       queue.ackTask(taskId, getAuthenticatedOptimizer(authToken).getThread(threadId));
-      Telemetry.getInstance()
-          .trackOptimizationStarted(optimizingType, getInputTableSize(taskRuntime));
     } catch (Exception e) {
-      LOG.warn("Failed to track optimization started for task {}", taskId, e);
     }
   }
 
@@ -255,26 +246,11 @@ public class DefaultOptimizingService extends StatedPersistentBase
     OptimizingTaskId taskId = taskResult.getTaskId();
     boolean success = taskResult.getErrorMessage() == null;
     try {
-      OptimizingType optimizingType = queue.getOptimizingType(taskId);
-      TaskRuntime<?> taskRuntime = queue.getTaskRuntime(taskId);
-      Telemetry.getInstance()
-          .trackOptimizationCompleted(optimizingType, getInputTableSize(taskRuntime), success);
       OptimizerThread thread =
           getAuthenticatedOptimizer(authToken).getThread(taskResult.getThreadId());
       queue.completeTask(thread, taskResult);
     } catch (Exception e) {
-      LOG.warn("Failed to track optimization completed for task {}", taskId, e);
     }
-  }
-
-  private static long getInputTableSize(TaskRuntime<?> taskRuntime) {
-    if (taskRuntime.getTaskDescriptor() instanceof RewriteStageTask) {
-      MetricsSummary summary = ((RewriteStageTask) taskRuntime.getTaskDescriptor()).getSummary();
-      if (summary != null) {
-        return summary.getInputFilesStatistics().getTotalSize();
-      }
-    }
-    return 0;
   }
 
   @Override
