@@ -663,6 +663,7 @@ public class OptimizingQueue extends PersistentBase {
               this.status = ProcessStatus.FAILED;
               this.endTime = taskRuntime.getEndTime();
               persistAndSetCompleted(false);
+              trackCompleted(false);
             }
           }
         }
@@ -786,6 +787,7 @@ public class OptimizingQueue extends PersistentBase {
             trackCompleted(false);
           } else {
             status = ProcessStatus.CLOSED;
+            trackCompleted(false);
           }
           endTime = System.currentTimeMillis();
           persistAndSetCompleted(status == ProcessStatus.SUCCESS);
@@ -896,7 +898,7 @@ public class OptimizingQueue extends PersistentBase {
                   mapper -> mapper.insertTaskRuntimes(Lists.newArrayList(taskMap.values()))),
           () -> TaskFilesPersistence.persistTaskInputs(processId, taskMap.values()),
           () -> tableRuntime.beginProcess(this));
-      Telemetry.getInstance().trackOptimizationStarted(optimizingType, getInputTableSize());
+      Telemetry.getInstance().trackOptimizationStarted(optimizingType, inputTableSize());
     }
 
     private long inputTableSize() {
