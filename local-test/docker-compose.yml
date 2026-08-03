@@ -18,7 +18,7 @@
 
 services:
   fusion:
-    image: olakego/fusion:logging-20260731-164214
+    image: olakego/fusion:latest
     container_name: olake-fusion
     profiles:
       - prod
@@ -360,7 +360,7 @@ services:
         echo "==> Done — image available on all workers."
 
   spark-copy:
-    image: olakego/fusion-spark:logging-20260731-164214
+    image: olakego/fusion-spark:latest
     container_name: fusion-spark-copy
     profiles:
       - prod
@@ -378,7 +378,6 @@ services:
         fi
     volumes:
       - spark-home:/spark-vol
-
 
 networks:
   iceberg-net:
