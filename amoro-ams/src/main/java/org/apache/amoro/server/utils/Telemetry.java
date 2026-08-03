@@ -231,7 +231,7 @@ public class Telemetry {
       enrichedProperties.put("num_cpu", platform.deviceCpu());
       enrichedProperties.put("ip_address", ipAddress);
       enrichedProperties.put("location", locationInfo);
-      enrichedProperties.put("distinct_id", resolveUserID());
+      enrichedProperties.put("distinct_id", userID != null ? userID : resolveUserID());
       enrichedProperties.put("time", System.currentTimeMillis() / 1000L);
       enrichedProperties.put("event_original_name", eventName);
 

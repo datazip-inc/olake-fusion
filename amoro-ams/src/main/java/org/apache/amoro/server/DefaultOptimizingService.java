@@ -240,8 +240,6 @@ public class DefaultOptimizingService extends StatedPersistentBase
         taskResult.getTaskId(),
         taskResult.getErrorMessage() == null ? "SUCCESS" : "FAIL");
     OptimizingQueue queue = getQueueByToken(authToken);
-    OptimizingTaskId taskId = taskResult.getTaskId();
-    boolean success = taskResult.getErrorMessage() == null;
     OptimizerThread thread =
         getAuthenticatedOptimizer(authToken).getThread(taskResult.getThreadId());
     queue.completeTask(thread, taskResult);

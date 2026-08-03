@@ -775,20 +775,20 @@ public class OptimizingQueue extends PersistentBase {
           }
           throw new IllegalStateException("repeat commit, and last error " + failedReason);
         }
+        boolean tracked = false;
         try {
           hasCommitted = true;
           buildCommit().commit();
           if (allTasksPrepared()) {
             status = ProcessStatus.SUCCESS;
-            trackCompleted();
           } else if (taskMap.values().stream()
               .anyMatch(task -> task.getStatus() == TaskRuntime.Status.FAILED)) {
             status = ProcessStatus.FAILED;
-            trackCompleted();
           } else {
             status = ProcessStatus.CLOSED;
-            trackCompleted();
           }
+          trackCompleted();
+          tracked = true;
           endTime = System.currentTimeMillis();
           persistAndSetCompleted(status == ProcessStatus.SUCCESS);
         } catch (PersistenceException e) {
@@ -799,7 +799,9 @@ public class OptimizingQueue extends PersistentBase {
         } catch (Throwable t) {
           LOG.error("{} Commit optimizing failed ", tableRuntime.getTableIdentifier(), t);
           status = ProcessStatus.FAILED;
-          trackCompleted();
+          if (!tracked) {
+            trackCompleted();
+          }
           failedReason = ExceptionUtil.getErrorMessage(t, 4000);
           endTime = System.currentTimeMillis();
           persistAndSetCompleted(false);
@@ -909,7 +911,15 @@ public class OptimizingQueue extends PersistentBase {
                   mapper -> mapper.insertTaskRuntimes(Lists.newArrayList(taskMap.values()))),
           () -> TaskFilesPersistence.persistTaskInputs(processId, taskMap.values()),
           () -> tableRuntime.beginProcess(this));
-      Telemetry.getInstance().trackOptimizationStarted(optimizingType, inputTableSize());
+      trackStarted();
+    }
+
+    private void trackStarted() {
+      try {
+        Telemetry.getInstance().trackOptimizationStarted(optimizingType, inputTableSize());
+      } catch (Exception e) {
+        LOG.debug("Failed to track optimization started for process {}", processId, e);
+      }
     }
 
     private long inputTableSize() {
