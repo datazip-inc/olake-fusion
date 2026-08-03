@@ -185,10 +185,10 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
     validateCatalogConnection(catalogMeta);
     // Build to make sure the catalog is valid
     ServerCatalog catalog = CatalogBuilder.buildServerCatalog(catalogMeta, serverConfiguration);
+    Telemetry.getInstance().trackCatalogAdded(catalogMeta.getCatalogType());
     doAs(CatalogMetaMapper.class, mapper -> mapper.insertCatalog(catalog.getMetadata()));
     disposeCatalog(catalogMeta.getCatalogName());
     serverCatalogMap.put(catalogMeta.getCatalogName(), catalog);
-    Telemetry.getInstance().trackCatalogAdded(catalogMeta.getCatalogType());
     LOG.info(
         "Create catalog {}, type:{}", catalogMeta.getCatalogName(), catalogMeta.getCatalogType());
   }
