@@ -567,7 +567,7 @@ public class OptimizingQueue extends PersistentBase {
           this.status = ProcessStatus.CLOSED;
           this.endTime = System.currentTimeMillis();
           persistAndSetCompleted(false);
-          trackCompleted(false);
+          trackCompleted();
         }
       } finally {
         lock.unlock();
@@ -663,7 +663,7 @@ public class OptimizingQueue extends PersistentBase {
               this.status = ProcessStatus.FAILED;
               this.endTime = taskRuntime.getEndTime();
               persistAndSetCompleted(false);
-              trackCompleted(false);
+              trackCompleted();
             }
           }
         }
@@ -780,14 +780,14 @@ public class OptimizingQueue extends PersistentBase {
           buildCommit().commit();
           if (allTasksPrepared()) {
             status = ProcessStatus.SUCCESS;
-            trackCompleted(true);
+            trackCompleted();
           } else if (taskMap.values().stream()
               .anyMatch(task -> task.getStatus() == TaskRuntime.Status.FAILED)) {
             status = ProcessStatus.FAILED;
-            trackCompleted(false);
+            trackCompleted();
           } else {
             status = ProcessStatus.CLOSED;
-            trackCompleted(false);
+            trackCompleted();
           }
           endTime = System.currentTimeMillis();
           persistAndSetCompleted(status == ProcessStatus.SUCCESS);
@@ -799,7 +799,7 @@ public class OptimizingQueue extends PersistentBase {
         } catch (Throwable t) {
           LOG.error("{} Commit optimizing failed ", tableRuntime.getTableIdentifier(), t);
           status = ProcessStatus.FAILED;
-          trackCompleted(false);
+          trackCompleted();
           failedReason = ExceptionUtil.getErrorMessage(t, 4000);
           endTime = System.currentTimeMillis();
           persistAndSetCompleted(false);
@@ -809,12 +809,23 @@ public class OptimizingQueue extends PersistentBase {
       }
     }
 
-    private void trackCompleted(boolean success) {
+    private void trackCompleted() {
       try {
         Telemetry.getInstance()
-            .trackOptimizationCompleted(optimizingType, inputTableSize(), success);
+            .trackOptimizationCompleted(optimizingType, inputTableSize(), telemetryStatus());
       } catch (Exception e) {
         LOG.debug("Failed to track optimization completed for process {}", processId, e);
+      }
+    }
+
+    private String telemetryStatus() {
+      switch (status) {
+        case SUCCESS:
+          return "SUCCESS";
+        case CLOSED:
+          return "CANCELLED";
+        default:
+          return "FAILED";
       }
     }
 

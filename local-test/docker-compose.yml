@@ -18,7 +18,7 @@
 
 services:
   fusion:
-    image: olakego/fusion:latest
+    image: olakego/fusion:logging-20260731-164214
     container_name: olake-fusion
     profiles:
       - prod
@@ -48,6 +48,7 @@ services:
       - kind-kubeconfig:/root/.kube:ro
       - spark-home:/opt/spark:ro
       - ${AMORO_LOG_DIR:-/opt/amoro-logs}:/mnt/amoro-logs
+      - ./data/olake-config/telemetry:/tmp/olake-config/telemetry
     command: ["/entrypoint.sh", "ams"]
     tty: true
     stdin_open: true
@@ -359,7 +360,7 @@ services:
         echo "==> Done — image available on all workers."
 
   spark-copy:
-    image: olakego/fusion-spark:latest
+    image: olakego/fusion-spark:logging-20260731-164214
     container_name: fusion-spark-copy
     profiles:
       - prod
@@ -378,7 +379,7 @@ services:
     volumes:
       - spark-home:/spark-vol
 
-  
+
 networks:
   iceberg-net:
     driver: bridge

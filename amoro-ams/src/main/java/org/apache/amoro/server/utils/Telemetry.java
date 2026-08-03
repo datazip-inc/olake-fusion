@@ -35,9 +35,13 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 // TODO: Add spark metrics  (Spark Driver Memory, Spark Executor Memory, Spark Executor Cores,
@@ -159,6 +163,24 @@ public class Telemetry {
   }
 
   private String resolveUserID() {
+    String fromFile = readSharedUserID();
+    if (fromFile != null) {
+      this.userID = fromFile;
+      return fromFile;
+    }
+
+    if (this.userID != null) {
+      return this.userID;
+    }
+
+    // fallback
+    String generated = generateUserID();
+    persistUserID(generated);
+    this.userID = generated;
+    return generated;
+  }
+
+  private String readSharedUserID() {
     Path shared = Paths.get(SHARED_USER_ID_FILE);
     try {
       if (Files.exists(shared)) {
@@ -173,6 +195,30 @@ public class Telemetry {
     return null;
   }
 
+  private void persistUserID(String id) {
+    Path shared = Paths.get(SHARED_USER_ID_FILE);
+    try {
+      Files.createDirectories(shared.getParent());
+      Files.writeString(shared, id, StandardCharsets.UTF_8);
+    } catch (IOException e) {
+      LOG.debug("Failed to persist generated telemetry user id at {}: {}", shared, e.getMessage());
+    }
+  }
+
+  private String generateUserID() {
+    try {
+      MessageDigest digest = MessageDigest.getInstance("SHA-256");
+      byte[] hash = digest.digest(Instant.now().toString().getBytes(StandardCharsets.UTF_8));
+      StringBuilder sb = new StringBuilder(hash.length * 2);
+      for (byte b : hash) {
+        sb.append(String.format("%02x", b));
+      }
+      return sb.substring(0, 32);
+    } catch (NoSuchAlgorithmException e) {
+      return UUID.randomUUID().toString().replace("-", "").substring(0, 32);
+    }
+  }
+
   private void sendEvent(String eventName, Map<String, Object> props) {
     if (isTelemetryDisabled()) {
       return;
@@ -185,7 +231,7 @@ public class Telemetry {
       enrichedProperties.put("num_cpu", platform.deviceCpu());
       enrichedProperties.put("ip_address", ipAddress);
       enrichedProperties.put("location", locationInfo);
-      enrichedProperties.put("distinct_id", userID != null ? userID : resolveUserID());
+      enrichedProperties.put("distinct_id", resolveUserID());
       enrichedProperties.put("time", System.currentTimeMillis() / 1000L);
       enrichedProperties.put("event_original_name", eventName);
 
@@ -243,7 +289,7 @@ public class Telemetry {
   }
 
   public void trackOptimizationCompleted(
-      OptimizingType optimizationType, long tableSize, boolean success) {
+      OptimizingType optimizationType, long tableSize, String status) {
     Map<String, Object> props =
         Map.of(
             "optimization_type",
@@ -251,7 +297,7 @@ public class Telemetry {
             "table_size",
             bytesToGb(tableSize),
             "optimization_status",
-            success ? "SUCCESS" : "FAILED");
+            status);
     sendEvent("Optimization Completed - Fusion", props);
   }
 
