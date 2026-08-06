@@ -56,7 +56,7 @@ public class Telemetry {
   private static final String IP_NOT_FOUND_PLACEHOLDER = "NA";
   private static final String SHARED_USER_ID_FILE = "/tmp/olake-config/telemetry/user_id";
 
-  private static final long TIMEOUT_MINS = 10L;
+  private static final long TIMEOUT_SECONDS = 10L;
 
   private final HttpClient httpClient;
   private final ObjectMapper objectMapper;
@@ -82,7 +82,7 @@ public class Telemetry {
 
   private Telemetry() {
     this.httpClient =
-        HttpClient.newBuilder().connectTimeout(Duration.ofMinutes(TIMEOUT_MINS)).build();
+        HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(TIMEOUT_SECONDS)).build();
     this.objectMapper = new ObjectMapper();
 
     initAsync();
@@ -118,7 +118,7 @@ public class Telemetry {
       HttpRequest request =
           HttpRequest.newBuilder()
               .uri(URI.create(IPIFY_URL))
-              .timeout(Duration.ofMinutes(TIMEOUT_MINS))
+              .timeout(Duration.ofSeconds(TIMEOUT_SECONDS))
               .GET()
               .build();
       HttpResponse<String> response =
@@ -140,7 +140,7 @@ public class Telemetry {
       HttpRequest request =
           HttpRequest.newBuilder()
               .uri(URI.create(IPINFO_URL + ip + "/json"))
-              .timeout(Duration.ofMinutes(TIMEOUT_MINS))
+              .timeout(Duration.ofSeconds(TIMEOUT_SECONDS))
               .GET()
               .build();
       HttpResponse<String> response =
@@ -246,7 +246,7 @@ public class Telemetry {
               .uri(URI.create(TRACK_URL))
               .header("Content-Type", "application/json")
               .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
-              .timeout(Duration.ofMinutes(TIMEOUT_MINS))
+              .timeout(Duration.ofSeconds(TIMEOUT_SECONDS))
               .build();
 
       httpClient
