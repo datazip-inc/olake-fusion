@@ -22,6 +22,7 @@ package org.apache.amoro.optimizer.spark;
 
 import org.apache.amoro.api.OptimizingTask;
 import org.apache.amoro.api.OptimizingTaskResult;
+import org.apache.amoro.log.OptimizerLogContextRegistry;
 import org.apache.amoro.optimizer.common.OptimizerConfig;
 import org.apache.amoro.optimizer.common.OptimizerExecutor;
 import org.apache.amoro.optimizing.RewriteFilesInput;
@@ -59,12 +60,16 @@ public class SparkOptimizerExecutor extends OptimizerExecutor {
 
     long processId = task.getTaskId().getProcessId();
     int taskId = task.getTaskId().getTaskId();
-    String driverFilePath = processId + "/driver";
+    String driverFilePath = OptimizerLogContextRegistry.driverLogFilePath(processId);
 
     // Set MDC context for Log4j2 routing
     // Driver logs go to: <LOG_DIR>/<processId>/driver.log
     MDC.put("processId", String.valueOf(processId));
     MDC.put("logFilePath", driverFilePath);
+    // Spark itself logs from its own threads (dag-scheduler-event-loop, task-result-getter-*,
+    // kubernetes-executor-snapshots-subscribers-*, ...), which carry no MDC. Registering here lets
+    // AmoroContextDataProvider route those lines into the same driver log.
+    OptimizerLogContextRegistry.bind(processId, null, driverFilePath);
 
     try {
       ImmutableList<OptimizingTask> of = ImmutableList.of(task);
@@ -90,6 +95,7 @@ public class SparkOptimizerExecutor extends OptimizerExecutor {
       result.setErrorMessage(ExceptionUtil.getErrorMessage(r, ERROR_MESSAGE_MAX_LENGTH));
       return result;
     } finally {
+      OptimizerLogContextRegistry.unbind();
       MDC.remove("processId");
       MDC.remove("logFilePath");
     }

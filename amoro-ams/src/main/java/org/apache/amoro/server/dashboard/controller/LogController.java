@@ -43,6 +43,15 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Serves the per-compaction log files that the optimizers write under {@code LOG_DIR}.
+ *
+ * <p>A Spark optimizer writes {@code <processId>/driver.log} from its driver pod and {@code
+ * <processId>/<taskId>.log} from the executor pod running that task, onto a volume shared with AMS.
+ * Both Amoro's own log statements and Spark's application logs land there, and log4j2 writes them
+ * unbuffered and flushed per event, so re-reading a file here always returns everything the Spark
+ * pods have emitted so far - polling these endpoints is enough to follow a compaction live.
+ */
 public class LogController {
   private static final Logger LOG = LoggerFactory.getLogger(LogController.class);
   private static final String LOG_BASE_DIR;
@@ -62,6 +71,9 @@ public class LogController {
    * ERROR log entry when the log4j2 PatternLayout did not include the throwable inside the JSON
    * pattern. Such raw lines are collected and attached as a {@code stackTrace} field on the
    * preceding log entry so the API can deliver them to the UI.
+   *
+   * <p>A trailing line without a newline is skipped: the optimizer is still writing it, and it will
+   * be complete by the time the caller polls again.
    *
    * @param logPath Path to the log file
    * @return List of parsed log entry objects (as Maps)
