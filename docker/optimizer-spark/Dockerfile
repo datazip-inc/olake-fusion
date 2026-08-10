@@ -33,7 +33,7 @@ ARG TARGETARCH
 USER root
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends wget \
+    && apt-get install -y --no-install-recommends wget unzip \
     && rm -rf /var/lib/apt/lists/*
 
 ENV JAVA_HOME=/opt/java/openjdk
@@ -52,3 +52,28 @@ RUN rm -f $SPARK_HOME/conf/log4j2.properties $SPARK_HOME/conf/log4j2.properties.
 COPY docker/optimizer-spark/log4j2.xml $SPARK_HOME/conf/log4j2.xml
 
 COPY $OPTIMIZER_JOB $SPARK_HOME/usrlib/optimizer-job.jar
+
+# Put the log routing context on the JVM system classpath.
+#
+# Log4j2 resolves its ContextDataProvider services once, from a static initializer, the first time
+# anything logs. On an executor that happens seconds before Spark fetches optimizer-job.jar and adds
+# it to a child MutableURLClassLoader ("Adding file:.../optimizer-job.jar to class loader default"),
+# and the k8s cluster-mode driver loads the job jar the same way. A provider that only exists inside
+# optimizer-job.jar is therefore never registered, and Spark's own log lines get no processId/taskId.
+#
+# $SPARK_HOME/jars is on the system classpath from JVM start, so re-packaging just the log context
+# classes there makes the provider visible to Log4j2 immediately. Class loading is parent first
+# (spark.{driver,executor}.userClassPathFirst stays false), so the optimizer code inside
+# optimizer-job.jar resolves these same classes, and therefore the same static registry.
+#
+# The grep fails the build rather than shipping an image whose Spark logs are silently unrouted.
+RUN mkdir -p /tmp/amoro-log-context \
+    && unzip -q $SPARK_HOME/usrlib/optimizer-job.jar \
+        'org/apache/amoro/log/*' \
+        'META-INF/services/org.apache.logging.log4j.core.util.ContextDataProvider' \
+        -d /tmp/amoro-log-context \
+    && grep -q 'org.apache.amoro.log.AmoroContextDataProvider' \
+        /tmp/amoro-log-context/META-INF/services/org.apache.logging.log4j.core.util.ContextDataProvider \
+    && jar cf $SPARK_HOME/jars/amoro-log-context.jar -C /tmp/amoro-log-context . \
+    && chown spark:spark $SPARK_HOME/jars/amoro-log-context.jar \
+    && rm -rf /tmp/amoro-log-context

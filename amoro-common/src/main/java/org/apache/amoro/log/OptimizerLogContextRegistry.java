@@ -58,6 +58,23 @@ public final class OptimizerLogContextRegistry {
 
   public static final String DRIVER_LOG_NAME = "driver";
 
+  /**
+   * Spark copies job local properties whose name starts with {@code mdc.} into the MDC of the
+   * executor thread running the task, for the whole lifetime of that task, and removes them
+   * afterwards (see {@code Executor.setMDCForTask}). It does not strip the prefix, so these are
+   * distinct keys from the ones Amoro sets, and {@link AmoroContextDataProvider} translates them.
+   */
+  private static final String SPARK_MDC_PREFIX = "mdc.";
+
+  public static final String SPARK_LOG_FILE_PATH_KEY =
+      SPARK_MDC_PREFIX + OptimizingTaskLogContext.LOG_FILE_PATH_KEY;
+
+  public static final String SPARK_PROCESS_ID_KEY =
+      SPARK_MDC_PREFIX + OptimizingTaskLogContext.PROCESS_ID_KEY;
+
+  public static final String SPARK_TASK_ID_KEY =
+      SPARK_MDC_PREFIX + OptimizingTaskLogContext.TASK_ID_KEY;
+
   private static final Map<Long, LogContext> ACTIVE = new ConcurrentHashMap<>();
 
   /**
@@ -66,6 +83,20 @@ public final class OptimizerLogContextRegistry {
    * read and the pre-built context map is shared rather than rebuilt.
    */
   private static volatile LogContext fallback;
+
+  /**
+   * The last attribution this JVM had, kept after {@link #unbind()}.
+   *
+   * <p>Spark brackets our code with logging of its own: on an executor, {@code Running task}, the
+   * broadcast reads, {@code Finished task} and {@code Got assigned task} all happen outside the
+   * window in which the optimizer function runs, and on the driver the executor allocation and
+   * shutdown lines land between jobs. Clearing the attribution the moment a task returns would drop
+   * exactly those lines, so the last known context stays in effect until the next task claims the
+   * JVM. An executor runs one task at a time ({@code spark.executor.cores=1}), so what follows a
+   * task really does belong to it; on the driver every task of a process maps to the same driver
+   * log anyway.
+   */
+  private static volatile LogContext lastKnown;
 
   private OptimizerLogContextRegistry() {}
 
@@ -82,23 +113,24 @@ public final class OptimizerLogContextRegistry {
   }
 
   /**
-   * Marks the calling thread as working on {@code logFilePath}. Must be paired with {@link
-   * #unbind()} in a {@code finally} block, otherwise a finished task keeps attracting unrelated
-   * Spark log lines.
+   * Marks the calling thread as working on {@code logFilePath}, and makes it this JVM's current
+   * attribution. Pair it with {@link #unbind()} in a {@code finally} block.
    *
    * @param taskId may be null for process level (driver) attribution
    */
   public static void bind(long processId, Integer taskId, String logFilePath) {
-    ACTIVE.put(
-        Thread.currentThread().getId(),
+    LogContext context =
         new LogContext(
-            String.valueOf(processId),
-            taskId == null ? null : String.valueOf(taskId),
-            logFilePath));
+            String.valueOf(processId), taskId == null ? null : String.valueOf(taskId), logFilePath);
+    ACTIVE.put(Thread.currentThread().getId(), context);
+    lastKnown = context;
     recompute();
   }
 
-  /** Clears the attribution registered by {@link #bind} for the calling thread. */
+  /**
+   * Ends the calling thread's binding. The context stays in effect as this JVM's {@link #lastKnown}
+   * attribution until another task binds, so Spark's own post-task logging is not lost.
+   */
   public static void unbind() {
     if (ACTIVE.remove(Thread.currentThread().getId()) != null) {
       recompute();
@@ -107,7 +139,8 @@ public final class OptimizerLogContextRegistry {
 
   /** Attribution for a thread with no ThreadContext, or null when it cannot be determined. */
   public static LogContext currentFallback() {
-    return fallback;
+    LogContext active = fallback;
+    return active != null ? active : lastKnown;
   }
 
   private static synchronized void recompute() {

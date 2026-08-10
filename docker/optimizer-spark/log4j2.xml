@@ -94,7 +94,7 @@
         </Root>
 
         <Logger name="org.apache.amoro" level="info"/>
-        <Logger name="org.apache.amoro.optimizing" level="debug"/>
+        <Logger name="org.apache.amoro.optimizing" level="deybug"/>
         <Logger name="org.apache.amoro.optimizer" level="info"/>
 
         <!-- Spark's own application logs: the scheduler, executor allocation and task failure

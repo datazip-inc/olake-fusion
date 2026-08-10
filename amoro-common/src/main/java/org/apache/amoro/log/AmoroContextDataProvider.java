@@ -24,6 +24,7 @@ import org.apache.logging.log4j.ThreadContext;
 import org.apache.logging.log4j.core.util.ContextDataProvider;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -33,9 +34,17 @@ import java.util.Map;
  * context data of each event, which is what the {@code RoutingAppender} keys its per-process and
  * per-task log files on.
  *
- * <p>If the emitting thread already carries any routing key it set up itself, this provider returns
- * nothing: provider data is merged over the ThreadContext map and must not overwrite the more
- * precise attribution that {@link OptimizingTaskLogContext} put there.
+ * <p>Attribution is tried in three steps, most precise first:
+ *
+ * <ol>
+ *   <li>the thread set the routing keys itself - return nothing, provider data is merged over the
+ *       ThreadContext map and must not overwrite what {@link OptimizingTaskLogContext} put there;
+ *   <li>the thread is a Spark task launch worker carrying the {@code mdc.*} properties the driver
+ *       attached to the task - use those, so the lines Spark logs around our code ({@code Running
+ *       task}, the broadcast reads, {@code Finished task}) reach the right task file even for the
+ *       first task an executor ever runs;
+ *   <li>otherwise fall back to whatever this JVM is currently working on.
+ * </ol>
  */
 public class AmoroContextDataProvider implements ContextDataProvider {
 
@@ -47,7 +56,30 @@ public class AmoroContextDataProvider implements ContextDataProvider {
       return Collections.emptyMap();
     }
 
+    String sparkLogFilePath =
+        ThreadContext.get(OptimizerLogContextRegistry.SPARK_LOG_FILE_PATH_KEY);
+    if (sparkLogFilePath != null) {
+      Map<String, String> data = new HashMap<>(4);
+      data.put(OptimizingTaskLogContext.LOG_FILE_PATH_KEY, sparkLogFilePath);
+      putIfPresent(
+          data,
+          OptimizingTaskLogContext.PROCESS_ID_KEY,
+          OptimizerLogContextRegistry.SPARK_PROCESS_ID_KEY);
+      putIfPresent(
+          data,
+          OptimizingTaskLogContext.TASK_ID_KEY,
+          OptimizerLogContextRegistry.SPARK_TASK_ID_KEY);
+      return data;
+    }
+
     OptimizerLogContextRegistry.LogContext current = OptimizerLogContextRegistry.currentFallback();
     return current == null ? Collections.emptyMap() : current.contextData();
+  }
+
+  private static void putIfPresent(Map<String, String> data, String key, String sparkKey) {
+    String value = ThreadContext.get(sparkKey);
+    if (value != null) {
+      data.put(key, value);
+    }
   }
 }

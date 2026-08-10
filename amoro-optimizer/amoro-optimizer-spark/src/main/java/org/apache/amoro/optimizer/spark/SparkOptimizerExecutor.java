@@ -74,6 +74,17 @@ public class SparkOptimizerExecutor extends OptimizerExecutor {
     try {
       ImmutableList<OptimizingTask> of = ImmutableList.of(task);
       jsc.setJobDescription(jobDescription(task));
+      // Ship the task's routing keys with the Spark job. Spark copies local properties prefixed
+      // with "mdc." into the MDC of the executor's task launch worker thread for the whole task,
+      // which is wider than the window SparkOptimizingTaskFunction can cover itself: it also
+      // catches what Spark logs before our function runs (Running task, the broadcast reads) and
+      // after it returns (Finished task). AmoroContextDataProvider turns them into routing keys.
+      jsc.setLocalProperty(
+          OptimizerLogContextRegistry.SPARK_LOG_FILE_PATH_KEY,
+          OptimizerLogContextRegistry.taskLogFilePath(processId, taskId));
+      jsc.setLocalProperty(
+          OptimizerLogContextRegistry.SPARK_PROCESS_ID_KEY, String.valueOf(processId));
+      jsc.setLocalProperty(OptimizerLogContextRegistry.SPARK_TASK_ID_KEY, String.valueOf(taskId));
       SparkOptimizingTaskFunction taskFunction =
           new SparkOptimizingTaskFunction(getConfig(), threadId);
       List<OptimizingTaskResult> results = jsc.parallelize(of, 1).map(taskFunction).collect();
@@ -95,6 +106,9 @@ public class SparkOptimizerExecutor extends OptimizerExecutor {
       result.setErrorMessage(ExceptionUtil.getErrorMessage(r, ERROR_MESSAGE_MAX_LENGTH));
       return result;
     } finally {
+      jsc.setLocalProperty(OptimizerLogContextRegistry.SPARK_LOG_FILE_PATH_KEY, null);
+      jsc.setLocalProperty(OptimizerLogContextRegistry.SPARK_PROCESS_ID_KEY, null);
+      jsc.setLocalProperty(OptimizerLogContextRegistry.SPARK_TASK_ID_KEY, null);
       OptimizerLogContextRegistry.unbind();
       MDC.remove("processId");
       MDC.remove("logFilePath");
