@@ -79,10 +79,6 @@ amoro-web/node/
 public
 resources
 !javadoc/resources
-# ... but "resources" above also matches every Maven src/{main,test}/resources directory, which
-# silently keeps newly added resource files (service loader registrations, configs) out of commits.
-!**/src/main/resources/
-!**/src/test/resources/
 
 /dist/src/main/amoro-bin/*
 !/dist/src/main/amoro-bin/bin/
