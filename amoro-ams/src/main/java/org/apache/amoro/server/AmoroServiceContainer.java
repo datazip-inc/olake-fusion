@@ -59,6 +59,7 @@ import org.apache.amoro.server.table.TableManager;
 import org.apache.amoro.server.table.TableRuntimeFactoryManager;
 import org.apache.amoro.server.table.TableService;
 import org.apache.amoro.server.terminal.TerminalManager;
+import org.apache.amoro.server.utils.Telemetry;
 import org.apache.amoro.server.utils.ThriftServiceProxy;
 import org.apache.amoro.shade.guava32.com.google.common.annotations.VisibleForTesting;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Maps;
@@ -611,10 +612,38 @@ public class AmoroServiceContainer {
           // put addition system properties
           container.setProperties(containerProperties);
           containerList.add(container);
+          maybeTrackInstalledFusion(containerProperties);
         }
       }
       Containers.init(containerList);
     }
+  }
+
+  private void maybeTrackInstalledFusion(Map<String, String> props) {
+    if (!Boolean.parseBoolean(
+        System.getenv().getOrDefault("ENABLE_OPTIMIZATION", "false"))) {
+      return;
+    }
+
+    Map<String, Object> eventProps = new HashMap<>();
+    eventProps.put(
+        "spark_driver_memory",
+        props.getOrDefault("spark-conf.spark.driver.memory", "NA"));
+    eventProps.put(
+        "spark_executor_memory",
+        props.getOrDefault("spark-conf.spark.executor.memory", "NA"));
+    eventProps.put(
+        "spark_executor_cores",
+        props.getOrDefault("spark-conf.spark.executor.cores", "NA"));
+    // Not in config.yaml at AMS boot — see note below
+    eventProps.put(
+        "desired_parallelism",
+        System.getenv().getOrDefault("DESIRED_PARALLELISM", "NA"));
+    eventProps.put(
+        "deployment_mode",
+        System.getenv().getOrDefault("DEPLOYMENT_MODE", "NA")); // "docker" | "helm"
+
+    Telemetry.getInstance().trackInstalledFusion(eventProps);
   }
 
   private TNonblockingServerSocket getServerSocket(String bindHost, int portNum)

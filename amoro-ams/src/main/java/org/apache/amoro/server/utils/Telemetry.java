@@ -305,4 +305,8 @@ public class Telemetry {
     Map<String, Object> props = Map.of("catalog_type", catalogType);
     sendEvent("Catalog Added - Fusion", props);
   }
+
+  public void trackInstalledFusion(Map<String, Object> props) {
+    sendEvent("Installed Fusion", props);
+  }
 }
