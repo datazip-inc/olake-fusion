@@ -527,6 +527,7 @@ public class AmoroServiceContainer {
   private class ConfigurationHelper {
 
     private JsonNode yamlConfig;
+    private Map<String, String> sparkContainerProperties;
 
     public void init() throws Exception {
       Map<String, Object> envConfig = initEnvConfig();
@@ -558,6 +559,40 @@ public class AmoroServiceContainer {
       AmoroManagementConfValidator.validateConfig(serviceConfig);
       dataSource = DataSourceFactory.createDataSource(serviceConfig);
       SqlSessionFactoryProvider.getInstance().init(dataSource);
+    }
+
+    private Map<String, Object> getResolveSparkConfig(
+        Map<String, String> sparkContainerProperties) {
+      Map<String, Object> sparkconfigMap = new HashMap<>();
+      sparkconfigMap.put(
+          "spark_driver_memory",
+          sparkContainerProperties.getOrDefault("spark-conf.spark.driver.memory", "NA"));
+      sparkconfigMap.put(
+          "spark_executor_memory",
+          sparkContainerProperties.getOrDefault("spark-conf.spark.executor.memory", "NA"));
+      sparkconfigMap.put(
+          "spark_executor_cores",
+          sparkContainerProperties.getOrDefault("spark-conf.spark.executor.cores", "NA"));
+      return sparkconfigMap;
+    }
+
+    public Map<String, Object> getSparkConfig() {
+      return getResolveSparkConfig(sparkContainerProperties);
+    }
+
+    private void trackInstalledFusion() {
+      if (!Boolean.parseBoolean(System.getenv().getOrDefault("ENABLE_OPTIMIZATION", "false"))) {
+        return;
+      }
+      Map<String, Object> eventProps = new HashMap<>();
+      eventProps.putAll(getSparkConfig());
+      eventProps.put(
+          "desired_parallelism",
+          String.valueOf(
+              serviceConfig.getInteger(AmoroManagementConf.OPTIMIZER_MAX_PLANNING_PARALLELISM)));
+      eventProps.put("deployment_mode", System.getenv().getOrDefault("DEPLOYMENT_MODE", "NA"));
+
+      Telemetry.getInstance().trackInstalledFusion(eventProps);
     }
 
     private Map<String, Object> initEnvConfig() {
@@ -614,33 +649,15 @@ public class AmoroServiceContainer {
           // put addition system properties
           container.setProperties(containerProperties);
           containerList.add(container);
-          maybeTrackInstalledFusion(containerProperties);
+          if ("org.apache.amoro.server.manager.SparkOptimizerContainer"
+              .equals(container.getImplClass())) {
+            sparkContainerProperties = containerProperties;
+          }
         }
       }
       Containers.init(containerList);
+      trackInstalledFusion();
     }
-  }
-
-  private void maybeTrackInstalledFusion(Map<String, String> props) {
-    if (!Boolean.parseBoolean(System.getenv().getOrDefault("ENABLE_OPTIMIZATION", "false"))) {
-      return;
-    }
-
-    Map<String, Object> eventProps = new HashMap<>();
-    eventProps.put(
-        "spark_driver_memory", props.getOrDefault("spark-conf.spark.driver.memory", "NA"));
-    eventProps.put(
-        "spark_executor_memory", props.getOrDefault("spark-conf.spark.executor.memory", "NA"));
-    eventProps.put(
-        "spark_executor_cores", props.getOrDefault("spark-conf.spark.executor.cores", "NA"));
-    // Not in config.yaml at AMS boot — see note below
-    eventProps.put(
-        "desired_parallelism", System.getenv().getOrDefault("DESIRED_PARALLELISM", "NA"));
-    eventProps.put(
-        "deployment_mode",
-        System.getenv().getOrDefault("DEPLOYMENT_MODE", "NA")); // "docker" | "helm"
-
-    Telemetry.getInstance().trackInstalledFusion(eventProps);
   }
 
   private TNonblockingServerSocket getServerSocket(String bindHost, int portNum)

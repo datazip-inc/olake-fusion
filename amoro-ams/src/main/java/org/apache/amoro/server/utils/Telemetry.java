@@ -57,6 +57,9 @@ public class Telemetry {
   private static final String SHARED_USER_ID_FILE = "/tmp/olake-config/telemetry/user_id";
 
   private static final long TIMEOUT_SECONDS = 10L;
+  private static final double BYTES_PER_KB = 1024.0;
+  private static final double BYTES_PER_MB = 1024.0 * 1024.0;
+  private static final double BYTES_PER_GB = 1024.0 * 1024.0 * 1024.0;
 
   private final HttpClient httpClient;
   private final ObjectMapper objectMapper;
@@ -262,10 +265,17 @@ public class Telemetry {
     }
   }
 
-  private static final double BYTES_PER_GB = 1024.0 * 1024.0 * 1024.0;
-
-  private static double bytesToGb(long bytes) {
-    return bytes / BYTES_PER_GB;
+  private static String bytesToUnits(long bytes) {
+    double kb = bytes / BYTES_PER_KB;
+    if (kb < 1000.0) {
+      return String.format("%.2f KB", kb);
+    }
+    double mb = bytes / BYTES_PER_MB;
+    if (mb < 1000.0) {
+      return String.format("%.2f MB", mb);
+    }
+    double gb = bytes / BYTES_PER_GB;
+    return String.format("%.2f GB", gb);
   }
 
   private String optimizationTypeHelper(String optimizationTypeName) {
@@ -278,44 +288,32 @@ public class Telemetry {
     }
   }
 
-  public void trackOptimizationStarted(OptimizingType optimizationType, long tableSize) {
+  public void trackOptimizationStarted(
+      OptimizingType optimizationType, long tableSize, Map<String, String> sparkConfig) {
     Map<String, Object> props =
         Map.of(
             "optimization_type",
             optimizationTypeHelper(optimizationType.name()),
             "table_size",
-            bytesToGb(tableSize));
+            bytesToUnits(tableSize));
+    props.putAll(sparkConfig);
     sendEvent("Optimization Started - Fusion", props);
   }
 
   public void trackOptimizationCompleted(
       OptimizingType optimizationType,
-      long tableSize,
+      Long tableSize,
       String status,
       long duration,
       Map<String, String> sparkConfig) {
     Map<String, Object> props = new HashMap<>();
     props.put("optimization_type", optimizationTypeHelper(optimizationType.name()));
-    props.put("table_size", bytesToGb(tableSize));
+    props.putAll(sparkConfig);
+    props.put("table_size", bytesToUnits(tableSize));
     props.put("optimization_status", status);
     props.put("duration_ms", duration);
-    props.put(
-        "spark_driver_memory", sparkConfig.getOrDefault("spark-conf.spark.driver.memory", "NA"));
-    props.put(
-        "spark_executor_memory",
-        sparkConfig.getOrDefault("spark-conf.spark.executor.memory", "NA"));
-    props.put(
-        "spark_executor_cores", sparkConfig.getOrDefault("spark-conf.spark.executor.cores", "NA"));
-    props.put(
-        "desired_parallelism",
-        sparkConfig.getOrDefault(
-            "desired_parallelism", System.getenv().getOrDefault("DESIRED_PARALLELISM", "NA")));
-    sendEvent("Optimization Completed - Fusion", props);
-  }
 
-  public void trackCatalogAdded(String catalogType) {
-    Map<String, Object> props = Map.of("catalog_type", catalogType);
-    sendEvent("Catalog Added - Fusion", props);
+    sendEvent("Optimization Completed - Fusion", props);
   }
 
   public void trackInstalledFusion(Map<String, Object> props) {

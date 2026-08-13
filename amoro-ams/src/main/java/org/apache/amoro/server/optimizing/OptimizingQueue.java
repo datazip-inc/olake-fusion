@@ -815,15 +815,21 @@ public class OptimizingQueue extends PersistentBase {
       try {
         Telemetry.getInstance()
             .trackOptimizationCompleted(
-                optimizingType, inputTableSize(), telemetryStatus(), getDuration(), sparkConfig());
+                optimizingType,
+                inputTableSize(),
+                telemetryStatus(),
+                getDuration(),
+                buildSparkConfig());
       } catch (Exception e) {
         LOG.debug("Failed to track optimization completed for process {}", processId, e);
       }
     }
 
-    private Map<String, String> sparkConfig() {
-      Map<String, String> props = optimizerGroup.getProperties();
-      return props != null ? props : Map.of();
+    private Map<String, String> buildSparkConfig() {
+      Map<String, String> props = new HashMap<>();
+      props.put("memory_bytes_allocated", String.valueOf(metrics.getMemoryBytesAllocated()));
+      props.put("group_threads", String.valueOf(metrics.getGroupThreads()));
+      return props;
     }
 
     private String telemetryStatus() {
@@ -922,7 +928,8 @@ public class OptimizingQueue extends PersistentBase {
 
     private void trackStarted() {
       try {
-        Telemetry.getInstance().trackOptimizationStarted(optimizingType, inputTableSize());
+        Telemetry.getInstance()
+            .trackOptimizationStarted(optimizingType, inputTableSize(), buildSparkConfig());
       } catch (Exception e) {
         LOG.debug("Failed to track optimization started for process {}", processId, e);
       }

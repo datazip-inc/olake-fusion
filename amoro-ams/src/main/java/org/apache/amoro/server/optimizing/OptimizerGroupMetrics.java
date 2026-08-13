@@ -122,6 +122,17 @@ public class OptimizerGroupMetrics {
     registeredMetricKeys.add(key);
   }
 
+  public long getMemoryBytesAllocated() {
+    return optimizerInstances.values().stream()
+        .mapToLong(OptimizerInstance::getMemoryMb)
+        .map(mb -> mb * 1024 * 1024)
+        .sum();
+  }
+
+  public long getGroupThreads() {
+    return optimizerInstances.values().stream().mapToLong(OptimizerInstance::getThreadCount).sum();
+  }
+
   public void register() {
     registerMetric(
         registry,
