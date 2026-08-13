@@ -61,9 +61,7 @@ public class SparkOptimizingTaskFunction implements Function<OptimizingTask, Opt
     MDC.put("processId", String.valueOf(processId));
     MDC.put("taskId", String.valueOf(taskId));
     MDC.put("logFilePath", logFilePath);
-    // Spark's executor side logs (block manager, shuffle client, memory store, RPC dispatcher)
-    // come from threads with no MDC; register the task so AmoroContextDataProvider can route them
-    // into this task's log file as well.
+    // Sends this executor's other threads (block manager, shuffle, RPC) to the same task log.
     OptimizerLogContextRegistry.bind(processId, taskId, logFilePath);
 
     try {

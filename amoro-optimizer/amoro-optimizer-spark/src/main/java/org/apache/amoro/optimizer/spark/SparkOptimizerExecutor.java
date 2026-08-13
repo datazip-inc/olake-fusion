@@ -62,23 +62,18 @@ public class SparkOptimizerExecutor extends OptimizerExecutor {
     int taskId = task.getTaskId().getTaskId();
     String driverFilePath = OptimizerLogContextRegistry.driverLogFilePath(processId);
 
-    // Set MDC context for Log4j2 routing
-    // Driver logs go to: <LOG_DIR>/<processId>/driver.log
+    // Route this thread's own logging to <LOG_DIR>/<processId>/driver.log.
     MDC.put("processId", String.valueOf(processId));
     MDC.put("logFilePath", driverFilePath);
-    // Spark itself logs from its own threads (dag-scheduler-event-loop, task-result-getter-*,
-    // kubernetes-executor-snapshots-subscribers-*, ...), which carry no MDC. Registering here lets
-    // AmoroContextDataProvider route those lines into the same driver log.
+    // Spark's own driver threads (dag-scheduler-event-loop, task-result-getter-*) carry no MDC;
+    // this registration is what sends their lines to the same driver log.
     OptimizerLogContextRegistry.bind(processId, null, driverFilePath);
 
     try {
       ImmutableList<OptimizingTask> of = ImmutableList.of(task);
       jsc.setJobDescription(jobDescription(task));
-      // Ship the task's routing keys with the Spark job. Spark copies local properties prefixed
-      // with "mdc." into the MDC of the executor's task launch worker thread for the whole task,
-      // which is wider than the window SparkOptimizingTaskFunction can cover itself: it also
-      // catches what Spark logs before our function runs (Running task, the broadcast reads) and
-      // after it returns (Finished task). AmoroContextDataProvider turns them into routing keys.
+      // Spark puts mdc.* job properties into the executor task thread's MDC for the whole task,
+      // covering what it logs before (Running task) and after (Finished task) our function too.
       jsc.setLocalProperty(
           OptimizerLogContextRegistry.SPARK_LOG_FILE_PATH_KEY,
           OptimizerLogContextRegistry.taskLogFilePath(processId, taskId));

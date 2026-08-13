@@ -23,8 +23,6 @@
     <Properties>
         <Property name="LOG_DIR">${env:LOG_DIR:-/mnt/amoro-logs/compaction}</Property>
         <Property name="CONSOLE_LEVEL">${env:CONSOLE_LOG_LEVEL:-info}</Property>
-        <Property name="ROOT_LEVEL">${env:AMORO_LOG_LEVEL:-info}</Property>
-        <Property name="SPARK_LEVEL">${env:AMORO_SPARK_LOG_LEVEL:-info}</Property>
         <Property name="LOG_PATTERN">%d{yyyy-MM-dd HH:mm:ss.SSS} %-5p [%t] [%c{1}] [P:%X{processId}|T:%X{taskId}|Table:%X{tableName}|Exec:%X{executorId}] - %m%n</Property>
         <Property name="JSON_LOG_PATTERN">{"level":"%p","time":"%d{yyyy-MM-dd'T'HH:mm:ss.SSS'Z'}{UTC}","processId":"%X{processId}","taskId":"%X{taskId}","thread":"%enc{%t}{JSON}","logger":"%c{1}","message":"%enc{%m}{JSON}","stackTrace":"%enc{%throwable{full}}{JSON}"}%n</Property>
     </Properties>
@@ -112,9 +110,9 @@
     </Appenders>
 
     <Loggers>
-        <!-- Every logger routes to the per-process/task files by default, Spark's own loggers
-             included; the loggers below only tune levels and inherit these appenders. -->
-        <Root level="${ROOT_LEVEL}">
+        <!-- Every logger routes to the per-process/task files by default; the loggers below only
+             tune levels and inherit these appenders. -->
+        <Root level="info">
             <AppenderRef ref="RoutingAppender"/>
             <AppenderRef ref="OptimizerInfo" level="info"/>
             <AppenderRef ref="OptimizerError" level="error"/>
@@ -124,18 +122,9 @@
         <Logger name="org.apache.amoro.optimizing" level="debug"/>
         <Logger name="org.apache.amoro.optimizer" level="debug"/>
 
-        <!-- Spark's own application logs: the scheduler, executor allocation and task failure
-             lines that explain a slow or failed compaction. -->
-        <Logger name="org.apache.spark" level="${SPARK_LEVEL}"/>
-        <Logger name="org.apache.spark.storage.BlockManager" level="warn"/>
-        <Logger name="org.apache.spark.storage.memory.MemoryStore" level="warn"/>
-        <Logger name="org.apache.spark.network" level="warn"/>
-        <Logger name="org.apache.spark.executor.ProcfsMetricsGetter" level="error"/>
-
         <Logger name="org.apache.hadoop.io.compress.CodecPool" level="warn"/>
         <Logger name="org.apache.hadoop.metrics2" level="warn"/>
         <Logger name="org.apache.parquet" level="warn"/>
         <Logger name="org.apache.iceberg.avro" level="warn"/>
-        <Logger name="org.sparkproject.jetty" level="warn"/>
     </Loggers>
 </Configuration>

@@ -19,29 +19,11 @@
   ~ Modified by Datazip Inc. in 2026
   -->
 
-<!--
-  Log4j2 configuration for the Spark optimizer image (driver and executor pods).
-
-  Every logger, Spark's own included, feeds the RoutingAppender, which writes one file per
-  optimizing process/task under LOG_DIR:
-
-      LOG_DIR/<processId>/driver.log     - the Spark driver: Amoro's optimizer code plus Spark's
-                                           scheduler, k8s allocator and RPC threads
-      LOG_DIR/<processId>/<taskId>.log   - a Spark executor running that task: Amoro's rewrite code
-                                           plus Spark's block manager, shuffle and memory threads
-
-  The routing key is the "logFilePath" MDC value. Threads that run Amoro code set it themselves
-  (SparkOptimizerExecutor / SparkOptimizingTaskFunction); Spark's internal threads have no MDC, so
-  AmoroContextDataProvider supplies the key for them from OptimizerLogContextRegistry. Anything that
-  still cannot be attributed to a compaction goes to the console only.
-
-  LOG_DIR points at a ReadWriteMany volume shared with AMS, and writes are unbuffered and flushed
-  per event, so AMS serves these files live over /api/ams/v1/logs while the compaction runs.
--->
+<!-- Every logger routes by the "logFilePath" MDC key to LOG_DIR/<pid>/{driver,<taskId>}.log. -->
 <Configuration monitorInterval="30">
     <Properties>
         <Property name="LOG_DIR">${env:LOG_DIR:-/mnt/amoro-logs/compaction}</Property>
-        <Property name="ROOT_LEVEL">${env:AMORO_LOG_LEVEL:-info}</Property>
+        <!-- info makes the per-task files useful; AMORO_SPARK_LOG_LEVEL=warn quietens them. -->
         <Property name="SPARK_LEVEL">${env:AMORO_SPARK_LOG_LEVEL:-info}</Property>
         <Property name="CONSOLE_PATTERN">%d{yyyy-MM-dd HH:mm:ss.SSS'Z'}{UTC} %-5p [%t] [%c{1}] [P:%X{processId}|T:%X{taskId}] - %m%n</Property>
         <Property name="JSON_LOG_PATTERN">{"level":"%p","time":"%d{yyyy-MM-dd'T'HH:mm:ss.SSS'Z'}{UTC}","processId":"%X{processId}","taskId":"%X{taskId}","thread":"%enc{%t}{JSON}","logger":"%c{1}","message":"%enc{%m}{JSON}","stackTrace":"%enc{%throwable{full}}{JSON}"}%n</Property>
@@ -52,15 +34,13 @@
             <PatternLayout pattern="${CONSOLE_PATTERN}"/>
         </Console>
 
-        <!-- Discards events that belong to no compaction; they still reach Console via the root
-             logger, this route only prevents them from being printed a second time. -->
+        <!-- Events belonging to no compaction; they still reach Console via the root logger. -->
         <Null name="Discard"/>
 
         <!-- Routing appender: creates per-process/task log files based on MDC logFilePath -->
         <Routing name="RoutingAppender">
             <Routes pattern="$${ctx:logFilePath}">
-                <!-- When logFilePath is NOT set the pattern stays the literal "${ctx:logFilePath}",
-                     which matches this key: the event belongs to no compaction, drop it here. -->
+                <!-- Unset logFilePath leaves the pattern literal, matching this key: no file. -->
                 <Route key="$${ctx:logFilePath}" ref="Discard"/>
                 <!-- When logFilePath IS set, create a log file -->
                 <Route>
@@ -79,39 +59,28 @@
                     </RollingFile>
                 </Route>
             </Routes>
-            <!-- Close the file of a process/task that stopped logging, otherwise a long lived
-                 driver holds an open descriptor for every compaction it has ever run. -->
+            <!-- Close idle files, else a long lived driver holds one descriptor per compaction. -->
             <IdlePurgePolicy timeToLive="15" timeUnit="minutes"/>
         </Routing>
     </Appenders>
 
     <Loggers>
-        <!-- Every logger routes to the per-process/task files by default; the loggers below only
-             tune levels and inherit these appenders. -->
-        <Root level="${ROOT_LEVEL}">
+        <!-- Loggers below only tune levels; they inherit these appenders. -->
+        <Root level="info">
             <AppenderRef ref="Console"/>
             <AppenderRef ref="RoutingAppender"/>
         </Root>
 
         <Logger name="org.apache.amoro" level="info"/>
-        <Logger name="org.apache.amoro.optimizing" level="deybug"/>
+        <Logger name="org.apache.amoro.optimizing" level="debug"/>
         <Logger name="org.apache.amoro.optimizer" level="info"/>
 
-        <!-- Spark's own application logs: the scheduler, executor allocation and task failure
-             lines that explain a slow or failed compaction. -->
+        <!-- Spark's own scheduler, executor allocation and task failure lines. -->
         <Logger name="org.apache.spark" level="${SPARK_LEVEL}"/>
-
-        <!-- Chatty Spark internals: kept at warn so the per-task files stay readable. -->
-        <Logger name="org.apache.spark.storage.BlockManager" level="warn"/>
-        <Logger name="org.apache.spark.storage.memory.MemoryStore" level="warn"/>
-        <Logger name="org.apache.spark.network" level="warn"/>
-        <Logger name="org.apache.spark.util.ShutdownHookManager" level="warn"/>
-        <Logger name="org.apache.spark.executor.ProcfsMetricsGetter" level="error"/>
 
         <Logger name="org.apache.hadoop" level="warn"/>
         <Logger name="org.apache.parquet" level="warn"/>
         <Logger name="org.apache.iceberg.avro" level="warn"/>
         <Logger name="org.sparkproject.jetty" level="warn"/>
-        <Logger name="io.netty" level="warn"/>
     </Loggers>
 </Configuration>
