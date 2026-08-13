@@ -814,10 +814,16 @@ public class OptimizingQueue extends PersistentBase {
     private void trackCompleted() {
       try {
         Telemetry.getInstance()
-            .trackOptimizationCompleted(optimizingType, inputTableSize(), telemetryStatus());
+            .trackOptimizationCompleted(
+                optimizingType, inputTableSize(), telemetryStatus(), getDuration(), sparkConfig());
       } catch (Exception e) {
         LOG.debug("Failed to track optimization completed for process {}", processId, e);
       }
+    }
+
+    private Map<String, String> sparkConfig() {
+      Map<String, String> props = optimizerGroup.getProperties();
+      return props != null ? props : Map.of();
     }
 
     private String telemetryStatus() {

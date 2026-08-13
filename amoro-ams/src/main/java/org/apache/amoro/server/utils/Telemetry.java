@@ -289,15 +289,27 @@ public class Telemetry {
   }
 
   public void trackOptimizationCompleted(
-      OptimizingType optimizationType, long tableSize, String status) {
-    Map<String, Object> props =
-        Map.of(
-            "optimization_type",
-            optimizationTypeHelper(optimizationType.name()),
-            "table_size",
-            bytesToGb(tableSize),
-            "optimization_status",
-            status);
+      OptimizingType optimizationType,
+      long tableSize,
+      String status,
+      long duration,
+      Map<String, String> sparkConfig) {
+    Map<String, Object> props = new HashMap<>();
+    props.put("optimization_type", optimizationTypeHelper(optimizationType.name()));
+    props.put("table_size", bytesToGb(tableSize));
+    props.put("optimization_status", status);
+    props.put("duration_ms", duration);
+    props.put(
+        "spark_driver_memory", sparkConfig.getOrDefault("spark-conf.spark.driver.memory", "NA"));
+    props.put(
+        "spark_executor_memory",
+        sparkConfig.getOrDefault("spark-conf.spark.executor.memory", "NA"));
+    props.put(
+        "spark_executor_cores", sparkConfig.getOrDefault("spark-conf.spark.executor.cores", "NA"));
+    props.put(
+        "desired_parallelism",
+        sparkConfig.getOrDefault(
+            "desired_parallelism", System.getenv().getOrDefault("DESIRED_PARALLELISM", "NA")));
     sendEvent("Optimization Completed - Fusion", props);
   }
 

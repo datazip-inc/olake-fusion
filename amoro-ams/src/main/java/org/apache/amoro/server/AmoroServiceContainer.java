@@ -620,25 +620,20 @@ public class AmoroServiceContainer {
   }
 
   private void maybeTrackInstalledFusion(Map<String, String> props) {
-    if (!Boolean.parseBoolean(
-        System.getenv().getOrDefault("ENABLE_OPTIMIZATION", "false"))) {
+    if (!Boolean.parseBoolean(System.getenv().getOrDefault("ENABLE_OPTIMIZATION", "false"))) {
       return;
     }
 
     Map<String, Object> eventProps = new HashMap<>();
     eventProps.put(
-        "spark_driver_memory",
-        props.getOrDefault("spark-conf.spark.driver.memory", "NA"));
+        "spark_driver_memory", props.getOrDefault("spark-conf.spark.driver.memory", "NA"));
     eventProps.put(
-        "spark_executor_memory",
-        props.getOrDefault("spark-conf.spark.executor.memory", "NA"));
+        "spark_executor_memory", props.getOrDefault("spark-conf.spark.executor.memory", "NA"));
     eventProps.put(
-        "spark_executor_cores",
-        props.getOrDefault("spark-conf.spark.executor.cores", "NA"));
+        "spark_executor_cores", props.getOrDefault("spark-conf.spark.executor.cores", "NA"));
     // Not in config.yaml at AMS boot — see note below
     eventProps.put(
-        "desired_parallelism",
-        System.getenv().getOrDefault("DESIRED_PARALLELISM", "NA"));
+        "desired_parallelism", System.getenv().getOrDefault("DESIRED_PARALLELISM", "NA"));
     eventProps.put(
         "deployment_mode",
         System.getenv().getOrDefault("DEPLOYMENT_MODE", "NA")); // "docker" | "helm"
