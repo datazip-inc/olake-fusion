@@ -295,7 +295,6 @@ public class Telemetry {
     props.put("table_size", bytesToUnits(tableSize));
     props.putAll(AmoroServiceContainer.getSparkConfig());
     sendEvent("Optimization Started - Fusion", props);
-    LOG.info("Telemetry - Optimization Started - Fusion: {}", props);
   }
 
   public void trackOptimizationCompleted(
@@ -308,11 +307,9 @@ public class Telemetry {
     props.put("duration_ms", duration);
 
     sendEvent("Optimization Completed - Fusion", props);
-    LOG.info("Telemetry - Optimization Completed - Fusion: {}", props);
   }
 
   public void trackInstalledFusion(Map<String, Object> props) {
     sendEvent("Installed Fusion", props);
-    LOG.info("Telemetry - Installed Fusion: {}", props);
   }
 }

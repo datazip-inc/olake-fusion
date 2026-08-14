@@ -264,6 +264,20 @@ public class AmoroServiceContainer {
 
     initThriftService();
     startThriftService();
+    trackInstalledFusion();
+  }
+
+  private void trackInstalledFusion() {
+    Map<String, Object> eventProps = new HashMap<>();
+    eventProps.putAll(AmoroServiceContainer.getSparkConfig());
+    eventProps.put(
+        "desired_parallelism",
+        String.valueOf(
+            serviceConfig.getInteger(AmoroManagementConf.OPTIMIZER_MAX_PLANNING_PARALLELISM)));
+    eventProps.put(
+        "deployment_mode", System.getenv("KUBERNETES_SERVICE_HOST") != null ? "HELM" : "DOCKER");
+
+    Telemetry.getInstance().trackInstalledFusion(eventProps);
   }
 
   private void addHandlerChain(RuntimeHandlerChain chain) {
@@ -584,19 +598,6 @@ public class AmoroServiceContainer {
       SqlSessionFactoryProvider.getInstance().init(dataSource);
     }
 
-    private void trackInstalledFusion() {
-      Map<String, Object> eventProps = new HashMap<>();
-      eventProps.putAll(AmoroServiceContainer.getSparkConfig());
-      eventProps.put(
-          "desired_parallelism",
-          String.valueOf(
-              serviceConfig.getInteger(AmoroManagementConf.OPTIMIZER_MAX_PLANNING_PARALLELISM)));
-      eventProps.put(
-          "deployment_mode", System.getenv("KUBERNETES_SERVICE_HOST") != null ? "HELM" : "DOCKER");
-
-      Telemetry.getInstance().trackInstalledFusion(eventProps);
-    }
-
     private Map<String, Object> initEnvConfig() {
       LOG.info("initializing system env configuration...");
       Map<String, String> envs = System.getenv();
@@ -661,7 +662,6 @@ public class AmoroServiceContainer {
         AmoroServiceContainer.SPARK_CONFIG = resolveSparkConfig(sparkContainerProperties);
       }
       Containers.init(containerList);
-      trackInstalledFusion();
     }
   }
 
