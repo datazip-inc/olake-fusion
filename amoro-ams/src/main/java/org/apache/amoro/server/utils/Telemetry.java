@@ -21,6 +21,7 @@
 package org.apache.amoro.server.utils;
 
 import org.apache.amoro.optimizing.OptimizingType;
+import org.apache.amoro.server.AmoroServiceContainer;
 import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -288,35 +289,30 @@ public class Telemetry {
     }
   }
 
-  public void trackOptimizationStarted(
-      OptimizingType optimizationType, long tableSize, Map<String, String> sparkConfig) {
-    Map<String, Object> props =
-        Map.of(
-            "optimization_type",
-            optimizationTypeHelper(optimizationType.name()),
-            "table_size",
-            bytesToUnits(tableSize));
-    props.putAll(sparkConfig);
+  public void trackOptimizationStarted(OptimizingType optimizationType, long tableSize) {
+    Map<String, Object> props = new HashMap<>();
+    props.put("optimization_type", optimizationTypeHelper(optimizationType.name()));
+    props.put("table_size", bytesToUnits(tableSize));
+    props.putAll(AmoroServiceContainer.getSparkConfig());
     sendEvent("Optimization Started - Fusion", props);
+    LOG.info("Telemetry - Optimization Started - Fusion: {}", props);
   }
 
   public void trackOptimizationCompleted(
-      OptimizingType optimizationType,
-      Long tableSize,
-      String status,
-      long duration,
-      Map<String, String> sparkConfig) {
+      OptimizingType optimizationType, Long tableSize, String status, long duration) {
     Map<String, Object> props = new HashMap<>();
     props.put("optimization_type", optimizationTypeHelper(optimizationType.name()));
-    props.putAll(sparkConfig);
+    props.putAll(AmoroServiceContainer.getSparkConfig());
     props.put("table_size", bytesToUnits(tableSize));
     props.put("optimization_status", status);
     props.put("duration_ms", duration);
 
     sendEvent("Optimization Completed - Fusion", props);
+    LOG.info("Telemetry - Optimization Completed - Fusion: {}", props);
   }
 
   public void trackInstalledFusion(Map<String, Object> props) {
     sendEvent("Installed Fusion", props);
+    LOG.info("Telemetry - Installed Fusion: {}", props);
   }
 }

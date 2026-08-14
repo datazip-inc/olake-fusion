@@ -106,6 +106,7 @@ public class AmoroServiceContainer {
 
   public static final String SERVER_CONFIG_FILENAME = "config.yaml";
   private static boolean IS_MASTER_SLAVE_MODE = false;
+  private static volatile Map<String, Object> SPARK_CONFIG = Map.of();
 
   private final HighAvailabilityContainer haContainer;
   private DataSource dataSource;
@@ -332,6 +333,28 @@ public class AmoroServiceContainer {
 
   public Configurations getServiceConfig() {
     return serviceConfig;
+  }
+
+  public static Map<String, Object> getSparkConfig() {
+    return SPARK_CONFIG;
+  }
+
+  private static Map<String, Object> resolveSparkConfig(
+      Map<String, String> sparkContainerProperties) {
+    Map<String, Object> sparkConfigMap = new HashMap<>();
+    if (sparkContainerProperties == null || sparkContainerProperties.isEmpty()) {
+      return sparkConfigMap;
+    }
+    sparkConfigMap.put(
+        "spark_driver_memory",
+        sparkContainerProperties.getOrDefault("spark-conf.spark.driver.memory", "NA"));
+    sparkConfigMap.put(
+        "spark_executor_memory",
+        sparkContainerProperties.getOrDefault("spark-conf.spark.executor.memory", "NA"));
+    sparkConfigMap.put(
+        "spark_executor_cores",
+        sparkContainerProperties.getOrDefault("spark-conf.spark.executor.cores", "NA"));
+    return sparkConfigMap;
   }
 
   private void startThriftService() {
@@ -561,36 +584,15 @@ public class AmoroServiceContainer {
       SqlSessionFactoryProvider.getInstance().init(dataSource);
     }
 
-    private Map<String, Object> getResolveSparkConfig(
-        Map<String, String> sparkContainerProperties) {
-      Map<String, Object> sparkconfigMap = new HashMap<>();
-      sparkconfigMap.put(
-          "spark_driver_memory",
-          sparkContainerProperties.getOrDefault("spark-conf.spark.driver.memory", "NA"));
-      sparkconfigMap.put(
-          "spark_executor_memory",
-          sparkContainerProperties.getOrDefault("spark-conf.spark.executor.memory", "NA"));
-      sparkconfigMap.put(
-          "spark_executor_cores",
-          sparkContainerProperties.getOrDefault("spark-conf.spark.executor.cores", "NA"));
-      return sparkconfigMap;
-    }
-
-    public Map<String, Object> getSparkConfig() {
-      return getResolveSparkConfig(sparkContainerProperties);
-    }
-
     private void trackInstalledFusion() {
-      if (!Boolean.parseBoolean(System.getenv().getOrDefault("ENABLE_OPTIMIZATION", "false"))) {
-        return;
-      }
       Map<String, Object> eventProps = new HashMap<>();
-      eventProps.putAll(getSparkConfig());
+      eventProps.putAll(AmoroServiceContainer.getSparkConfig());
       eventProps.put(
           "desired_parallelism",
           String.valueOf(
               serviceConfig.getInteger(AmoroManagementConf.OPTIMIZER_MAX_PLANNING_PARALLELISM)));
-      eventProps.put("deployment_mode", System.getenv().getOrDefault("DEPLOYMENT_MODE", "NA"));
+      eventProps.put(
+          "deployment_mode", System.getenv("KUBERNETES_SERVICE_HOST") != null ? "HELM" : "DOCKER");
 
       Telemetry.getInstance().trackInstalledFusion(eventProps);
     }
@@ -654,6 +656,9 @@ public class AmoroServiceContainer {
             sparkContainerProperties = containerProperties;
           }
         }
+      }
+      if (sparkContainerProperties != null) {
+        AmoroServiceContainer.SPARK_CONFIG = resolveSparkConfig(sparkContainerProperties);
       }
       Containers.init(containerList);
       trackInstalledFusion();
