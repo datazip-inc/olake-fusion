@@ -303,6 +303,7 @@ public class DefaultTableService extends PersistentBase implements TableService 
 
   @VisibleForTesting
   public void exploreExternalCatalog(ExternalCatalog externalCatalog) {
+    final Set<String> failedDatabases = ConcurrentHashMap.newKeySet();
     final List<CompletableFuture<Set<TableIdentity>>> tableIdentifiersFutures =
         Lists.newArrayList();
     externalCatalog
@@ -320,8 +321,11 @@ public class DefaultTableService extends PersistentBase implements TableService 
                         .exceptionally(
                             ex -> {
                               LOG.error(
-                                  "TableExplorer list tables in database {} error", database, ex);
-                              throw new RuntimeException(ex);
+                                  "TableExplorer list tables in database {} error, skipping it in this sync cycle",
+                                  database,
+                                  ex);
+                              failedDatabases.add(database);
+                              return Sets.newHashSet();
                             }));
               } catch (RejectedExecutionException e) {
                 LOG.error(
@@ -372,7 +376,8 @@ public class DefaultTableService extends PersistentBase implements TableService 
                     "The queue of table explorer is full, please increase the queue size or thread count.");
               }
             });
-    Sets.difference(serverTableIdentifiers.keySet(), tableIdentifiers)
+    Sets.difference(serverTableIdentifiers.keySet(), tableIdentifiers).stream()
+        .filter(tableIdentity -> !failedDatabases.contains(tableIdentity.getDatabase()))
         .forEach(
             tableIdentity -> {
               try {
