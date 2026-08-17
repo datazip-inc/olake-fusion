@@ -88,7 +88,8 @@ public class Telemetry {
     this.httpClient =
         HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(TIMEOUT_SECONDS)).build();
     this.objectMapper = new ObjectMapper();
-
+    this.platform = gatherPlatformInfo();
+    this.locationInfo = new LocationInfo("NA", "NA", "NA");
     initAsync();
   }
 
@@ -107,9 +108,9 @@ public class Telemetry {
             if (isTelemetryDisabled()) {
               return;
             }
+            this.platform = gatherPlatformInfo();
             this.ipAddress = fetchOutboundIP();
             this.userID = resolveUserID();
-            this.platform = gatherPlatformInfo();
             this.locationInfo = fetchLocationFromIP(this.ipAddress);
           } catch (Exception e) {
             LOG.debug("Failed to initialize telemetry context safely: {}", e.getMessage());
@@ -229,12 +230,14 @@ public class Telemetry {
     }
 
     try {
+      PlatformInfo p = platform != null ? platform : gatherPlatformInfo();
+      LocationInfo loc = locationInfo != null ? locationInfo : new LocationInfo("NA", "NA", "NA");
       Map<String, Object> enrichedProperties = new HashMap<>(props);
-      enrichedProperties.put("os", platform.os());
-      enrichedProperties.put("arch", platform.arch());
-      enrichedProperties.put("num_cpu", platform.deviceCpu());
+      enrichedProperties.put("os", p.os());
+      enrichedProperties.put("arch", p.arch());
+      enrichedProperties.put("num_cpu", p.deviceCpu());
       enrichedProperties.put("ip_address", ipAddress);
-      enrichedProperties.put("location", locationInfo);
+      enrichedProperties.put("location", loc);
       enrichedProperties.put("distinct_id", userID != null ? userID : resolveUserID());
       enrichedProperties.put("time", System.currentTimeMillis() / 1000L);
       enrichedProperties.put("event_original_name", eventName);
