@@ -45,9 +45,6 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
-// TODO: Add spark metrics  (Spark Driver Memory, Spark Executor Memory, Spark Executor Cores,
-//  Desired Parallelism)
-
 public class Telemetry {
   private static final Logger LOG = LoggerFactory.getLogger(Telemetry.class);
 
@@ -67,10 +64,11 @@ public class Telemetry {
 
   private String ipAddress = IP_NOT_FOUND_PLACEHOLDER;
   private PlatformInfo platform;
+  private String os;
   private LocationInfo locationInfo;
   private volatile String userID;
 
-  public record PlatformInfo(String os, String arch, String deviceCpu) {}
+  public record PlatformInfo(String os) {}
 
   @JsonIgnoreProperties(ignoreUnknown = true)
   public record LocationInfo(String country, String region, String city) {}
@@ -88,7 +86,7 @@ public class Telemetry {
     this.httpClient =
         HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(TIMEOUT_SECONDS)).build();
     this.objectMapper = new ObjectMapper();
-    this.platform = gatherPlatformInfo();
+    this.os = gatherPlatformInfo();
     this.locationInfo = new LocationInfo("NA", "NA", "NA");
     initAsync();
   }
@@ -108,7 +106,7 @@ public class Telemetry {
             if (isTelemetryDisabled()) {
               return;
             }
-            this.platform = gatherPlatformInfo();
+            this.os = gatherPlatformInfo();
             this.ipAddress = fetchOutboundIP();
             this.userID = resolveUserID();
             this.locationInfo = fetchLocationFromIP(this.ipAddress);
@@ -159,12 +157,10 @@ public class Telemetry {
     return new LocationInfo("NA", "NA", "NA");
   }
 
-  private PlatformInfo gatherPlatformInfo() {
+  private String gatherPlatformInfo() {
     String os = System.getProperty("os.name", "Unknown").toLowerCase();
-    String arch = System.getProperty("os.arch", "Unknown");
-    int cores = Runtime.getRuntime().availableProcessors();
 
-    return new PlatformInfo(os, arch, cores + " cores");
+    return os;
   }
 
   private String resolveUserID() {
@@ -230,12 +226,10 @@ public class Telemetry {
     }
 
     try {
-      PlatformInfo p = platform != null ? platform : gatherPlatformInfo();
+      String opSys = os != null ? os : gatherPlatformInfo();
       LocationInfo loc = locationInfo != null ? locationInfo : new LocationInfo("NA", "NA", "NA");
       Map<String, Object> enrichedProperties = new HashMap<>(props);
-      enrichedProperties.put("os", p.os());
-      enrichedProperties.put("arch", p.arch());
-      enrichedProperties.put("num_cpu", p.deviceCpu());
+      enrichedProperties.put("os", opSys);
       enrichedProperties.put("ip_address", ipAddress);
       enrichedProperties.put("location", loc);
       enrichedProperties.put("distinct_id", userID != null ? userID : resolveUserID());
