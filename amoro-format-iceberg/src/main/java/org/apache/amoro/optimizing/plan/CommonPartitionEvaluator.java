@@ -409,10 +409,6 @@ public class CommonPartitionEvaluator implements PartitionEvaluator {
 
   public boolean isMinorNecessary() {
     int smallFileCount = fragmentFileCount + equalityDeleteFileCount;
-    LOG.warn("ASHI: isMinorNecessary partition={} fragmentFileCount={} equalityDeleteFileCount={} smallFileCount={} minorLeastFileCount={} reachMinorInterval={} combinePosSegmentFileCount={}",
-    getPartition(), fragmentFileCount, equalityDeleteFileCount,
-    fragmentFileCount + equalityDeleteFileCount, config.getMinorLeastFileCount(),
-    reachMinorInterval(), combinePosSegmentFileCount);
     return smallFileCount >= config.getMinorLeastFileCount()
         || (smallFileCount > 0 && reachMinorInterval())
         || combinePosSegmentFileCount > 0;
