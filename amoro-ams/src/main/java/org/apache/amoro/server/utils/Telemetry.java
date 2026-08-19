@@ -64,11 +64,10 @@ public class Telemetry {
 
   private String ipAddress = IP_NOT_FOUND_PLACEHOLDER;
   private PlatformInfo platform;
-  private String os;
   private LocationInfo locationInfo;
   private volatile String userID;
 
-  public record PlatformInfo(String os) {}
+  public record PlatformInfo(String os, String arch, String deviceCpu) {}
 
   @JsonIgnoreProperties(ignoreUnknown = true)
   public record LocationInfo(String country, String region, String city) {}
@@ -86,7 +85,7 @@ public class Telemetry {
     this.httpClient =
         HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(TIMEOUT_SECONDS)).build();
     this.objectMapper = new ObjectMapper();
-    this.os = gatherPlatformInfo();
+    this.platform = gatherPlatformInfo();
     this.locationInfo = new LocationInfo("NA", "NA", "NA");
     initAsync();
   }
@@ -106,7 +105,7 @@ public class Telemetry {
             if (isTelemetryDisabled()) {
               return;
             }
-            this.os = gatherPlatformInfo();
+            this.platform = gatherPlatformInfo();
             this.ipAddress = fetchOutboundIP();
             this.userID = resolveUserID();
             this.locationInfo = fetchLocationFromIP(this.ipAddress);
@@ -157,10 +156,12 @@ public class Telemetry {
     return new LocationInfo("NA", "NA", "NA");
   }
 
-  private String gatherPlatformInfo() {
+  private PlatformInfo gatherPlatformInfo() {
     String os = System.getProperty("os.name", "Unknown").toLowerCase();
+    String arch = System.getProperty("os.arch", "Unknown");
+    int cores = Runtime.getRuntime().availableProcessors();
 
-    return os;
+    return new PlatformInfo(os, arch, cores + " cores");
   }
 
   private String resolveUserID() {
@@ -226,10 +227,12 @@ public class Telemetry {
     }
 
     try {
-      String opSys = os != null ? os : gatherPlatformInfo();
+      PlatformInfo p = platform != null ? platform : gatherPlatformInfo();
       LocationInfo loc = locationInfo != null ? locationInfo : new LocationInfo("NA", "NA", "NA");
       Map<String, Object> enrichedProperties = new HashMap<>(props);
-      enrichedProperties.put("os", opSys);
+      enrichedProperties.put("os", p.os());
+      enrichedProperties.put("arch", p.arch());
+      enrichedProperties.put("num_cpu", p.deviceCpu());
       enrichedProperties.put("ip_address", ipAddress);
       enrichedProperties.put("location", loc);
       enrichedProperties.put("distinct_id", userID != null ? userID : resolveUserID());
@@ -304,6 +307,22 @@ public class Telemetry {
     props.put("duration_ms", duration);
 
     sendEvent("Optimization Completed - Fusion", props);
+  }
+
+  public void trackCatalogCreated(String catalogType, boolean imported, boolean success) {
+    Map<String, Object> props = new HashMap<>();
+    props.put("catalog_type", catalogType);
+    props.put("imported_from_destination", imported);
+    props.put("success", success);
+    sendEvent("Catalog Created - Fusion", props);
+  }
+
+  public void trackCatalogUpdated(String catalogType, boolean imported, boolean success) {
+    Map<String, Object> props = new HashMap<>();
+    props.put("catalog_type", catalogType);
+    props.put("imported_from_destination", imported);
+    props.put("success", success);
+    sendEvent("Catalog Updated - Fusion", props);
   }
 
   public void trackInstalledFusion(Map<String, Object> props) {
