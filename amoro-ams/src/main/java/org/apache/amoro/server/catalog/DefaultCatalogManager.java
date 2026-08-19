@@ -59,6 +59,7 @@ import java.util.stream.Collectors;
 public class DefaultCatalogManager extends PersistentBase implements CatalogManager {
 
   private static final Logger LOG = LoggerFactory.getLogger(DefaultCatalogManager.class);
+  private static final String OLAKE_CREATED_PROPERTY = "olake_created";
   protected final Configurations serverConfiguration;
   private final LoadingCache<String, Optional<CatalogMeta>> metaCache;
 
@@ -187,23 +188,22 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
       // Build to make sure the catalog is valid
       ServerCatalog catalog = CatalogBuilder.buildServerCatalog(catalogMeta, serverConfiguration);
       doAs(CatalogMetaMapper.class, mapper -> mapper.insertCatalog(catalog.getMetadata()));
-      Telemetry.getInstance()
-          .trackCatalogCreated(
-              catalogMeta.getCatalogType(),
-              Boolean.parseBoolean(catalogMeta.getCatalogProperties().get("olake_created")),
-              true);
       disposeCatalog(catalogMeta.getCatalogName());
       serverCatalogMap.put(catalogMeta.getCatalogName(), catalog);
       LOG.info(
           "Create catalog {}, type:{}", catalogMeta.getCatalogName(), catalogMeta.getCatalogType());
+      Telemetry.getInstance()
+          .trackCatalogCreated(catalogMeta.getCatalogType(), isOlakeCreated(catalogMeta), true);
     } catch (Exception e) {
       Telemetry.getInstance()
-          .trackCatalogCreated(
-              catalogMeta.getCatalogType(),
-              Boolean.parseBoolean(catalogMeta.getCatalogProperties().get("olake_created")),
-              false);
-      LOG.error("Failed to create catalog {}", catalogMeta.getCatalogName(), e);
+          .trackCatalogCreated(catalogMeta.getCatalogType(), isOlakeCreated(catalogMeta), false);
+      throw e instanceof RuntimeException ? (RuntimeException) e : new RuntimeException(e);
     }
+  }
+
+  private static boolean isOlakeCreated(CatalogMeta catalogMeta) {
+    Map<String, String> properties = catalogMeta.getCatalogProperties();
+    return properties != null && Boolean.parseBoolean(properties.get(OLAKE_CREATED_PROPERTY));
   }
 
   private void fillCatalogProperties(CatalogMeta catalogMeta) {
@@ -249,21 +249,14 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
       CatalogMeta copy = catalogMeta.deepCopy();
       fillCatalogProperties(copy);
       validateCatalogConnection(copy);
-
       catalog.updateMetadata(catalogMeta);
-      Telemetry.getInstance()
-          .trackCatalogUpdated(
-              catalogMeta.getCatalogType(),
-              Boolean.parseBoolean(catalogMeta.getCatalogProperties().get("olake_created")),
-              true);
       metaCache.invalidate(catalogMeta.getCatalogName());
       LOG.info("Update catalog metadata: {}", catalogMeta.getCatalogName());
+      Telemetry.getInstance()
+          .trackCatalogUpdated(catalogMeta.getCatalogType(), isOlakeCreated(catalogMeta), true);
     } catch (Exception e) {
       Telemetry.getInstance()
-          .trackCatalogUpdated(
-              catalogMeta.getCatalogType(),
-              Boolean.parseBoolean(catalogMeta.getCatalogProperties().get("olake_created")),
-              false);
+          .trackCatalogUpdated(catalogMeta.getCatalogType(), isOlakeCreated(catalogMeta), false);
       LOG.error("Failed to update catalog {}", catalogMeta.getCatalogName(), e);
     }
   }

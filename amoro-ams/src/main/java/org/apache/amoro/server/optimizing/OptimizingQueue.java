@@ -771,11 +771,11 @@ public class OptimizingQueue extends PersistentBase {
           LOG.warn("{} has already committed, give up", tableRuntime.getTableIdentifier());
           try {
             persistAndSetCompleted(status == ProcessStatus.SUCCESS);
+            trackCompleted();
           } catch (Exception ignored) {
           }
           throw new IllegalStateException("repeat commit, and last error " + failedReason);
         }
-        boolean tracked = false;
         try {
           hasCommitted = true;
           buildCommit().commit();
@@ -787,10 +787,9 @@ public class OptimizingQueue extends PersistentBase {
           } else {
             status = ProcessStatus.CLOSED;
           }
-          trackCompleted();
-          tracked = true;
           endTime = System.currentTimeMillis();
           persistAndSetCompleted(status == ProcessStatus.SUCCESS);
+          trackCompleted();
         } catch (PersistenceException e) {
           LOG.warn(
               "{} failed to persist process completed, will retry next commit",
@@ -799,12 +798,10 @@ public class OptimizingQueue extends PersistentBase {
         } catch (Throwable t) {
           LOG.error("{} Commit optimizing failed ", tableRuntime.getTableIdentifier(), t);
           status = ProcessStatus.FAILED;
-          if (!tracked) {
-            trackCompleted();
-          }
           failedReason = ExceptionUtil.getErrorMessage(t, 4000);
           endTime = System.currentTimeMillis();
           persistAndSetCompleted(false);
+          trackCompleted();
         }
       } finally {
         lock.unlock();
@@ -815,7 +812,11 @@ public class OptimizingQueue extends PersistentBase {
       try {
         Telemetry.getInstance()
             .trackOptimizationCompleted(
-                optimizingType, inputTableSize(), telemetryStatus(), getDuration());
+                optimizingType,
+                inputTableSize(),
+                telemetryStatus(),
+                getDuration(),
+                quotaProvider.getTotalQuota(optimizerGroup.getName()));
       } catch (Exception e) {
         LOG.debug("Failed to track optimization completed for process {}", processId, e);
       }
@@ -918,8 +919,8 @@ public class OptimizingQueue extends PersistentBase {
     private void trackStarted() {
       try {
         Telemetry.getInstance().trackOptimizationStarted(optimizingType, inputTableSize());
-      } catch (Exception e) {
-        LOG.debug("Failed to track optimization started for process {}", processId, e);
+      } catch (Throwable t) {
+        LOG.debug("Failed to track optimization started for process {}", processId, t);
       }
     }
 
@@ -929,8 +930,8 @@ public class OptimizingQueue extends PersistentBase {
         if (summary != null && summary.getInputFilesStatistics() != null) {
           return summary.getInputFilesStatistics().getTotalSize();
         }
-      } catch (Exception e) {
-        LOG.debug("Failed to compute input table size for telemetry, process {}", processId, e);
+      } catch (Throwable t) {
+        LOG.debug("Failed to compute input table size for telemetry, process {}", processId, t);
       }
       return 0;
     }

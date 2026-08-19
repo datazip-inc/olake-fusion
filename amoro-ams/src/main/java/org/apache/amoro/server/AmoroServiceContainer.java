@@ -61,7 +61,6 @@ import org.apache.amoro.server.table.TableManager;
 import org.apache.amoro.server.table.TableRuntimeFactoryManager;
 import org.apache.amoro.server.table.TableService;
 import org.apache.amoro.server.terminal.TerminalManager;
-import org.apache.amoro.server.utils.Telemetry;
 import org.apache.amoro.server.utils.ThriftServiceProxy;
 import org.apache.amoro.shade.guava32.com.google.common.annotations.VisibleForTesting;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Maps;
@@ -107,6 +106,7 @@ public class AmoroServiceContainer {
   public static final String SERVER_CONFIG_FILENAME = "config.yaml";
   private static boolean IS_MASTER_SLAVE_MODE = false;
   private static volatile Map<String, Object> SPARK_CONFIG = Map.of();
+  private static final String NOT_AVAILABLE = "NA";
 
   private final HighAvailabilityContainer haContainer;
   private DataSource dataSource;
@@ -264,20 +264,6 @@ public class AmoroServiceContainer {
 
     initThriftService();
     startThriftService();
-    trackInstalledFusion();
-  }
-
-  private void trackInstalledFusion() {
-    Map<String, Object> eventProps = new HashMap<>();
-    eventProps.putAll(AmoroServiceContainer.getSparkConfig());
-    eventProps.put(
-        "desired_parallelism",
-        String.valueOf(
-            serviceConfig.getInteger(AmoroManagementConf.OPTIMIZER_MAX_PLANNING_PARALLELISM)));
-    eventProps.put(
-        "deployment_mode", System.getenv("KUBERNETES_SERVICE_HOST") != null ? "HELM" : "DOCKER");
-
-    Telemetry.getInstance().trackInstalledFusion(eventProps);
   }
 
   private void addHandlerChain(RuntimeHandlerChain chain) {
@@ -361,13 +347,13 @@ public class AmoroServiceContainer {
     }
     sparkConfigMap.put(
         "spark_driver_memory",
-        sparkContainerProperties.getOrDefault("spark-conf.spark.driver.memory", "NA"));
+        sparkContainerProperties.getOrDefault("spark-conf.spark.driver.memory", NOT_AVAILABLE));
     sparkConfigMap.put(
         "spark_executor_memory",
-        sparkContainerProperties.getOrDefault("spark-conf.spark.executor.memory", "NA"));
+        sparkContainerProperties.getOrDefault("spark-conf.spark.executor.memory", NOT_AVAILABLE));
     sparkConfigMap.put(
         "spark_executor_cores",
-        sparkContainerProperties.getOrDefault("spark-conf.spark.executor.cores", "NA"));
+        sparkContainerProperties.getOrDefault("spark-conf.spark.executor.cores", NOT_AVAILABLE));
     return sparkConfigMap;
   }
 

@@ -33,9 +33,11 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
@@ -44,6 +46,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 public class Telemetry {
   private static final Logger LOG = LoggerFactory.getLogger(Telemetry.class);
@@ -51,20 +54,18 @@ public class Telemetry {
   private static final String TRACK_URL = "https://analytics.olake.io/mp/track";
   private static final String IPINFO_URL = "https://ipinfo.io/";
   private static final String IPIFY_URL = "https://api.ipify.org?format=text";
-  private static final String IP_NOT_FOUND_PLACEHOLDER = "NA";
+  private static final String NOT_FOUND_PLACEHOLDER = "NA";
   private static final String SHARED_USER_ID_FILE = "/tmp/olake-config/telemetry/user_id";
 
   private static final long TIMEOUT_SECONDS = 10L;
-  private static final double BYTES_PER_KB = 1024.0;
-  private static final double BYTES_PER_MB = 1024.0 * 1024.0;
-  private static final double BYTES_PER_GB = 1024.0 * 1024.0 * 1024.0;
 
   private final HttpClient httpClient;
   private final ObjectMapper objectMapper;
+  private final CompletableFuture<Void> initFuture;
 
-  private String ipAddress = IP_NOT_FOUND_PLACEHOLDER;
-  private PlatformInfo platform;
-  private LocationInfo locationInfo;
+  private volatile String ipAddress = NOT_FOUND_PLACEHOLDER;
+  private volatile PlatformInfo platform;
+  private volatile LocationInfo locationInfo;
   private volatile String userID;
 
   public record PlatformInfo(String os, String arch, String deviceCpu) {}
@@ -86,8 +87,19 @@ public class Telemetry {
         HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(TIMEOUT_SECONDS)).build();
     this.objectMapper = new ObjectMapper();
     this.platform = gatherPlatformInfo();
-    this.locationInfo = new LocationInfo("NA", "NA", "NA");
-    initAsync();
+    this.locationInfo = unknownLocation();
+    try {
+      if (!isTelemetryDisabled()) {
+        this.userID = resolveUserID();
+      }
+    } catch (Throwable t) {
+      LOG.debug("Failed to resolve user ID: {}", t.getMessage());
+    }
+    this.initFuture = initAsync();
+  }
+
+  private static LocationInfo unknownLocation() {
+    return new LocationInfo(NOT_FOUND_PLACEHOLDER, NOT_FOUND_PLACEHOLDER, NOT_FOUND_PLACEHOLDER);
   }
 
   public boolean isTelemetryDisabled() {
@@ -98,21 +110,20 @@ public class Telemetry {
     return false;
   }
 
-  private void initAsync() {
-    CompletableFuture.runAsync(
-        () -> {
-          try {
-            if (isTelemetryDisabled()) {
-              return;
-            }
-            this.platform = gatherPlatformInfo();
-            this.ipAddress = fetchOutboundIP();
-            this.userID = resolveUserID();
-            this.locationInfo = fetchLocationFromIP(this.ipAddress);
-          } catch (Exception e) {
-            LOG.debug("Failed to initialize telemetry context safely: {}", e.getMessage());
-          }
-        });
+  private CompletableFuture<Void> initAsync() {
+    return CompletableFuture.runAsync(
+            () -> {
+              try {
+                if (isTelemetryDisabled()) {
+                  return;
+                }
+                this.ipAddress = fetchOutboundIP();
+                this.locationInfo = fetchLocationFromIP(this.ipAddress);
+              } catch (Throwable t) {
+                LOG.debug("Failed to initialize telemetry context: {}", t.getMessage());
+              }
+            })
+        .completeOnTimeout(null, 2 * TIMEOUT_SECONDS, TimeUnit.SECONDS);
   }
 
   private String fetchOutboundIP() {
@@ -131,12 +142,12 @@ public class Telemetry {
     } catch (Exception e) {
       LOG.debug("Failed to fetch outbound IP: {}", e.getMessage());
     }
-    return IP_NOT_FOUND_PLACEHOLDER;
+    return NOT_FOUND_PLACEHOLDER;
   }
 
   private LocationInfo fetchLocationFromIP(String ip) {
-    if (IP_NOT_FOUND_PLACEHOLDER.equals(ip)) {
-      return new LocationInfo("NA", "NA", "NA");
+    if (NOT_FOUND_PLACEHOLDER.equals(ip)) {
+      return unknownLocation();
     }
     try {
       HttpRequest request =
@@ -153,7 +164,7 @@ public class Telemetry {
     } catch (Exception e) {
       LOG.debug("Failed to fetch location context for IP {}: {}", ip, e.getMessage());
     }
-    return new LocationInfo("NA", "NA", "NA");
+    return unknownLocation();
   }
 
   private PlatformInfo gatherPlatformInfo() {
@@ -176,10 +187,9 @@ public class Telemetry {
     }
 
     // fallback
-    String generated = generateUserID();
-    persistUserID(generated);
-    this.userID = generated;
-    return generated;
+    String effective = persistUserID(generateUserID());
+    this.userID = effective;
+    return effective;
   }
 
   private String readSharedUserID() {
@@ -197,14 +207,21 @@ public class Telemetry {
     return null;
   }
 
-  private void persistUserID(String id) {
+  private String persistUserID(String id) {
     Path shared = Paths.get(SHARED_USER_ID_FILE);
     try {
       Files.createDirectories(shared.getParent());
-      Files.writeString(shared, id, StandardCharsets.UTF_8);
+      Files.writeString(shared, id, StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW);
+    } catch (FileAlreadyExistsException e) {
+      String existing = readSharedUserID();
+      if (existing != null) {
+        LOG.debug("Adopting telemetry user id already present at {}", shared);
+        return existing;
+      }
     } catch (IOException e) {
       LOG.debug("Failed to persist generated telemetry user id at {}: {}", shared, e.getMessage());
     }
+    return id;
   }
 
   private String generateUserID() {
@@ -227,8 +244,17 @@ public class Telemetry {
     }
 
     try {
+      Map<String, Object> snapshot = new HashMap<>(props);
+      initFuture.thenRunAsync(() -> dispatchEvent(eventName, snapshot));
+    } catch (Throwable t) {
+      LOG.debug("Telemetry dispatch scheduling failed: {}", t.getMessage());
+    }
+  }
+
+  private void dispatchEvent(String eventName, Map<String, Object> props) {
+    try {
       PlatformInfo p = platform != null ? platform : gatherPlatformInfo();
-      LocationInfo loc = locationInfo != null ? locationInfo : new LocationInfo("NA", "NA", "NA");
+      LocationInfo loc = locationInfo != null ? locationInfo : unknownLocation();
       Map<String, Object> enrichedProperties = new HashMap<>(props);
       enrichedProperties.put("os", p.os());
       enrichedProperties.put("arch", p.arch());
@@ -261,22 +287,9 @@ public class Telemetry {
                 return null;
               });
 
-    } catch (Exception e) {
-      LOG.debug("Telemetry delivery structure failure: {}", e.getMessage());
+    } catch (Throwable t) {
+      LOG.debug("Telemetry delivery structure failure: {}", t.getMessage());
     }
-  }
-
-  private static String bytesToUnits(long bytes) {
-    double kb = bytes / BYTES_PER_KB;
-    if (kb < 1000.0) {
-      return String.format("%.2f KB", kb);
-    }
-    double mb = bytes / BYTES_PER_MB;
-    if (mb < 1000.0) {
-      return String.format("%.2f MB", mb);
-    }
-    double gb = bytes / BYTES_PER_GB;
-    return String.format("%.2f GB", gb);
   }
 
   private String optimizationTypeHelper(String optimizationTypeName) {
@@ -292,19 +305,24 @@ public class Telemetry {
   public void trackOptimizationStarted(OptimizingType optimizationType, long tableSize) {
     Map<String, Object> props = new HashMap<>();
     props.put("optimization_type", optimizationTypeHelper(optimizationType.name()));
-    props.put("table_size", bytesToUnits(tableSize));
+    props.put("table_size", tableSize);
     props.putAll(AmoroServiceContainer.getSparkConfig());
     sendEvent("Optimization Started - Fusion", props);
   }
 
   public void trackOptimizationCompleted(
-      OptimizingType optimizationType, Long tableSize, String status, long duration) {
+      OptimizingType optimizationType,
+      Long tableSize,
+      String status,
+      long duration,
+      int optimizerParallelism) {
     Map<String, Object> props = new HashMap<>();
     props.put("optimization_type", optimizationTypeHelper(optimizationType.name()));
     props.putAll(AmoroServiceContainer.getSparkConfig());
-    props.put("table_size", bytesToUnits(tableSize));
+    props.put("table_size", tableSize);
     props.put("optimization_status", status);
     props.put("duration_ms", duration);
+    props.put("optimizer_parallelism", optimizerParallelism);
 
     sendEvent("Optimization Completed - Fusion", props);
   }
@@ -325,7 +343,12 @@ public class Telemetry {
     sendEvent("Catalog Updated - Fusion", props);
   }
 
-  public void trackInstalledFusion(Map<String, Object> props) {
+  public void trackInstalledFusion(int optimizerParallelism) {
+    Map<String, Object> props = new HashMap<>();
+    props.putAll(AmoroServiceContainer.getSparkConfig());
+    props.put("optimizer_parallelism", optimizerParallelism);
+    props.put(
+        "deployment_mode", System.getenv("KUBERNETES_SERVICE_HOST") != null ? "HELM" : "DOCKER");
     sendEvent("Installed Fusion", props);
   }
 }
