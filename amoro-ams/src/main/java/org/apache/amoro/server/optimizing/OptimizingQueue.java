@@ -817,8 +817,8 @@ public class OptimizingQueue extends PersistentBase {
                 telemetryStatus(),
                 getDuration(),
                 quotaProvider.getTotalQuota(optimizerGroup.getName()));
-      } catch (Exception e) {
-        LOG.debug("Failed to track optimization completed for process {}", processId, e);
+      } catch (Throwable t) {
+        LOG.debug("Failed to track optimization completed for process {}", processId, t);
       }
     }
 
