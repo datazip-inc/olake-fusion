@@ -262,7 +262,7 @@ public class TestSnapshotExpire extends ExecutorTestBase {
 
     TestTableMaintainerContext.Impl context =
         new TestTableMaintainerContext.Impl(
-            TableConfigurations.parseTableConfig(table.properties()), table);
+            TestTableMaintainerContext.parseTestTableConfig(table.properties()), table);
     new MixedTableMaintainer(table, context).expireSnapshots();
     Assert.assertEquals(1, Iterables.size(table.snapshots()));
 
@@ -540,6 +540,41 @@ public class TestSnapshotExpire extends ExecutorTestBase {
     table.updateProperties().set(TableProperties.SNAPSHOT_MIN_COUNT, "10").commit();
     Assert.assertEquals(
         10, TableConfigurations.parseTableConfig(table.properties()).getSnapshotMinCount());
+  }
+
+  @Test
+  public void testSnapshotExpireDisabledByDefault() {
+    UnkeyedTable table =
+        isKeyedTable()
+            ? getMixedTable().asKeyedTable().baseTable()
+            : getMixedTable().asUnkeyedTable();
+    Assert.assertFalse(
+        "snapshots must be kept forever unless table-expire.enabled is set explicitly",
+        TableConfigurations.parseTableConfig(table.properties()).isExpireSnapshotEnabled());
+
+    table.updateProperties().set(TableProperties.ENABLE_TABLE_EXPIRE, "true").commit();
+    Assert.assertTrue(
+        TableConfigurations.parseTableConfig(table.properties()).isExpireSnapshotEnabled());
+  }
+
+  @Test
+  public void testNotExpireSnapshotsByDefault() {
+    UnkeyedTable table =
+        isKeyedTable()
+            ? getMixedTable().asKeyedTable().baseTable()
+            : getMixedTable().asUnkeyedTable();
+    table.newAppend().commit();
+    table.newAppend().commit();
+    table.updateProperties().set(TableProperties.SNAPSHOT_KEEP_DURATION, "0").commit();
+
+    // no table-expire.enabled property, so the default applies and nothing is expired
+    new MixedTableMaintainer(
+            table,
+            new TestTableMaintainerContext.Impl(
+                TableConfigurations.parseTableConfig(table.properties()), table))
+        .expireSnapshots();
+
+    Assert.assertEquals(2, Iterables.size(table.snapshots()));
   }
 
   private long waitUntilAfter(long timestampMillis) {
