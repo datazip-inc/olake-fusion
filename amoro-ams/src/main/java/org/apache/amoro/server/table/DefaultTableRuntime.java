@@ -477,16 +477,6 @@ public class DefaultTableRuntime extends AbstractTableRuntime
       store()
           .begin()
           .updateStatusCode(code -> OptimizingStatus.IDLE.getCode())
-          .updateState(
-              OPTIMIZING_STATE_KEY,
-              state -> {
-                state.setLastOptimizedSnapshotId(state.getCurrentSnapshotId());
-                state.setLastOptimizedChangeSnapshotId(state.getCurrentChangeSnapshotId());
-                if (cronType != null) {
-                  state.setLastOptimizingType(cronType.name());
-                }
-                return state;
-              })
           .updateState(PENDING_INPUT_KEY, any -> new AbstractOptimizingEvaluator.PendingInput())
           .commit();
       this.pendingCronType = null;
