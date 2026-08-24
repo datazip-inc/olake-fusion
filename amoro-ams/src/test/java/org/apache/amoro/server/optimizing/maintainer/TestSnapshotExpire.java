@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.optimizing.maintainer;
@@ -262,7 +264,7 @@ public class TestSnapshotExpire extends ExecutorTestBase {
 
     TestTableMaintainerContext.Impl context =
         new TestTableMaintainerContext.Impl(
-            TableConfigurations.parseTableConfig(table.properties()), table);
+            TestTableMaintainerContext.parseTestTableConfig(table.properties()), table);
     new MixedTableMaintainer(table, context).expireSnapshots();
     Assert.assertEquals(1, Iterables.size(table.snapshots()));
 

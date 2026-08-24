@@ -53,7 +53,7 @@ services:
     stdin_open: true
 
   fusion-init:
-    image: curlimages/curl
+    image: curlimages/curl:8.21.0
     container_name: fusion-init
     profiles:
       - prod

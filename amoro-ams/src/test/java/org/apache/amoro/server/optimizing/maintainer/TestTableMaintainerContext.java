@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.optimizing.maintainer;
@@ -26,27 +28,36 @@ import org.apache.amoro.server.table.TableConfigurations;
 import org.apache.amoro.server.utils.HiveLocationUtil;
 import org.apache.amoro.table.KeyedTable;
 import org.apache.amoro.table.MixedTable;
+import org.apache.amoro.table.TableProperties;
 import org.apache.amoro.table.UnkeyedTable;
 
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 
 /** Utility class for creating test TableMaintainerContext instances. */
 public class TestTableMaintainerContext {
 
+  public static TableConfiguration parseTestTableConfig(Map<String, String> properties) {
+    Map<String, String> merged = new HashMap<>(properties);
+    merged.putIfAbsent(TableProperties.ENABLE_TABLE_EXPIRE, "true");
+    return TableConfigurations.parseTableConfig(merged);
+  }
+
   /** Create a test TableMaintainerContext for the given MixedTable. */
   public static TableMaintainerContext of(MixedTable table) {
-    return new Impl(TableConfigurations.parseTableConfig(table.properties()), table);
+    return new Impl(parseTestTableConfig(table.properties()), table);
   }
 
   /** Create a test TableMaintainerContext for the given KeyedTable. */
   public static TableMaintainerContext of(KeyedTable table) {
-    return new Impl(TableConfigurations.parseTableConfig(table.properties()));
+    return new Impl(parseTestTableConfig(table.properties()));
   }
 
   /** Create a test TableMaintainerContext for the given UnkeyedTable. */
   public static TableMaintainerContext of(UnkeyedTable table) {
-    return new Impl(TableConfigurations.parseTableConfig(table.properties()));
+    return new Impl(parseTestTableConfig(table.properties()));
   }
 
   /** Test implementation of TableMaintainerContext. */

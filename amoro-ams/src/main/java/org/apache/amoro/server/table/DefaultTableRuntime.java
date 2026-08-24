@@ -369,7 +369,7 @@ public class DefaultTableRuntime extends AbstractTableRuntime
 
   public void planFailed() {
     OptimizingStatus originalStatus = getOptimizingStatus();
-    store().begin().updateStatusCode(code -> OptimizingStatus.PENDING.getCode()).commit();
+    store().begin().updateStatusCode(code -> OptimizingStatus.IDLE.getCode()).commit();
   }
 
   public void beginProcess(OptimizingProcess optimizingProcess) {
