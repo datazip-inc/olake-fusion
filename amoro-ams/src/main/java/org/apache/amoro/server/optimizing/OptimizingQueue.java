@@ -53,6 +53,7 @@ import org.apache.amoro.server.resource.QuotaProvider;
 import org.apache.amoro.server.table.DefaultTableRuntime;
 import org.apache.amoro.server.table.blocker.TableBlocker;
 import org.apache.amoro.server.utils.IcebergTableUtil;
+import org.apache.amoro.server.utils.Telemetry;
 import org.apache.amoro.shade.guava32.com.google.common.annotations.VisibleForTesting;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Lists;
@@ -567,6 +568,7 @@ public class OptimizingQueue extends PersistentBase {
           this.status = ProcessStatus.CLOSED;
           this.endTime = System.currentTimeMillis();
           persistAndSetCompleted(false);
+          trackCompleted();
         }
       } finally {
         lock.unlock();
@@ -662,6 +664,7 @@ public class OptimizingQueue extends PersistentBase {
               this.status = ProcessStatus.FAILED;
               this.endTime = taskRuntime.getEndTime();
               persistAndSetCompleted(false);
+              trackCompleted();
             }
           }
         }
@@ -769,6 +772,7 @@ public class OptimizingQueue extends PersistentBase {
           LOG.warn("{} has already committed, give up", tableRuntime.getTableIdentifier());
           try {
             persistAndSetCompleted(status == ProcessStatus.SUCCESS);
+            trackCompleted();
           } catch (Exception ignored) {
           }
           throw new IllegalStateException("repeat commit, and last error " + failedReason);
@@ -786,6 +790,7 @@ public class OptimizingQueue extends PersistentBase {
           }
           endTime = System.currentTimeMillis();
           persistAndSetCompleted(status == ProcessStatus.SUCCESS);
+          trackCompleted();
         } catch (PersistenceException e) {
           LOG.warn(
               "{} failed to persist process completed, will retry next commit",
@@ -797,9 +802,35 @@ public class OptimizingQueue extends PersistentBase {
           failedReason = ExceptionUtil.getErrorMessage(t, 4000);
           endTime = System.currentTimeMillis();
           persistAndSetCompleted(false);
+          trackCompleted();
         }
       } finally {
         lock.unlock();
+      }
+    }
+
+    private void trackCompleted() {
+      try {
+        Telemetry.getInstance()
+            .trackOptimizationCompleted(
+                optimizingType,
+                inputTableSize(),
+                telemetryStatus(),
+                getDuration(),
+                quotaProvider.getTotalQuota(optimizerGroup.getName()));
+      } catch (Throwable t) {
+        LOG.debug("Failed to track optimization completed for process {}", processId, t);
+      }
+    }
+
+    private String telemetryStatus() {
+      switch (status) {
+        case SUCCESS:
+          return "SUCCESS";
+        case CLOSED:
+          return "CANCELLED";
+        default:
+          return "FAILED";
       }
     }
 
@@ -883,6 +914,27 @@ public class OptimizingQueue extends PersistentBase {
                   mapper -> mapper.insertTaskRuntimes(Lists.newArrayList(taskMap.values()))),
           () -> TaskFilesPersistence.persistTaskInputs(processId, taskMap.values()),
           () -> tableRuntime.beginProcess(this));
+      trackStarted();
+    }
+
+    private void trackStarted() {
+      try {
+        Telemetry.getInstance().trackOptimizationStarted(optimizingType, inputTableSize());
+      } catch (Throwable t) {
+        LOG.debug("Failed to track optimization started for process {}", processId, t);
+      }
+    }
+
+    private long inputTableSize() {
+      try {
+        MetricsSummary summary = getSummary();
+        if (summary != null && summary.getInputFilesStatistics() != null) {
+          return summary.getInputFilesStatistics().getTotalSize();
+        }
+      } catch (Throwable t) {
+        LOG.debug("Failed to compute input table size for telemetry, process {}", processId, t);
+      }
+      return 0;
     }
 
     private void persistAndSetCompleted(boolean success) {
