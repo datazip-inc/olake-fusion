@@ -11,6 +11,8 @@ concurrency:
   cancel-in-progress: true
 # TODO: enable hadoop 3 testing
 on:
+  # Disabled on push; run manually from the Actions tab when needed.
+  workflow_dispatch:
   # push:
   #   paths:
   #     - ".github/workflows/**"
