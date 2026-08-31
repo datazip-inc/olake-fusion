@@ -38,8 +38,7 @@ spark/tmp/
 spark/spark-warehouse/
 
 # vscode/eclipse files
-.vscode/
-.vscode/
+.vscode
 .classpath
 .project
 bin/
@@ -84,3 +83,4 @@ resources
 !/dist/src/main/amoro-bin/bin/
 !/dist/src/main/amoro-bin/conf/
 /local-test/data
+CLAUDE.local.md

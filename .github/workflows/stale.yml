@@ -29,7 +29,7 @@ permissions:
 
 jobs:
   stale:
-    if: github.repository_owner == 'apache'
+    if: github.repository_owner == 'datazip-inc'
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/stale@v9.0.0
@@ -56,7 +56,7 @@ jobs:
             This pull request has been marked as stale due to 30 days of inactivity. It will be closed
             in 1 week if no further activity occurs. If you think that’s incorrect or this pull request
             requires a review, please simply write any comment. If closed, you can revive the PR at any
-            time and @mention a reviewer or discuss it on the dev@amoro.apache.org list. Thank you for
+            time and @mention a reviewer or discuss it on Slack (https://olake.io/slack/). Thank you for
             your contributions.
           close-pr-message: >
             This pull request has been closed due to lack of activity. This is not a judgement on the merit
