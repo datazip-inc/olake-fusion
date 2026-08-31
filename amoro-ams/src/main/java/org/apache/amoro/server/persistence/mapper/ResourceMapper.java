@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.persistence.mapper;
@@ -59,15 +61,14 @@ public interface ResourceMapper {
   ResourceGroup selectResourceGroup(@Param("resourceGroup") String groupName);
 
   @Select(
-      "SELECT resource_id, group_name, container_name, start_time, thread_count, total_memory, properties"
+      "SELECT resource_id, group_name, container_name, thread_count, total_memory, properties"
           + " FROM resource WHERE group_name = #{resourceGroup}")
   @Results({
     @Result(property = "resourceId", column = "resource_id"),
-    @Result(property = "group", column = "group_name"),
-    @Result(property = "container", column = "container_name"),
-    @Result(property = "startTime", column = "start_time", typeHandler = Long2TsConverter.class),
+    @Result(property = "groupName", column = "group_name"),
+    @Result(property = "containerName", column = "container_name"),
     @Result(property = "threadCount", column = "thread_count"),
-    @Result(property = "totalMemory", column = "total_memory"),
+    @Result(property = "memoryMb", column = "total_memory"),
     @Result(property = "properties", column = "properties", typeHandler = Map2StringConverter.class)
   })
   List<Resource> selectResourcesByGroup(@Param("resourceGroup") String groupName);

@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server;
@@ -32,6 +34,7 @@ import org.apache.amoro.config.ConfigurationException;
 import org.apache.amoro.config.Configurations;
 import org.apache.amoro.config.shade.utils.ConfigShadeUtils;
 import org.apache.amoro.exception.AmoroRuntimeException;
+import org.apache.amoro.server.bootstrap.OptimizerBootstrap;
 import org.apache.amoro.server.catalog.CatalogManager;
 import org.apache.amoro.server.catalog.DefaultCatalogManager;
 import org.apache.amoro.server.dashboard.DashboardServer;
@@ -111,6 +114,7 @@ public class AmoroServiceContainer {
   private OptimizerManager optimizerManager;
   private TableService tableService;
   private DefaultOptimizingService optimizingService;
+  private OptimizerBootstrap optimizerBootstrap;
   private ProcessService processService;
   private TerminalManager terminalManager;
   private Configurations serviceConfig;
@@ -257,7 +261,13 @@ public class AmoroServiceContainer {
     tableService.initialize();
     LOG.info("AMS table service have been initialized");
     tableManager.setTableService(tableService);
-
+    try {
+      optimizerBootstrap =
+          new OptimizerBootstrap(serviceConfig, optimizerManager, optimizingService);
+      optimizerBootstrap.run();
+    } catch (Exception e) {
+      LOG.error("Failed to start optimizer bootstrap", e);
+    }
     initThriftService();
     startThriftService();
   }
@@ -269,6 +279,11 @@ public class AmoroServiceContainer {
   }
 
   public void disposeOptimizingService() {
+    if (optimizerBootstrap != null) {
+      LOG.info("Stopping optimizer bootstrap keeper...");
+      optimizerBootstrap.dispose();
+      optimizerBootstrap = null;
+    }
     if (tableManagementServer != null) {
       LOG.info(
           "Stopping table management server[serving:{}] ...", tableManagementServer.isServing());
