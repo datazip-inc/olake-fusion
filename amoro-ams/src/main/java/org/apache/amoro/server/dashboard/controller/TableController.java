@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.dashboard.controller;
@@ -21,9 +23,11 @@ package org.apache.amoro.server.dashboard.controller;
 import static org.apache.amoro.properties.CatalogMetaProperties.CATALOG_TYPE_HIVE;
 
 import io.javalin.http.Context;
+import org.apache.amoro.AmoroTable;
 import org.apache.amoro.Constants;
 import org.apache.amoro.ServerTableIdentifier;
 import org.apache.amoro.TableFormat;
+import org.apache.amoro.TableIDWithFormat;
 import org.apache.amoro.api.CatalogMeta;
 import org.apache.amoro.api.OptimizingService;
 import org.apache.amoro.client.OptimizingClientPools;
@@ -34,6 +38,7 @@ import org.apache.amoro.hive.catalog.MixedHiveCatalog;
 import org.apache.amoro.hive.utils.HiveTableUtil;
 import org.apache.amoro.hive.utils.UpgradeHiveTableUtil;
 import org.apache.amoro.mixed.CatalogLoader;
+import org.apache.amoro.optimizing.OptimizingType;
 import org.apache.amoro.process.ProcessStatus;
 import org.apache.amoro.properties.CatalogMetaProperties;
 import org.apache.amoro.properties.HiveTableProperties;
@@ -43,6 +48,7 @@ import org.apache.amoro.server.dashboard.ServerTableDescriptor;
 import org.apache.amoro.server.dashboard.ServerTableProperties;
 import org.apache.amoro.server.dashboard.model.HiveTableInfo;
 import org.apache.amoro.server.dashboard.model.TableMeta;
+import org.apache.amoro.server.dashboard.model.TableMeta.CompactionInfo;
 import org.apache.amoro.server.dashboard.model.TableOperation;
 import org.apache.amoro.server.dashboard.model.UpgradeHiveMeta;
 import org.apache.amoro.server.dashboard.model.UpgradeRunningInfo;
@@ -52,8 +58,11 @@ import org.apache.amoro.server.dashboard.response.PageResult;
 import org.apache.amoro.server.dashboard.utils.AmsUtil;
 import org.apache.amoro.server.dashboard.utils.CommonUtil;
 import org.apache.amoro.server.optimizing.OptimizingStatus;
+import org.apache.amoro.server.persistence.PersistentBase;
 import org.apache.amoro.server.persistence.TableRuntimeMeta;
+import org.apache.amoro.server.persistence.mapper.TableProcessMapper;
 import org.apache.amoro.server.process.TableProcessMeta;
+import org.apache.amoro.server.table.TableConfigurations;
 import org.apache.amoro.server.table.TableManager;
 import org.apache.amoro.shade.guava32.com.google.common.base.Function;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
@@ -83,6 +92,7 @@ import org.apache.iceberg.SnapshotRef;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -92,14 +102,18 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /** The controller that handles table requests. */
-public class TableController {
+public class TableController extends PersistentBase {
   private static final Logger LOG = LoggerFactory.getLogger(TableController.class);
   private static final long UPGRADE_INFO_EXPIRE_INTERVAL = 60 * 60 * 1000;
 
@@ -110,6 +124,10 @@ public class TableController {
   private final ConcurrentHashMap<TableIdentifier, UpgradeRunningInfo> upgradeRunningInfo =
       new ConcurrentHashMap<>();
   private final ScheduledExecutorService tableUpgradeExecutor;
+
+  private static final int TABLE_LIST_LOAD_PARALLELISM =
+      Runtime.getRuntime().availableProcessors() * 2;
+  private final ExecutorService tableListLoadExecutor;
 
   public TableController(
       CatalogManager catalogManager,
@@ -127,6 +145,10 @@ public class TableController {
                 .setDaemon(false)
                 .setNameFormat("async-hive-table-upgrade-%d")
                 .build());
+    this.tableListLoadExecutor =
+        Executors.newFixedThreadPool(
+            TABLE_LIST_LOAD_PARALLELISM,
+            new ThreadFactoryBuilder().setDaemon(true).setNameFormat("table-list-load-%d").build());
   }
 
   /**
@@ -175,6 +197,34 @@ public class TableController {
       tableSummary.setOptimizingStatus(OptimizingStatus.IDLE.name());
     }
     ctx.json(OkResponse.of(serverTableMeta));
+  }
+
+  /**
+   * get table self-optimizing enabled status.
+   *
+   * @param ctx
+   */
+  public void getTableOptimizingEnabled(Context ctx) {
+    String catalog = ctx.pathParam("catalog");
+    String database = ctx.pathParam("db");
+    String tableName = ctx.pathParam("table");
+
+    Preconditions.checkArgument(
+        StringUtils.isNotBlank(catalog)
+            && StringUtils.isNotBlank(database)
+            && StringUtils.isNotBlank(tableName),
+        "catalog, db and table can not be empty");
+    Preconditions.checkState(catalogManager.catalogExist(catalog), "invalid catalog!");
+
+    ServerCatalog serverCatalog = catalogManager.getServerCatalog(catalog);
+    AmoroTable<?> amoroTable = serverCatalog.loadTable(database, tableName);
+
+    boolean enabled =
+        TableConfigurations.parseTableConfig(amoroTable.properties())
+            .getOptimizingConfig()
+            .isEnabled();
+
+    ctx.json(OkResponse.of(enabled));
   }
 
   /**
@@ -547,23 +597,41 @@ public class TableController {
           }
         };
 
-    List<TableMeta> tables =
-        serverCatalog.listTables(db).stream()
+    // Fill each table concurrently
+    List<TableIDWithFormat> tableIds = serverCatalog.listTables(db);
+    List<Callable<TableMeta>> tasks =
+        tableIds.stream()
             .map(
                 idWithFormat ->
-                    new TableMeta(
-                        idWithFormat.getIdentifier().getTableName(),
-                        formatToType.apply(idWithFormat.getTableFormat())))
-            // Sort by table format and table name
-            .sorted(
-                (table1, table2) -> {
-                  if (Objects.equals(table1.getType(), table2.getType())) {
-                    return table1.getName().compareTo(table2.getName());
-                  } else {
-                    return table1.getType().compareTo(table2.getType());
-                  }
-                })
+                    (Callable<TableMeta>)
+                        () -> buildTableMeta(serverCatalog, db, idWithFormat, formatToType))
             .collect(Collectors.toList());
+
+    List<TableMeta> tables = new ArrayList<>(tableIds.size());
+    try {
+      for (Future<TableMeta> future : tableListLoadExecutor.invokeAll(tasks)) {
+        tables.add(future.get());
+      }
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new IllegalStateException("Interrupted while building table list", e);
+    } catch (ExecutionException e) {
+      Throwable cause = e.getCause();
+      if (cause instanceof RuntimeException) {
+        throw (RuntimeException) cause;
+      }
+      throw new IllegalStateException("Failed to build table list", cause);
+    }
+
+    // Sort by table format and table name
+    tables.sort(
+        (table1, table2) -> {
+          if (Objects.equals(table1.getType(), table2.getType())) {
+            return table1.getName().compareTo(table2.getName());
+          } else {
+            return table1.getType().compareTo(table2.getType());
+          }
+        });
     String catalogType = serverCatalog.getMetadata().getCatalogType();
     if (catalogType.equals(CATALOG_TYPE_HIVE)) {
       CatalogMeta catalogMeta = serverCatalog.getMetadata();
@@ -585,6 +653,72 @@ public class TableController {
             tables.stream()
                 .filter(t -> StringUtils.isBlank(keywords) || t.getName().contains(keywords))
                 .collect(Collectors.toList())));
+  }
+
+  /**
+   * Builds a {@link TableMeta} enriched with health score, optimizing-enabled status, olake-created
+   * flag and the latest compaction info per type.
+   */
+  private TableMeta buildTableMeta(
+      ServerCatalog serverCatalog,
+      String db,
+      TableIDWithFormat idWithFormat,
+      Function<TableFormat, String> formatToType) {
+    TableMeta tableMeta =
+        new TableMeta(
+            idWithFormat.getIdentifier().getTableName(),
+            formatToType.apply(idWithFormat.getTableFormat()));
+    try {
+      ServerTableIdentifier serverTableId =
+          Objects.requireNonNull(
+              tableManager.getServerTableIdentifier(
+                  idWithFormat.getIdentifier().buildTableIdentifier()),
+              "ServerTableIdentifier not found");
+
+      TableRuntimeMeta tableRuntimeMeta =
+          Objects.requireNonNull(
+              tableManager.getTableRuntimeMata(serverTableId), "TableRuntimeMeta not found");
+      tableMeta.setHealthScore(tableRuntimeMeta.getTableSummary().getHealthScore());
+
+      Map<String, String> tableProperties =
+          serverCatalog.loadTable(db, idWithFormat.getIdentifier().getTableName()).properties();
+
+      tableMeta.setOptimizingEnabled(
+          TableConfigurations.parseTableConfig(tableProperties).getOptimizingConfig().isEnabled());
+
+      tableMeta.setOlakeCreated(
+          tableProperties.containsKey(TableProperties.OLAKE_TABLE_IDENTIFIER));
+
+      List<TableProcessMeta> latestProcesses =
+          getAs(
+              TableProcessMapper.class,
+              mapper -> mapper.listLatestOptimizingProcessPerType(serverTableId.getId()));
+      for (TableProcessMeta processMeta : latestProcesses) {
+        CompactionInfo compactionInfo =
+            new CompactionInfo(
+                processMeta.getProcessId(),
+                processMeta.getFinishTime(),
+                processMeta.getStatus().name());
+        switch (OptimizingType.valueOf(processMeta.getProcessType())) {
+          case MINOR:
+            tableMeta.setLastMinorCompaction(compactionInfo);
+            break;
+          case MAJOR:
+            tableMeta.setLastMajorCompaction(compactionInfo);
+            break;
+          case FULL:
+            tableMeta.setLastFullCompaction(compactionInfo);
+            break;
+          default:
+            break;
+        }
+      }
+    } catch (Exception e) {
+      throw new IllegalStateException(
+          "Failed to build TableMeta for table " + idWithFormat.getIdentifier(), e);
+    }
+
+    return tableMeta;
   }
 
   /**

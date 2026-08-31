@@ -367,6 +367,8 @@ public class TableProperties {
   /** Protected properties which should not be written by user. */
   public static final Set<String> WRITE_PROTECTED_PROPERTIES = new HashSet<>();
 
+  public static final String OLAKE_TABLE_IDENTIFIER = "olake_2pc";
+
   static {
     READ_PROTECTED_PROPERTIES.add(TableProperties.BASE_TABLE_MAX_TRANSACTION_ID);
     READ_PROTECTED_PROPERTIES.add(TableProperties.PARTITION_OPTIMIZED_SEQUENCE);
