@@ -22,6 +22,7 @@ package org.apache.amoro.optimizer.spark;
 
 import org.apache.amoro.api.OptimizingTask;
 import org.apache.amoro.api.OptimizingTaskResult;
+import org.apache.amoro.log.OptimizerLogContextRegistry;
 import org.apache.amoro.optimizer.common.OptimizerConfig;
 import org.apache.amoro.optimizer.common.OptimizerExecutor;
 import org.apache.amoro.optimizing.RewriteFilesInput;
@@ -59,16 +60,26 @@ public class SparkOptimizerExecutor extends OptimizerExecutor {
 
     long processId = task.getTaskId().getProcessId();
     int taskId = task.getTaskId().getTaskId();
-    String driverFilePath = processId + "/driver";
+    String driverFilePath = OptimizerLogContextRegistry.driverLogFilePath(processId);
 
-    // Set MDC context for Log4j2 routing
-    // Driver logs go to: <LOG_DIR>/<processId>/driver.log
+    // Route this thread's own logging to <LOG_DIR>/<processId>/driver.log.
     MDC.put("processId", String.valueOf(processId));
     MDC.put("logFilePath", driverFilePath);
+    // Spark's own driver threads (dag-scheduler-event-loop, task-result-getter-*) carry no MDC;
+    // this registration is what sends their lines to the same driver log.
+    OptimizerLogContextRegistry.bind(processId, null, driverFilePath);
 
     try {
       ImmutableList<OptimizingTask> of = ImmutableList.of(task);
       jsc.setJobDescription(jobDescription(task));
+      // Spark puts mdc.* job properties into the executor task thread's MDC for the whole task,
+      // covering what it logs before (Running task) and after (Finished task) our function too.
+      jsc.setLocalProperty(
+          OptimizerLogContextRegistry.SPARK_LOG_FILE_PATH_KEY,
+          OptimizerLogContextRegistry.taskLogFilePath(processId, taskId));
+      jsc.setLocalProperty(
+          OptimizerLogContextRegistry.SPARK_PROCESS_ID_KEY, String.valueOf(processId));
+      jsc.setLocalProperty(OptimizerLogContextRegistry.SPARK_TASK_ID_KEY, String.valueOf(taskId));
       SparkOptimizingTaskFunction taskFunction =
           new SparkOptimizingTaskFunction(getConfig(), threadId);
       List<OptimizingTaskResult> results = jsc.parallelize(of, 1).map(taskFunction).collect();
@@ -90,6 +101,10 @@ public class SparkOptimizerExecutor extends OptimizerExecutor {
       result.setErrorMessage(ExceptionUtil.getErrorMessage(r, ERROR_MESSAGE_MAX_LENGTH));
       return result;
     } finally {
+      jsc.setLocalProperty(OptimizerLogContextRegistry.SPARK_LOG_FILE_PATH_KEY, null);
+      jsc.setLocalProperty(OptimizerLogContextRegistry.SPARK_PROCESS_ID_KEY, null);
+      jsc.setLocalProperty(OptimizerLogContextRegistry.SPARK_TASK_ID_KEY, null);
+      OptimizerLogContextRegistry.unbind();
       MDC.remove("processId");
       MDC.remove("logFilePath");
     }

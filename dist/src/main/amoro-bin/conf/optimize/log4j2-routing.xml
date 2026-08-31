@@ -24,7 +24,7 @@
         <Property name="LOG_DIR">${env:LOG_DIR:-/mnt/amoro-logs/compaction}</Property>
         <Property name="CONSOLE_LEVEL">${env:CONSOLE_LOG_LEVEL:-info}</Property>
         <Property name="LOG_PATTERN">%d{yyyy-MM-dd HH:mm:ss.SSS} %-5p [%t] [%c{1}] [P:%X{processId}|T:%X{taskId}|Table:%X{tableName}|Exec:%X{executorId}] - %m%n</Property>
-        <Property name="JSON_LOG_PATTERN">{"level":"%p","time":"%d{yyyy-MM-dd'T'HH:mm:ss.SSS'Z'}{UTC}","processId":"%X{processId}","taskId":"%X{taskId}","logger":"%c{1}","message":"%enc{%m}{JSON}","stackTrace":"%enc{%throwable{full}}{JSON}"}%n</Property>
+        <Property name="JSON_LOG_PATTERN">{"level":"%p","time":"%d{yyyy-MM-dd'T'HH:mm:ss.SSS'Z'}{UTC}","processId":"%X{processId}","taskId":"%X{taskId}","thread":"%enc{%t}{JSON}","logger":"%c{1}","message":"%enc{%m}{JSON}","stackTrace":"%enc{%throwable{full}}{JSON}"}%n</Property>
     </Properties>
 
     <Appenders>
@@ -58,7 +58,10 @@
                 <Route>
                     <RollingFile name="CompactionTask-${ctx:processId}-${ctx:taskId}"
                                  fileName="${LOG_DIR}/${ctx:logFilePath}.log"
-                                 filePattern="${LOG_DIR}/${ctx:logFilePath}-%d{yyyy-MM-dd-HH}-%i.log.gz">
+                                 filePattern="${LOG_DIR}/${ctx:logFilePath}-%d{yyyy-MM-dd-HH}-%i.log.gz"
+                                 createOnDemand="true"
+                                 bufferedIO="false"
+                                 immediateFlush="true">
                         <PatternLayout pattern="${JSON_LOG_PATTERN}"/>
                         <Policies>
                             <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
@@ -73,6 +76,9 @@
                     </RollingFile>
                 </Route>
             </Routes>
+            <!-- Close the file of a process/task that stopped logging, otherwise a long lived
+                 optimizer holds an open descriptor for every compaction it has ever run. -->
+            <IdlePurgePolicy timeToLive="15" timeUnit="minutes"/>
         </Routing>
 
         <RollingFile name="OptimizerInfo"
@@ -104,6 +110,8 @@
     </Appenders>
 
     <Loggers>
+        <!-- Every logger routes to the per-process/task files by default; the loggers below only
+             tune levels and inherit these appenders. -->
         <Root level="info">
             <AppenderRef ref="RoutingAppender"/>
             <AppenderRef ref="OptimizerInfo" level="info"/>
@@ -111,32 +119,12 @@
             <AppenderRef ref="Console"/>
         </Root>
 
-        <Logger name="org.apache.amoro.optimizing" level="debug" additivity="false">
-            <AppenderRef ref="RoutingAppender"/>
-            <AppenderRef ref="OptimizerError" level="error"/>
-            <AppenderRef ref="Console"/>
-        </Logger>
+        <Logger name="org.apache.amoro.optimizing" level="debug"/>
+        <Logger name="org.apache.amoro.optimizer" level="debug"/>
 
-        <Logger name="org.apache.amoro.optimizer" level="debug" additivity="false">
-            <AppenderRef ref="RoutingAppender"/>
-            <AppenderRef ref="OptimizerError" level="error"/>
-            <AppenderRef ref="Console"/>
-        </Logger>
-
-        <Logger name="org.apache.hadoop.io.compress.CodecPool" level="warn" additivity="false">
-            <AppenderRef ref="OptimizerError" level="error"/>
-        </Logger>
-
-        <Logger name="org.apache.hadoop.metrics2" level="warn" additivity="false">
-            <AppenderRef ref="OptimizerError" level="error"/>
-        </Logger>
-
-        <Logger name="org.apache.parquet" level="warn" additivity="false">
-            <AppenderRef ref="OptimizerError" level="error"/>
-        </Logger>
-
-        <Logger name="org.apache.iceberg.avro" level="warn" additivity="false">
-            <AppenderRef ref="OptimizerError" level="error"/>
-        </Logger>
+        <Logger name="org.apache.hadoop.io.compress.CodecPool" level="warn"/>
+        <Logger name="org.apache.hadoop.metrics2" level="warn"/>
+        <Logger name="org.apache.parquet" level="warn"/>
+        <Logger name="org.apache.iceberg.avro" level="warn"/>
     </Loggers>
 </Configuration>
