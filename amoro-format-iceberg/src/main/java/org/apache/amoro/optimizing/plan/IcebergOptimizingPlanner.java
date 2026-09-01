@@ -14,8 +14,6 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
- * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.optimizing.plan;
@@ -53,12 +51,6 @@ public class IcebergOptimizingPlanner extends AbstractOptimizingPlanner {
         lastMinorOptimizingTime,
         lastFullOptimizingTime,
         lastMajorOptimizingTime);
-  }
-
-  // plan every partition for iceberg-only tables
-  @Override
-  protected double maxInputSize() {
-    return Double.MAX_VALUE;
   }
 
   @Override
