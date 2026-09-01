@@ -351,6 +351,9 @@ public class CommonPartitionEvaluator implements PartitionEvaluator {
     return necessary;
   }
 
+  // TODO: tables now plan all the partitions, so this cost logic is no longer needed.
+  // Keeping the cost functions and priority logic now as removing it brings a lot of changes.
+  // Need to remove it later on as it turns out to be: unnecessary logic.
   @Override
   public long getCost() {
     if (cost < 0) {
