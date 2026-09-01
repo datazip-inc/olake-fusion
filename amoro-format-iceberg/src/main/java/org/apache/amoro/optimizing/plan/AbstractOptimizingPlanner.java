@@ -208,7 +208,8 @@ public abstract class AbstractOptimizingPlanner extends AbstractOptimizingEvalua
   // max input for a single run
   //
   // for iceberg-only tables: it will get overriden with "Double.MAX_VALUE"
-  // keeping it this for now: for non-iceberg-only tables.
+  // keeping it this for now for non-iceberg-only tables, as removing it
+  // will create a lot of dead code
   // TODO: either drop non-iceberg-only tables or make it similar for all
   protected double maxInputSize() {
     return maxInputSizePerThread * availableCore;
