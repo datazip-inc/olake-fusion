@@ -103,6 +103,13 @@ public class OptimizingQueue extends PersistentBase {
 
   private static final Logger LOG = LoggerFactory.getLogger(OptimizingQueue.class);
 
+  // why: we insert task runtimes (subtask entries) into db (postgres),
+  // it hits the maximum limit of tuples at 65535.
+  // so, we run the INSERT query in batches (but in a single transaction, rollback on fail)
+  //
+  // case: more than 4681 subtasks created, pg limit : 14 * 4681 almost 65535
+  private static final int TASK_RUNTIME_INSERT_BATCH_SIZE = 4000;
+
   private final QuotaProvider quotaProvider;
   private final Queue<TableOptimizingProcess> tableQueue = new LinkedTransferQueue<>();
   private final SchedulingPolicy scheduler;
@@ -878,9 +885,12 @@ public class OptimizingQueue extends PersistentBase {
                           fromSequence,
                           toSequence)),
           () ->
-              doAs(
-                  OptimizingProcessMapper.class,
-                  mapper -> mapper.insertTaskRuntimes(Lists.newArrayList(taskMap.values()))),
+              Lists.partition(Lists.newArrayList(taskMap.values()), TASK_RUNTIME_INSERT_BATCH_SIZE)
+                  .forEach(
+                      taskRuntimes ->
+                          doAs(
+                              OptimizingProcessMapper.class,
+                              mapper -> mapper.insertTaskRuntimes(taskRuntimes))),
           () -> TaskFilesPersistence.persistTaskInputs(processId, taskMap.values()),
           () -> tableRuntime.beginProcess(this));
     }
