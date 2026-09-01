@@ -53,6 +53,12 @@ public class IcebergOptimizingPlanner extends AbstractOptimizingPlanner {
         lastMajorOptimizingTime);
   }
 
+  // plan every partition for iceberg-only tables
+  @Override
+  protected double maxInputSize() {
+    return Double.MAX_VALUE;
+  }
+
   @Override
   protected PartitionEvaluator buildEvaluator(Pair<Integer, StructLike> partition) {
     return new IcebergPartitionPlan(

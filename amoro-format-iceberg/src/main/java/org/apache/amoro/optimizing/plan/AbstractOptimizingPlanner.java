@@ -157,7 +157,7 @@ public abstract class AbstractOptimizingPlanner extends AbstractOptimizingEvalua
     // prioritize partitions with high cost to avoid starvation
     evaluators.sort(Comparator.comparing(PartitionEvaluator::getWeight, Comparator.reverseOrder()));
 
-    double maxInputSize = maxInputSizePerThread * availableCore;
+    double maxInputSize = maxInputSize();
     actualPartitionPlans = Lists.newArrayList();
     long actualInputSize = 0;
     List<RewriteStageTask> plannedTasks = Lists.newArrayList();
@@ -201,6 +201,15 @@ public abstract class AbstractOptimizingPlanner extends AbstractOptimizingEvalua
         maxInputSize,
         actualInputSize);
     return cacheAndReturnTasks(plannedTasks);
+  }
+
+  // max input for a single run
+  //
+  // for iceberg-only tables: it will get overriden with "Double.MAX_VALUE"
+  // keeping it this for now: for non-iceberg-only tables.
+  // TODO: either drop non-iceberg-only tables or make it similar for all
+  protected double maxInputSize() {
+    return maxInputSizePerThread * availableCore;
   }
 
   private List<RewriteStageTask> cacheAndReturnTasks(List<RewriteStageTask> tasks) {

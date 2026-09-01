@@ -351,6 +351,10 @@ public class CommonPartitionEvaluator implements PartitionEvaluator {
     return necessary;
   }
 
+  // TODO: Iceberg-only tables now plan all the partitions, so this cost no longer needed.
+  // Keeping the cost functions and priority logic now as removing it brings a lot of changes for
+  // Mixed-Iceberg and Mixed-Hive.
+  // We need to remove it later on as it turns out to be: dead code.
   @Override
   public long getCost() {
     if (cost < 0) {
