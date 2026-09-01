@@ -196,13 +196,13 @@ public abstract class AbstractOptimizingPlanner extends AbstractOptimizingEvalua
     }
     long endTime = System.nanoTime();
     LOG.info(
-        "{} finish plan, type = {}, get {} tasks, cost {} ns, {} ms maxInputSize {} actualInputSize {}",
+        "{} finish plan, type = {}, get {} tasks from {} partitions, cost {} ns, {} ms actualInputSize {}",
         identifier,
         getOptimizingType(),
         plannedTasks.size(),
+        actualPartitionPlans.size(),
         endTime - startTime,
         (endTime - startTime) / 1_000_000,
-        maxInputSize,
         actualInputSize);
     return cacheAndReturnTasks(plannedTasks);
   }
