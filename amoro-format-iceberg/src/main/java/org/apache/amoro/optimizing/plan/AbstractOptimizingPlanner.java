@@ -159,7 +159,9 @@ public abstract class AbstractOptimizingPlanner extends AbstractOptimizingEvalua
     // prioritize partitions with high cost to avoid starvation
     evaluators.sort(Comparator.comparing(PartitionEvaluator::getWeight, Comparator.reverseOrder()));
 
-    double maxInputSize = maxInputSize();
+    // max input for a single run
+    // TODO: maxInputSizePerThread is dead code now. Clean it up later from everywhere.
+    double maxInputSize = Double.MAX_VALUE;
     actualPartitionPlans = Lists.newArrayList();
     long actualInputSize = 0;
     List<RewriteStageTask> plannedTasks = Lists.newArrayList();
@@ -203,13 +205,6 @@ public abstract class AbstractOptimizingPlanner extends AbstractOptimizingEvalua
         maxInputSize,
         actualInputSize);
     return cacheAndReturnTasks(plannedTasks);
-  }
-
-  // max input for a single run
-  //
-  // TODO: maxInputSizePerThread is dead code now. Clean it up later from everywhere.
-  protected double maxInputSize() {
-    return Double.MAX_VALUE;
   }
 
   private List<RewriteStageTask> cacheAndReturnTasks(List<RewriteStageTask> tasks) {
