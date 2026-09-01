@@ -207,7 +207,7 @@ public abstract class AbstractOptimizingPlanner extends AbstractOptimizingEvalua
 
   // max input for a single run
   //
-  // TODO: maxInputSizePerThread is dead code. Clean it up later from everywhere.
+  // TODO: maxInputSizePerThread is dead code now. Clean it up later from everywhere.
   protected double maxInputSize() {
     return Double.MAX_VALUE;
   }
