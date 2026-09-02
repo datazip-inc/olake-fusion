@@ -31,6 +31,15 @@ ams:
     optimizing-service:
       bind-port: 1261
 
+  ## Anonymous usage telemetry. Set to true to turn it off; telemetry is also off when the
+  ## TELEMETRY_DISABLED=true environment variable is set, the same variable the OLake UI reads.
+  ## The anonymous install id is owned by the OLake UI, which pushes it to
+  ## PUT /api/ams/v1/telemetry/install-id, and AMS keeps it in the platform_property table.
+  ## Deployments upgraded from an older version can still seed it from $OLAKE_TELEMETRY_DIR/user_id
+  ## (default /tmp/olake-config/telemetry).
+  telemetry:
+    disabled: false
+
   http-server:
     session-timeout: 7d
     bind-port: 1630

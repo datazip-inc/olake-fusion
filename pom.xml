@@ -1538,6 +1538,10 @@
                     <version>${maven-surefire-plugin.version}</version>
                     <configuration>
                         <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
+                        <environmentVariables>
+                            <!-- Test runs must never report usage telemetry. -->
+                            <TELEMETRY_DISABLED>true</TELEMETRY_DISABLED>
+                        </environmentVariables>
                     </configuration>
                 </plugin>
                 <plugin>

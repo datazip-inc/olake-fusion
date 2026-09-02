@@ -61,6 +61,7 @@ import org.apache.amoro.server.table.TableManager;
 import org.apache.amoro.server.table.TableRuntimeFactoryManager;
 import org.apache.amoro.server.table.TableService;
 import org.apache.amoro.server.terminal.TerminalManager;
+import org.apache.amoro.server.utils.Telemetry;
 import org.apache.amoro.server.utils.ThriftServiceProxy;
 import org.apache.amoro.shade.guava32.com.google.common.annotations.VisibleForTesting;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Maps;
@@ -91,6 +92,7 @@ import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -107,6 +109,8 @@ public class AmoroServiceContainer {
   private static boolean IS_MASTER_SLAVE_MODE = false;
   private static volatile Map<String, Object> SPARK_CONFIG = Map.of();
   private static final String NOT_AVAILABLE = "NA";
+  private static final String SPARK_CONTAINER_IMPL =
+      "org.apache.amoro.server.manager.SparkOptimizerContainer";
 
   private final HighAvailabilityContainer haContainer;
   private DataSource dataSource;
@@ -329,6 +333,7 @@ public class AmoroServiceContainer {
     LOG.info("initializing configurations...");
     new ConfigurationHelper().init();
     IS_MASTER_SLAVE_MODE = serviceConfig.getBoolean(USE_MASTER_SLAVE_MODE);
+    Telemetry.configure(serviceConfig.getBoolean(AmoroManagementConf.TELEMETRY_DISABLED));
   }
 
   public Configurations getServiceConfig() {
@@ -341,20 +346,19 @@ public class AmoroServiceContainer {
 
   private static Map<String, Object> resolveSparkConfig(
       Map<String, String> sparkContainerProperties) {
+    Map<String, String> properties =
+        sparkContainerProperties == null ? Collections.emptyMap() : sparkContainerProperties;
     Map<String, Object> sparkConfigMap = new HashMap<>();
-    if (sparkContainerProperties == null || sparkContainerProperties.isEmpty()) {
-      return sparkConfigMap;
-    }
     sparkConfigMap.put(
         "spark_driver_memory",
-        sparkContainerProperties.getOrDefault("spark-conf.spark.driver.memory", NOT_AVAILABLE));
+        properties.getOrDefault("spark-conf.spark.driver.memory", NOT_AVAILABLE));
     sparkConfigMap.put(
         "spark_executor_memory",
-        sparkContainerProperties.getOrDefault("spark-conf.spark.executor.memory", NOT_AVAILABLE));
+        properties.getOrDefault("spark-conf.spark.executor.memory", NOT_AVAILABLE));
     sparkConfigMap.put(
         "spark_executor_cores",
-        sparkContainerProperties.getOrDefault("spark-conf.spark.executor.cores", NOT_AVAILABLE));
-    return sparkConfigMap;
+        properties.getOrDefault("spark-conf.spark.executor.cores", NOT_AVAILABLE));
+    return Collections.unmodifiableMap(sparkConfigMap);
   }
 
   private void startThriftService() {
@@ -638,8 +642,11 @@ public class AmoroServiceContainer {
           // put addition system properties
           container.setProperties(containerProperties);
           containerList.add(container);
-          if ("org.apache.amoro.server.manager.SparkOptimizerContainer"
-              .equals(container.getImplClass())) {
+          if (SPARK_CONTAINER_IMPL.equals(container.getImplClass())) {
+            if (sparkContainerProperties != null) {
+              LOG.warn(
+                  "Multiple Spark optimizer containers configured, telemetry reports the last one");
+            }
             sparkContainerProperties = containerProperties;
           }
         }

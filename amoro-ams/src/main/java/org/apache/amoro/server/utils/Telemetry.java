@@ -22,6 +22,7 @@ package org.apache.amoro.server.utils;
 
 import org.apache.amoro.optimizing.OptimizingType;
 import org.apache.amoro.server.AmoroServiceContainer;
+import org.apache.amoro.server.persistence.PlatformPropertyStore;
 import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -33,11 +34,9 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
@@ -45,9 +44,28 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 
+/**
+ * Fire-and-forget usage telemetry.
+ *
+ * <p>Contract: no method of this class ever throws, blocks the calling thread, or changes the
+ * behaviour of the code it is called from. Every public {@code track*} method builds its payload
+ * and hands it to a dedicated single-threaded daemon executor with a bounded queue; when the queue
+ * is full events are dropped rather than queued or retried.
+ *
+ * <p>Telemetry is turned off by the {@code TELEMETRY_DISABLED=true} environment variable or by the
+ * {@code telemetry.disabled: true} AMS configuration option.
+ *
+ * <p>The install id identifies one OLake deployment across all of its products. The OLake UI owns
+ * it and pushes it to AMS, which keeps it in {@code platform_property}; see {@link #resolveUserID}
+ * for the full resolution order.
+ */
 public class Telemetry {
   private static final Logger LOG = LoggerFactory.getLogger(Telemetry.class);
 
@@ -55,18 +73,45 @@ public class Telemetry {
   private static final String IPINFO_URL = "https://ipinfo.io/";
   private static final String IPIFY_URL = "https://api.ipify.org?format=text";
   private static final String NOT_FOUND_PLACEHOLDER = "NA";
-  private static final String SHARED_USER_ID_FILE = "/tmp/olake-config/telemetry/user_id";
+
+  private static final String TELEMETRY_DISABLED_ENV = "TELEMETRY_DISABLED";
+  /**
+   * Directory holding the anonymous install id. Override it with {@code OLAKE_TELEMETRY_DIR} so
+   * that deployments can point it at a persistent volume; without a persistent location a new
+   * install id is generated on every restart.
+   */
+  private static final String TELEMETRY_DIR_ENV = "OLAKE_TELEMETRY_DIR";
+
+  private static final String DEFAULT_TELEMETRY_DIR = "/tmp/olake-config/telemetry";
+  private static final String USER_ID_FILE_NAME = "user_id";
+  private static final int MAX_INSTALL_ID_LENGTH = 128;
+  /** How long to wait before looking the install id up again while it is not stored yet. */
+  private static final long INSTALL_ID_RETRY_INTERVAL_MS = 60_000L;
 
   private static final long TIMEOUT_SECONDS = 10L;
+  /** Bounded so that a slow or unreachable collector can never accumulate work. */
+  private static final int MAX_PENDING_EVENTS = 256;
+
+  /** Set from the AMS configuration; {@code null} means "not configured, fall back to the env". */
+  private static volatile Boolean configuredDisabled;
 
   private final HttpClient httpClient;
   private final ObjectMapper objectMapper;
+  private final Executor executor;
   private final CompletableFuture<Void> initFuture;
 
   private volatile String ipAddress = NOT_FOUND_PLACEHOLDER;
   private volatile PlatformInfo platform;
   private volatile LocationInfo locationInfo;
   private volatile String userID;
+  /**
+   * False while {@link #userID} is a throwaway id, so later events keep looking for the real one.
+   */
+  private volatile boolean userIDDurable;
+
+  private final PlatformPropertyStore propertyStore = new PlatformPropertyStore();
+
+  private volatile long nextInstallIdLookupAt;
 
   public record PlatformInfo(String os, String arch, String deviceCpu) {}
 
@@ -82,20 +127,71 @@ public class Telemetry {
     return InstanceHolder.INSTANCE;
   }
 
-  private Telemetry() {
-    this.httpClient =
-        HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(TIMEOUT_SECONDS)).build();
-    this.objectMapper = new ObjectMapper();
-    this.platform = gatherPlatformInfo();
-    this.locationInfo = unknownLocation();
-    try {
-      if (!isTelemetryDisabled()) {
-        this.userID = resolveUserID();
-      }
-    } catch (Throwable t) {
-      LOG.debug("Failed to resolve user ID: {}", t.getMessage());
+  /**
+   * Applies the AMS configuration. Called once while the server boots, before any event is tracked.
+   */
+  public static void configure(boolean disabled) {
+    configuredDisabled = disabled;
+    if (disabled) {
+      LOG.info("Telemetry is disabled by configuration");
     }
-    this.initFuture = initAsync();
+  }
+
+  /**
+   * Nothing here may throw. Callers reach the singleton from a {@code finally} block, where an
+   * {@link ExceptionInInitializerError} would replace the outcome of the work being tracked; a
+   * telemetry object that failed to build simply reports nothing.
+   */
+  private Telemetry() {
+    HttpClient client = null;
+    ObjectMapper mapper = null;
+    Executor telemetryExecutor = null;
+    CompletableFuture<Void> init = null;
+    try {
+      client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(TIMEOUT_SECONDS)).build();
+      mapper = new ObjectMapper();
+      telemetryExecutor = newTelemetryExecutor();
+      this.platform = gatherPlatformInfo();
+      this.locationInfo = unknownLocation();
+    } catch (Throwable t) {
+      LOG.debug("Failed to set up telemetry, no events will be reported: {}", t.getMessage());
+    }
+    this.httpClient = client;
+    this.objectMapper = mapper;
+    this.executor = telemetryExecutor;
+    // The install id lives in the database, so it is resolved on the telemetry thread when the
+    // first event is dispatched rather than here, where the data source may not be up yet.
+    if (telemetryExecutor != null) {
+      try {
+        init = initAsync();
+      } catch (Throwable t) {
+        LOG.debug("Failed to start telemetry context lookup: {}", t.getMessage());
+      }
+    }
+    this.initFuture = init;
+  }
+
+  /**
+   * A single daemon thread with a bounded queue. Telemetry must never borrow threads from {@link
+   * java.util.concurrent.ForkJoinPool#commonPool()}, which the rest of the JVM shares, because the
+   * context lookups below are blocking calls.
+   */
+  private static Executor newTelemetryExecutor() {
+    ThreadPoolExecutor pool =
+        new ThreadPoolExecutor(
+            1,
+            1,
+            0L,
+            TimeUnit.MILLISECONDS,
+            new ArrayBlockingQueue<>(MAX_PENDING_EVENTS),
+            runnable -> {
+              Thread thread = new Thread(runnable, "olake-telemetry");
+              thread.setDaemon(true);
+              return thread;
+            },
+            new ThreadPoolExecutor.DiscardPolicy());
+    pool.allowCoreThreadTimeOut(false);
+    return pool;
   }
 
   private static LocationInfo unknownLocation() {
@@ -103,11 +199,11 @@ public class Telemetry {
   }
 
   public boolean isTelemetryDisabled() {
-    String disabledEnv = System.getenv("TELEMETRY_DISABLED");
+    String disabledEnv = System.getenv(TELEMETRY_DISABLED_ENV);
     if (disabledEnv != null && Boolean.parseBoolean(disabledEnv)) {
       return true;
     }
-    return false;
+    return Boolean.TRUE.equals(configuredDisabled);
   }
 
   private CompletableFuture<Void> initAsync() {
@@ -122,7 +218,8 @@ public class Telemetry {
               } catch (Throwable t) {
                 LOG.debug("Failed to initialize telemetry context: {}", t.getMessage());
               }
-            })
+            },
+            executor)
         .completeOnTimeout(null, 2 * TIMEOUT_SECONDS, TimeUnit.SECONDS);
   }
 
@@ -175,25 +272,113 @@ public class Telemetry {
     return new PlatformInfo(os, arch, cores + " cores");
   }
 
+  private static Path userIdFile() {
+    String dir = System.getenv(TELEMETRY_DIR_ENV);
+    if (dir == null || dir.trim().isEmpty()) {
+      dir = DEFAULT_TELEMETRY_DIR;
+    }
+    return Paths.get(dir, USER_ID_FILE_NAME);
+  }
+
+  /**
+   * Resolves the install id, in order:
+   *
+   * <ol>
+   *   <li>{@code platform_property}, where the OLake UI pushes the id it owns;
+   *   <li>the shared {@code user_id} file, when an older OLake deployment mounts one;
+   *   <li>a generated id.
+   * </ol>
+   *
+   * <p>The last two are written back to {@code platform_property} so the id survives restarts even
+   * when the UI never pushes one, for instance because telemetry is off on the UI side. A push from
+   * the UI overwrites whatever is stored, so AMS choosing an id on its own cannot win permanently.
+   *
+   * <p>Until an id has been stored, every event retries the lookup, throttled to one attempt per
+   * {@link #INSTALL_ID_RETRY_INTERVAL_MS} so a degraded database is not queried per event.
+   */
   private String resolveUserID() {
-    String fromFile = readSharedUserID();
-    if (fromFile != null) {
-      this.userID = fromFile;
-      return fromFile;
+    String cached = this.userID;
+    long now = System.currentTimeMillis();
+    if (cached != null && now < nextInstallIdLookupAt) {
+      return cached;
+    }
+    nextInstallIdLookupAt = now + INSTALL_ID_RETRY_INTERVAL_MS;
+
+    String fromDb = readInstallIdFromDb();
+    if (fromDb != null) {
+      this.userID = fromDb;
+      this.userIDDurable = true;
+      return fromDb;
     }
 
-    if (this.userID != null) {
-      return this.userID;
+    if (cached != null) {
+      // Keep reporting under the id this process already picked, and try to make it durable.
+      return adoptInstallId(cached);
     }
 
-    // fallback
-    String effective = persistUserID(generateUserID());
+    String resolved = readSharedUserID();
+    if (resolved == null) {
+      resolved = generateUserID();
+      LOG.debug("No OLake install id found, generated one for this deployment");
+    }
+    String effective = adoptInstallId(resolved);
     this.userID = effective;
     return effective;
   }
 
+  private String readInstallIdFromDb() {
+    try {
+      String stored = propertyStore.get(PlatformPropertyStore.TELEMETRY_INSTALL_ID);
+      return stored == null || stored.isEmpty() ? null : stored;
+    } catch (Throwable t) {
+      // Missing table on a database whose migrations have not run, or no data source at all.
+      LOG.debug("Failed to read telemetry install id from the database: {}", t.getMessage());
+      return null;
+    }
+  }
+
+  /** Persists an id resolved outside the database and returns the value that ended up stored. */
+  private String adoptInstallId(String id) {
+    try {
+      String effective = propertyStore.putIfAbsent(PlatformPropertyStore.TELEMETRY_INSTALL_ID, id);
+      this.userIDDurable = true;
+      return effective;
+    } catch (Throwable t) {
+      LOG.debug("Failed to persist telemetry install id: {}", t.getMessage());
+      return id;
+    }
+  }
+
+  /**
+   * Applies the install id pushed by the OLake UI. The UI owns this id, so it overwrites whatever
+   * AMS resolved on its own.
+   */
+  public String applyInstallId(String id) {
+    String normalized = normalizeInstallId(id);
+    propertyStore.put(PlatformPropertyStore.TELEMETRY_INSTALL_ID, normalized);
+    this.userID = normalized;
+    this.userIDDurable = true;
+    return normalized;
+  }
+
+  private static String normalizeInstallId(String id) {
+    String normalized = id == null ? "" : id.trim();
+    if (normalized.isEmpty()) {
+      throw new IllegalArgumentException("Install id is empty");
+    }
+    if (normalized.length() > MAX_INSTALL_ID_LENGTH) {
+      throw new IllegalArgumentException(
+          "Install id is longer than " + MAX_INSTALL_ID_LENGTH + " characters");
+    }
+    if (!normalized.matches("[A-Za-z0-9_-]+")) {
+      throw new IllegalArgumentException(
+          "Install id may only contain letters, digits, '-' and '_'");
+    }
+    return normalized;
+  }
+
   private String readSharedUserID() {
-    Path shared = Paths.get(SHARED_USER_ID_FILE);
+    Path shared = userIdFile();
     try {
       if (Files.exists(shared)) {
         String id = Files.readString(shared, StandardCharsets.UTF_8).trim().replace("\"", "");
@@ -205,23 +390,6 @@ public class Telemetry {
       LOG.debug("Failed to read shared telemetry user id at {}: {}", shared, e.getMessage());
     }
     return null;
-  }
-
-  private String persistUserID(String id) {
-    Path shared = Paths.get(SHARED_USER_ID_FILE);
-    try {
-      Files.createDirectories(shared.getParent());
-      Files.writeString(shared, id, StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW);
-    } catch (FileAlreadyExistsException e) {
-      String existing = readSharedUserID();
-      if (existing != null) {
-        LOG.debug("Adopting telemetry user id already present at {}", shared);
-        return existing;
-      }
-    } catch (IOException e) {
-      LOG.debug("Failed to persist generated telemetry user id at {}: {}", shared, e.getMessage());
-    }
-    return id;
   }
 
   private String generateUserID() {
@@ -238,21 +406,27 @@ public class Telemetry {
     }
   }
 
-  private void sendEvent(String eventName, Map<String, Object> props) {
-    if (isTelemetryDisabled()) {
-      return;
-    }
-
+  /**
+   * Single entry point for every event. The payload is built lazily inside the guard so that
+   * neither payload construction nor dispatch can propagate a failure to the caller.
+   */
+  private void sendEvent(String eventName, Supplier<Map<String, Object>> propsSupplier) {
     try {
-      Map<String, Object> snapshot = new HashMap<>(props);
-      initFuture.thenRunAsync(() -> dispatchEvent(eventName, snapshot));
+      if (isTelemetryDisabled() || initFuture == null || executor == null) {
+        return;
+      }
+      Map<String, Object> snapshot = new HashMap<>(propsSupplier.get());
+      initFuture.thenRunAsync(() -> dispatchEvent(eventName, snapshot), executor);
     } catch (Throwable t) {
-      LOG.debug("Telemetry dispatch scheduling failed: {}", t.getMessage());
+      LOG.debug("Telemetry dispatch scheduling failed for {}: {}", eventName, t.getMessage());
     }
   }
 
   private void dispatchEvent(String eventName, Map<String, Object> props) {
     try {
+      if (httpClient == null || objectMapper == null) {
+        return;
+      }
       PlatformInfo p = platform != null ? platform : gatherPlatformInfo();
       LocationInfo loc = locationInfo != null ? locationInfo : unknownLocation();
       Map<String, Object> enrichedProperties = new HashMap<>(props);
@@ -261,7 +435,7 @@ public class Telemetry {
       enrichedProperties.put("num_cpu", p.deviceCpu());
       enrichedProperties.put("ip_address", ipAddress);
       enrichedProperties.put("location", loc);
-      enrichedProperties.put("distinct_id", userID != null ? userID : resolveUserID());
+      enrichedProperties.put("distinct_id", userIDDurable ? userID : resolveUserID());
       enrichedProperties.put("time", System.currentTimeMillis() / 1000L);
       enrichedProperties.put("event_original_name", eventName);
 
@@ -292,63 +466,76 @@ public class Telemetry {
     }
   }
 
-  private String optimizationTypeHelper(String optimizationTypeName) {
-    if (optimizationTypeName.equals("MINOR")) {
-      return "LITE";
-    } else if (optimizationTypeName.equals("MAJOR")) {
-      return "MEDIUM";
-    } else {
-      return optimizationTypeName;
+  private String optimizationTypeHelper(OptimizingType optimizationType) {
+    if (optimizationType == null) {
+      return NOT_FOUND_PLACEHOLDER;
+    }
+    switch (optimizationType) {
+      case MINOR:
+        return "LITE";
+      case MAJOR:
+        return "MEDIUM";
+      default:
+        return optimizationType.name();
     }
   }
 
   public void trackOptimizationStarted(OptimizingType optimizationType, long tableSize) {
-    Map<String, Object> props = new HashMap<>();
-    props.put("optimization_type", optimizationTypeHelper(optimizationType.name()));
-    props.put("table_size", tableSize);
-    props.putAll(AmoroServiceContainer.getSparkConfig());
-    sendEvent("Optimization Started - Fusion", props);
+    sendEvent(
+        "Optimization Started - Fusion",
+        () -> {
+          Map<String, Object> props = new HashMap<>(AmoroServiceContainer.getSparkConfig());
+          props.put("optimization_type", optimizationTypeHelper(optimizationType));
+          props.put("table_size", tableSize);
+          return props;
+        });
   }
 
   public void trackOptimizationCompleted(
       OptimizingType optimizationType,
-      Long tableSize,
+      long tableSize,
       String status,
       long duration,
       int optimizerParallelism) {
-    Map<String, Object> props = new HashMap<>();
-    props.put("optimization_type", optimizationTypeHelper(optimizationType.name()));
-    props.putAll(AmoroServiceContainer.getSparkConfig());
-    props.put("table_size", tableSize);
-    props.put("optimization_status", status);
-    props.put("duration_ms", duration);
-    props.put("optimizer_parallelism", optimizerParallelism);
-
-    sendEvent("Optimization Completed - Fusion", props);
+    sendEvent(
+        "Optimization Completed - Fusion",
+        () -> {
+          Map<String, Object> props = new HashMap<>(AmoroServiceContainer.getSparkConfig());
+          props.put("optimization_type", optimizationTypeHelper(optimizationType));
+          props.put("table_size", tableSize);
+          props.put("optimization_status", status);
+          props.put("duration_ms", duration);
+          props.put("optimizer_parallelism", optimizerParallelism);
+          return props;
+        });
   }
 
   public void trackCatalogCreated(String catalogType, boolean imported, boolean success) {
-    Map<String, Object> props = new HashMap<>();
-    props.put("catalog_type", catalogType);
-    props.put("imported_from_destination", imported);
-    props.put("success", success);
-    sendEvent("Catalog Created - Fusion", props);
+    sendEvent("Catalog Created - Fusion", () -> catalogProps(catalogType, imported, success));
   }
 
   public void trackCatalogUpdated(String catalogType, boolean imported, boolean success) {
+    sendEvent("Catalog Updated - Fusion", () -> catalogProps(catalogType, imported, success));
+  }
+
+  private Map<String, Object> catalogProps(String catalogType, boolean imported, boolean success) {
     Map<String, Object> props = new HashMap<>();
     props.put("catalog_type", catalogType);
     props.put("imported_from_destination", imported);
     props.put("success", success);
-    sendEvent("Catalog Updated - Fusion", props);
+    return props;
   }
 
   public void trackInstalledFusion(int optimizerParallelism) {
-    Map<String, Object> props = new HashMap<>();
-    props.putAll(AmoroServiceContainer.getSparkConfig());
-    props.put("optimizer_parallelism", optimizerParallelism);
-    props.put(
-        "deployment_mode", System.getenv("KUBERNETES_SERVICE_HOST") != null ? "HELM" : "DOCKER");
-    sendEvent("Installed Fusion", props);
+    sendEvent(
+        "Installed Fusion",
+        () -> {
+          Map<String, Object> props = new HashMap<>(AmoroServiceContainer.getSparkConfig());
+          props.put("optimizer_parallelism", optimizerParallelism);
+          props.put(
+              "deployment_mode",
+              System.getenv("KUBERNETES_SERVICE_HOST") != null ? "HELM" : "DOCKER");
+          return props;
+        });
   }
 }
