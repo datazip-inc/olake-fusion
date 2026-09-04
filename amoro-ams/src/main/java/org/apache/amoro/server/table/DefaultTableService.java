@@ -492,7 +492,11 @@ public class DefaultTableService extends PersistentBase implements TableService 
       }
     }
 
-    Map<String, String> properties = table.properties();
+    // Same overlay as DefaultTableRuntime.refresh, so the very first table_runtime row already
+    // carries the AMS-owned settings rather than a config that is corrected a tick later.
+    Map<String, String> properties =
+        TableOptimizingSettingsService.getInstance()
+            .overlay(serverTableIdentifier, table.properties());
     TableRuntimeMeta meta = new TableRuntimeMeta();
     meta.setTableId(serverTableIdentifier.getId());
     meta.setTableConfig(properties);

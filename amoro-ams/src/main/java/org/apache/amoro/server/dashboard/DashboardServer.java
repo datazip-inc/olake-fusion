@@ -49,6 +49,7 @@ import org.apache.amoro.server.dashboard.controller.LogController;
 import org.apache.amoro.server.dashboard.controller.LoginController;
 import org.apache.amoro.server.dashboard.controller.OptimizerController;
 import org.apache.amoro.server.dashboard.controller.OptimizerGroupController;
+import org.apache.amoro.server.dashboard.controller.OptimizingSettingsController;
 import org.apache.amoro.server.dashboard.controller.OverviewController;
 import org.apache.amoro.server.dashboard.controller.PlatformFileInfoController;
 import org.apache.amoro.server.dashboard.controller.SettingController;
@@ -89,6 +90,7 @@ public class DashboardServer {
   private final PlatformFileInfoController platformFileInfoController;
   private final SettingController settingController;
   private final TableController tableController;
+  private final OptimizingSettingsController optimizingSettingsController;
   private final TerminalController terminalController;
   private final VersionController versionController;
   private final OverviewController overviewController;
@@ -118,6 +120,8 @@ public class DashboardServer {
         new ServerTableDescriptor(catalogManager, tableManager, serviceConfig);
     this.tableController =
         new TableController(catalogManager, tableManager, tableDescriptor, serviceConfig);
+    this.optimizingSettingsController =
+        new OptimizingSettingsController(catalogManager, tableManager);
     this.terminalController = new TerminalController(terminalManager);
     this.versionController = new VersionController();
     OverviewManager manager = new OverviewManager(serviceConfig);
@@ -301,6 +305,12 @@ public class DashboardServer {
           "/catalogs",
           () -> {
             get("/{catalog}/databases/{db}/tables", tableController::getTableList);
+            get(
+                "/{catalog}/databases/{db}/optimizing-settings",
+                optimizingSettingsController::getDatabaseSettings);
+            put(
+                "/{catalog}/databases/{db}/optimizing-settings",
+                optimizingSettingsController::updateSettings);
             get("/{catalog}/databases", tableController::getDatabaseList);
             get("", tableController::getCatalogs);
             post("", catalogController::createCatalog);

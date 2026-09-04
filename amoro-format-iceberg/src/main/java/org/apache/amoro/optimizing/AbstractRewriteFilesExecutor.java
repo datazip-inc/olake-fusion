@@ -192,6 +192,15 @@ public abstract class AbstractRewriteFilesExecutor
   }
 
   protected long targetSize() {
+    // Prefer what the planner planned with: AMS may resolve the target size from its own database,
+    // in which case the table properties visible here still carry the old value. Falls back to the
+    // table for tasks planned before this was shipped, and by older AMS versions.
+    if (properties != null && properties.containsKey(TaskProperties.TARGET_SIZE)) {
+      return PropertyUtil.propertyAsLong(
+          properties,
+          TaskProperties.TARGET_SIZE,
+          TableProperties.SELF_OPTIMIZING_TARGET_SIZE_DEFAULT);
+    }
     return PropertyUtil.propertyAsLong(
         table.properties(),
         TableProperties.SELF_OPTIMIZING_TARGET_SIZE,

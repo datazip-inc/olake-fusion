@@ -33,6 +33,7 @@ import org.apache.amoro.server.persistence.mapper.PlatformFileMapper;
 import org.apache.amoro.server.persistence.mapper.ResourceMapper;
 import org.apache.amoro.server.persistence.mapper.TableBlockerMapper;
 import org.apache.amoro.server.persistence.mapper.TableMetaMapper;
+import org.apache.amoro.server.persistence.mapper.TableOptimizingSettingsMapper;
 import org.apache.amoro.server.persistence.mapper.TableProcessMapper;
 import org.apache.amoro.server.persistence.mapper.TableRuntimeMapper;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
@@ -75,6 +76,7 @@ public class SqlSessionFactoryProvider {
     configuration.addMapper(TableBlockerMapper.class);
     configuration.addMapper(TableProcessMapper.class);
     configuration.addMapper(TableRuntimeMapper.class);
+    configuration.addMapper(TableOptimizingSettingsMapper.class);
     configuration.addMapper(HaLeaseMapper.class);
 
     PageInterceptor interceptor = new PageInterceptor();

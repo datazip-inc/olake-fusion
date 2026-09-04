@@ -31,6 +31,7 @@ import org.apache.amoro.server.optimizing.OptimizingProcess;
 import org.apache.amoro.server.optimizing.OptimizingStatus;
 import org.apache.amoro.server.scheduler.PeriodicTableScheduler;
 import org.apache.amoro.server.table.DefaultTableRuntime;
+import org.apache.amoro.server.table.TableOptimizingSettingsService;
 import org.apache.amoro.server.table.TableService;
 import org.apache.amoro.server.utils.IcebergTableUtil;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
@@ -108,6 +109,9 @@ public class TableRuntimeRefreshExecutor extends PeriodicTableScheduler {
       DefaultTableRuntime defaultTableRuntime = (DefaultTableRuntime) tableRuntime;
 
       AmoroTable<?> table = loadTable(tableRuntime);
+      // One-time: move settings the table still carries in its own metadata into the AMS database.
+      TableOptimizingSettingsService.getInstance()
+          .adoptTableProperties(tableRuntime.getTableIdentifier(), table);
       defaultTableRuntime.refresh(table);
 
       MixedTable mixedTable = (MixedTable) table.originalTable();

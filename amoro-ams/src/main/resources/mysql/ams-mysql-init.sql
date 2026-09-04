@@ -281,3 +281,8 @@ CREATE TABLE IF NOT EXISTS ha_lease (
   KEY `idx_ha_lease_expire` (lease_expire_ts) COMMENT 'Index for querying expired leases',
   KEY `idx_ha_lease_node` (node_id) COMMENT 'Index for querying leases by node ID'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='HA lease table for leader election and heartbeat renewal';
+
+-- TODO: add the `table_optimizing_settings` table here when MySQL is supported. Only Postgres
+-- (and Derby, which backs the embedded default and the tests) carries it today. See
+-- postgres/ams-postgres-init.sql for the reference DDL; MySQL needs `tinyint(1)` for the boolean,
+-- `AUTO_INCREMENT` for the id and inline COMMENT clauses instead of `COMMENT ON`.

@@ -214,6 +214,36 @@ comment on column table_runtime_state.state_version is 'Table runtime state vers
 comment on column table_runtime_state.create_time is 'create time';
 comment on column table_runtime_state.update_time is 'update time';
 
+create table if not exists table_optimizing_settings (
+    setting_id                bigserial primary key,
+    catalog_name              varchar(64) not null,
+    db_name                   varchar(128) not null,
+    table_name                varchar(256) not null,
+    self_optimizing_enabled   boolean default null,
+    minor_trigger_cron        varchar(128) default null,
+    major_trigger_cron        varchar(128) default null,
+    full_trigger_cron         varchar(128) default null,
+    target_size               bigint default null,
+    create_time               timestamptz not null default now(),
+    update_time               timestamptz not null default now()
+);
+
+create unique index if not exists uniq_optimizing_settings_scope
+    on table_optimizing_settings (catalog_name, db_name, table_name);
+
+comment on table  table_optimizing_settings is 'Self-optimizing settings managed by AMS, source of truth for the columns below';
+comment on column table_optimizing_settings.setting_id is 'Primary key';
+comment on column table_optimizing_settings.catalog_name is 'Catalog name';
+comment on column table_optimizing_settings.db_name is 'Database name';
+comment on column table_optimizing_settings.table_name is 'Table name';
+comment on column table_optimizing_settings.self_optimizing_enabled is 'Overrides self-optimizing.enabled, null to fall back';
+comment on column table_optimizing_settings.minor_trigger_cron is 'Overrides self-optimizing.minor.trigger.cron, null to fall back';
+comment on column table_optimizing_settings.major_trigger_cron is 'Overrides self-optimizing.major.trigger.cron, null to fall back';
+comment on column table_optimizing_settings.full_trigger_cron is 'Overrides self-optimizing.full.trigger.cron, null to fall back';
+comment on column table_optimizing_settings.target_size is 'Overrides self-optimizing.target-size in bytes, null to fall back';
+comment on column table_optimizing_settings.create_time is 'create time';
+comment on column table_optimizing_settings.update_time is 'update time';
+
 CREATE TABLE table_process (
     process_id                      bigserial PRIMARY KEY,
     table_id                        bigint NOT NULL,

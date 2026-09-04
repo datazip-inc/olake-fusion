@@ -137,6 +137,13 @@ public class DefaultTableManager extends PersistentBase implements TableManager 
   }
 
   @Override
+  public List<ServerTableIdentifier> listManagedTables(String catalogName, String databaseName) {
+    return getAs(
+        TableMetaMapper.class,
+        mapper -> mapper.selectTableIdentifiersByDb(catalogName, databaseName));
+  }
+
+  @Override
   public Blocker block(
       TableIdentifier tableIdentifier,
       List<BlockableOperation> operations,

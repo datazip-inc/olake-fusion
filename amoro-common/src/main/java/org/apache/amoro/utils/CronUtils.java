@@ -43,6 +43,26 @@ public final class CronUtils {
 
   private CronUtils() {}
 
+  /**
+   * Returns true if the expression parses as 5-field Unix cron. Blank and null are valid: they mean
+   * "no cron configured", which is how an optimizing type is disabled.
+   *
+   * <p>Worth calling before storing an expression. {@link #hasFiredInWindow} swallows parse
+   * failures and returns false, so an unvalidated typo silently stops optimizing instead of
+   * reporting an error.
+   */
+  public static boolean isValid(String cronExpr) {
+    if (cronExpr == null || cronExpr.trim().isEmpty()) {
+      return true;
+    }
+    try {
+      UNIX_CRON_PARSER.parse(cronExpr).validate();
+      return true;
+    } catch (Exception e) {
+      return false;
+    }
+  }
+
   public static boolean hasFiredInWindow(String cronExpr, long currentTimeMs, long windowSec) {
     if (cronExpr == null || cronExpr.trim().isEmpty()) {
       return false;

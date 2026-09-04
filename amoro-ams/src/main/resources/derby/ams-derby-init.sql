@@ -127,6 +127,22 @@ CREATE TABLE table_runtime_state (
 
 CREATE UNIQUE INDEX uniq_table_state_key ON table_runtime_state (table_id, state_key);
 
+CREATE TABLE table_optimizing_settings (
+    setting_id              BIGINT NOT NULL GENERATED ALWAYS AS IDENTITY (START WITH 1, INCREMENT BY 1),
+    catalog_name            VARCHAR(64) NOT NULL,
+    db_name                 VARCHAR(128) NOT NULL,
+    table_name              VARCHAR(256) NOT NULL,
+    self_optimizing_enabled BOOLEAN DEFAULT NULL,
+    minor_trigger_cron      VARCHAR(128) DEFAULT NULL,
+    major_trigger_cron      VARCHAR(128) DEFAULT NULL,
+    full_trigger_cron       VARCHAR(128) DEFAULT NULL,
+    target_size             BIGINT DEFAULT NULL,
+    create_time             TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time             TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (setting_id),
+    CONSTRAINT uniq_optimizing_settings_scope UNIQUE (catalog_name, db_name, table_name)
+);
+
 CREATE TABLE table_process (
     process_id       BIGINT NOT NULL PRIMARY KEY,
     table_id         BIGINT NOT NULL,

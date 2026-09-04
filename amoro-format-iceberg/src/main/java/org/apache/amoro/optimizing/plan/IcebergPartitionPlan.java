@@ -63,6 +63,7 @@ public class IcebergPartitionPlan extends AbstractPartitionPlan {
     Map<String, String> properties = Maps.newHashMap();
     properties.put(
         TaskProperties.TASK_EXECUTOR_FACTORY_IMPL, IcebergRewriteExecutorFactory.class.getName());
+    properties.put(TaskProperties.TARGET_SIZE, String.valueOf(config.getTargetSize()));
     return properties;
   }
 

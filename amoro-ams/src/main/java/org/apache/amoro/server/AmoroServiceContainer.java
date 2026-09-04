@@ -56,6 +56,7 @@ import org.apache.amoro.server.table.DefaultTableManager;
 import org.apache.amoro.server.table.DefaultTableService;
 import org.apache.amoro.server.table.RuntimeHandlerChain;
 import org.apache.amoro.server.table.TableManager;
+import org.apache.amoro.server.table.TableOptimizingSettingsService;
 import org.apache.amoro.server.table.TableRuntimeFactoryManager;
 import org.apache.amoro.server.table.TableService;
 import org.apache.amoro.server.terminal.TerminalManager;
@@ -239,6 +240,9 @@ public class AmoroServiceContainer {
         new DefaultOptimizingService(serviceConfig, catalogManager, optimizerManager, tableService);
 
     processService = new ProcessService(serviceConfig, tableService);
+
+    // Lets a settings change reach the live table runtime immediately instead of at the next tick.
+    TableOptimizingSettingsService.getInstance().setTableService(tableService);
 
     LOG.info("Setting up AMS table executors...");
     InlineTableExecutors.getInstance().setup(tableService, serviceConfig);
@@ -555,6 +559,8 @@ public class AmoroServiceContainer {
       AmoroManagementConfValidator.validateConfig(serviceConfig);
       dataSource = DataSourceFactory.createDataSource(serviceConfig);
       SqlSessionFactoryProvider.getInstance().init(dataSource);
+      // Warm the AMS-owned optimizing settings before any table runtime is refreshed.
+      TableOptimizingSettingsService.getInstance().initialize();
     }
 
     private Map<String, Object> initEnvConfig() {

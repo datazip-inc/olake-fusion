@@ -221,3 +221,21 @@ ALTER TABLE table_process
 ADD COLUMN external_process_identifier varchar(256) DEFAULT NULL,
 ADD COLUMN retry_number int NOT NULL,
 ADD COLUMN process_parameters text;
+
+-- ADD table_optimizing_settings: AMS-owned self-optimizing settings, source of truth
+create table if not exists table_optimizing_settings (
+    setting_id                bigserial primary key,
+    catalog_name              varchar(64) not null,
+    db_name                   varchar(128) not null,
+    table_name                varchar(256) not null,
+    self_optimizing_enabled   boolean default null,
+    minor_trigger_cron        varchar(128) default null,
+    major_trigger_cron        varchar(128) default null,
+    full_trigger_cron         varchar(128) default null,
+    target_size               bigint default null,
+    create_time               timestamptz not null default now(),
+    update_time               timestamptz not null default now()
+);
+
+create unique index if not exists uniq_optimizing_settings_scope
+    on table_optimizing_settings (catalog_name, db_name, table_name);

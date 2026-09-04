@@ -97,6 +97,7 @@ public class MixedIcebergPartitionPlan extends AbstractPartitionPlan {
     properties.put(
         TaskProperties.TASK_EXECUTOR_FACTORY_IMPL,
         MixedIcebergRewriteExecutorFactory.class.getName());
+    properties.put(TaskProperties.TARGET_SIZE, String.valueOf(config.getTargetSize()));
     return properties;
   }
 

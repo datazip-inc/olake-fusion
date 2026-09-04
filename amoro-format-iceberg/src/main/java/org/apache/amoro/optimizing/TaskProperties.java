@@ -19,6 +19,7 @@
 package org.apache.amoro.optimizing;
 
 import org.apache.amoro.OptimizerProperties;
+import org.apache.amoro.table.TableProperties;
 import org.apache.amoro.utils.PropertyUtil;
 import org.apache.amoro.utils.map.StructLikeCollections;
 
@@ -44,6 +45,13 @@ public class TaskProperties {
   public static final String OUTPUT_DIR = "output_location";
 
   public static final String MOVE_FILE_TO_HIVE_LOCATION = "move-files-to-hive-location";
+
+  /**
+   * Target size the planner actually planned with, carried to the executor so it does not have to
+   * re-read the table properties. AMS may resolve this from its own database rather than from the
+   * table, in which case the table properties the executor can see are simply wrong.
+   */
+  public static final String TARGET_SIZE = TableProperties.SELF_OPTIMIZING_TARGET_SIZE;
 
   public static StructLikeCollections getStructLikeCollections(Map<String, String> properties) {
     boolean enableSpillMap =

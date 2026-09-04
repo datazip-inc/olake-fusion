@@ -333,7 +333,10 @@ public class DefaultTableRuntime extends AbstractTableRuntime
   }
 
   public DefaultTableRuntime refresh(AmoroTable<?> table) {
-    Map<String, String> tableConfig = table.properties();
+    // Settings stored in the AMS database win over the table's own properties.
+    Map<String, String> tableConfig =
+        TableOptimizingSettingsService.getInstance()
+            .overlay(getTableIdentifier(), table.properties());
     TableConfiguration newConfiguration = TableConfigurations.parseTableConfig(tableConfig);
     String newGroupName = newConfiguration.getOptimizingConfig().getOptimizerGroup();
 
