@@ -265,3 +265,5 @@ CREATE TABLE ha_lease (
 
 CREATE INDEX idx_ha_lease_expire ON ha_lease (lease_expire_ts);
 CREATE INDEX idx_ha_lease_node   ON ha_lease (node_id);
+
+-- TODO: `table_configurations`, right now, is not created for derby, need to add it for any user using derby as AMS db 

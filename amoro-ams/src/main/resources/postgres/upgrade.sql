@@ -221,3 +221,21 @@ ALTER TABLE table_process
 ADD COLUMN external_process_identifier varchar(256) DEFAULT NULL,
 ADD COLUMN retry_number int NOT NULL,
 ADD COLUMN process_parameters text;
+
+create table if not exists table_configurations (
+    catalog_name              varchar(64) not null,
+    db_name                   varchar(128) not null,
+    table_name                varchar(256) not null,
+    self_optimizing_enabled   boolean not null default false, -- default: false (disabled)
+    minor_trigger_cron        varchar(128) default null,
+    major_trigger_cron        varchar(128) default null,
+    full_trigger_cron         varchar(128) default null,
+    target_size               bigint not null default 536870912, -- default: 512 MB
+    olake_created             boolean default null,
+    health_score              integer default null,
+    health_score_snapshot_id  bigint default null,
+    create_time               timestamptz not null default now(),
+    update_time               timestamptz not null default now(),
+    primary key (catalog_name, db_name, table_name)
+);
+

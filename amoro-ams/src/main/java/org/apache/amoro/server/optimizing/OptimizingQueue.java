@@ -349,6 +349,7 @@ public class OptimizingQueue extends PersistentBase {
     tableRuntime.beginPlanning();
     try {
       ServerTableIdentifier identifier = tableRuntime.getTableIdentifier();
+      // mostly here corrupted metadata reacts:
       AmoroTable<?> table = catalogManager.loadTable(identifier.getIdentifier());
       AbstractOptimizingPlanner planner =
           IcebergTableUtil.createOptimizingPlanner(

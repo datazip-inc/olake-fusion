@@ -138,6 +138,9 @@ public class TableProperties {
   public static final String SELF_OPTIMIZING_FULL_TRIGGER_CRON =
       "self-optimizing.full.trigger.cron";
 
+  // olake-go ingested iceberg tables, will have this property
+  public static final String OLAKE_2PC = "olake_2pc";
+
   public static final String SELF_OPTIMIZING_FULL_REWRITE_ALL_FILES =
       "self-optimizing.full.rewrite-all-files";
   public static final boolean SELF_OPTIMIZING_FULL_REWRITE_ALL_FILES_DEFAULT = true;
@@ -165,7 +168,7 @@ public class TableProperties {
   /** table clean related properties */
   public static final String ENABLE_TABLE_EXPIRE = "table-expire.enabled";
 
-  public static final boolean ENABLE_TABLE_EXPIRE_DEFAULT = true;
+  public static final boolean ENABLE_TABLE_EXPIRE_DEFAULT = false;
 
   public static final String CHANGE_DATA_TTL = "change.data.ttl.minutes";
   public static final long CHANGE_DATA_TTL_DEFAULT = 10080; // 7 Days

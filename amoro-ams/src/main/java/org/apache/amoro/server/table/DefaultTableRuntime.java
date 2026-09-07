@@ -333,7 +333,9 @@ public class DefaultTableRuntime extends AbstractTableRuntime
   }
 
   public DefaultTableRuntime refresh(AmoroTable<?> table) {
-    Map<String, String> tableConfig = table.properties();
+    // Configurations stored in the AMS database get priority over the table's own properties.
+    Map<String, String> tableConfig =
+        TableConfigurationsService.getInstance().overlay(getTableIdentifier(), table.properties());
     TableConfiguration newConfiguration = TableConfigurations.parseTableConfig(tableConfig);
     String newGroupName = newConfiguration.getOptimizingConfig().getOptimizerGroup();
 
@@ -369,7 +371,7 @@ public class DefaultTableRuntime extends AbstractTableRuntime
 
   public void planFailed() {
     OptimizingStatus originalStatus = getOptimizingStatus();
-    store().begin().updateStatusCode(code -> OptimizingStatus.PENDING.getCode()).commit();
+    store().begin().updateStatusCode(code -> OptimizingStatus.IDLE.getCode()).commit();
   }
 
   public void beginProcess(OptimizingProcess optimizingProcess) {
@@ -477,16 +479,6 @@ public class DefaultTableRuntime extends AbstractTableRuntime
       store()
           .begin()
           .updateStatusCode(code -> OptimizingStatus.IDLE.getCode())
-          .updateState(
-              OPTIMIZING_STATE_KEY,
-              state -> {
-                state.setLastOptimizedSnapshotId(state.getCurrentSnapshotId());
-                state.setLastOptimizedChangeSnapshotId(state.getCurrentChangeSnapshotId());
-                if (cronType != null) {
-                  state.setLastOptimizingType(cronType.name());
-                }
-                return state;
-              })
           .updateState(PENDING_INPUT_KEY, any -> new AbstractOptimizingEvaluator.PendingInput())
           .commit();
       this.pendingCronType = null;

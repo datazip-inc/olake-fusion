@@ -23,6 +23,8 @@ menu:
  - WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  - See the License for the specific language governing permissions and
  - limitations under the License.
+ -
+ - Modified by Datazip Inc. in 2026
  -->
 # Table Configurations
 
@@ -69,7 +71,7 @@ Data-cleaning configurations are applicable to both Iceberg Format and Mixed str
 
 | Key                                         | Default          | Description                                                                                                                                                                                                                                                           |
 |---------------------------------------------|------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| table-expire.enabled                        | true             | Enables periodically expire table                                                                                                                                                                                                                                     |
+| table-expire.enabled                        | false            | Enables periodically expire table                                                                                                                                                                                                                                     |
 | change.data.ttl.minutes                     | 10080(7 days)    | Time to live in minutes for data of ChangeStore                                                                                                                                                                                                                       |
 | snapshot.keep.duration                      | 720min(12 hours) | Table-Expiration keeps the latest snapshots within a specified duration                                                                                                                                                                                               |
 | snapshot.keep.min-count                     | 1                | Minimum number of snapshots retained for table expiration                                                                                                                                                                                                             |
