@@ -22,6 +22,7 @@ import com.github.pagehelper.Page;
 import com.github.pagehelper.PageHelper;
 import com.github.pagehelper.PageInfo;
 import org.apache.amoro.ServerTableIdentifier;
+import org.apache.amoro.TableFormat;
 import org.apache.amoro.api.BlockableOperation;
 import org.apache.amoro.api.Blocker;
 import org.apache.amoro.api.TableIdentifier;
@@ -134,6 +135,16 @@ public class DefaultTableManager extends PersistentBase implements TableManager 
   @Override
   public List<ServerTableIdentifier> listManagedTables() {
     return getAs(TableMetaMapper.class, TableMetaMapper::selectAllTableIdentifiers);
+  }
+
+  @Override
+  public List<ServerTableIdentifier> listIcebergTables(String catalogName, String databaseName) {
+    return getAs(
+            TableMetaMapper.class,
+            mapper -> mapper.selectTableIdentifiersByDb(catalogName, databaseName))
+        .stream()
+        .filter(identifier -> TableFormat.ICEBERG.equals(identifier.getFormat()))
+        .collect(Collectors.toList());
   }
 
   @Override

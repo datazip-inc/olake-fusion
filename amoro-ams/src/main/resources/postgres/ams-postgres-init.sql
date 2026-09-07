@@ -466,3 +466,23 @@ COMMENT ON COLUMN ha_lease.lease_expire_ts IS 'Lease expiration timestamp (ms si
 COMMENT ON COLUMN ha_lease.version IS 'Optimistic lock version of the lease row';
 COMMENT ON COLUMN ha_lease.updated_at IS 'Last update timestamp (ms since epoch)';
 COMMENT ON TABLE ha_lease IS 'High-availability lease store';
+
+-- null means: value not set by the user
+-- for a table whose entry is present, its configurations are not copied from its metadata.json
+create table if not exists table_configurations (
+    setting_id                bigserial primary key,
+    catalog_name              varchar(64) not null,
+    db_name                   varchar(128) not null,
+    table_name                varchar(256) not null,
+    self_optimizing_enabled   boolean default null,
+    minor_trigger_cron        varchar(128) default null,
+    major_trigger_cron        varchar(128) default null,
+    full_trigger_cron         varchar(128) default null,
+    target_size               bigint default null,
+    olake_created             boolean default null,
+    health_score              integer default null,
+    create_time               timestamptz not null default now(),
+    update_time               timestamptz not null default now()
+);
+
+create unique index if not exists uniq_table_configurations_scope on table_configurations (catalog_name, db_name, table_name);

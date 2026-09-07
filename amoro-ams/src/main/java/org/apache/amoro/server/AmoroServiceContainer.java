@@ -55,6 +55,7 @@ import org.apache.amoro.server.scheduler.inline.InlineTableExecutors;
 import org.apache.amoro.server.table.DefaultTableManager;
 import org.apache.amoro.server.table.DefaultTableService;
 import org.apache.amoro.server.table.RuntimeHandlerChain;
+import org.apache.amoro.server.table.TableConfigurationsService;
 import org.apache.amoro.server.table.TableManager;
 import org.apache.amoro.server.table.TableRuntimeFactoryManager;
 import org.apache.amoro.server.table.TableService;
@@ -240,6 +241,8 @@ public class AmoroServiceContainer {
 
     processService = new ProcessService(serviceConfig, tableService);
 
+    TableConfigurationsService.getInstance().setTableService(tableService);
+
     LOG.info("Setting up AMS table executors...");
     InlineTableExecutors.getInstance().setup(tableService, serviceConfig);
     addHandlerChain(optimizingService.getTableRuntimeHandler());
@@ -256,6 +259,8 @@ public class AmoroServiceContainer {
     addHandlerChain(InlineTableExecutors.getInstance().getTagsAutoCreatingExecutor());
     tableService.initialize();
     LOG.info("AMS table service have been initialized");
+
+    TableConfigurationsService.getInstance().adoptExistingTables();
     tableManager.setTableService(tableService);
 
     initThriftService();

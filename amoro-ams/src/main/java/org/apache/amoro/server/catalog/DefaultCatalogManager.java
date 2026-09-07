@@ -36,6 +36,7 @@ import org.apache.amoro.server.AmoroManagementConf;
 import org.apache.amoro.server.dashboard.utils.AmsUtil;
 import org.apache.amoro.server.persistence.PersistentBase;
 import org.apache.amoro.server.persistence.mapper.CatalogMetaMapper;
+import org.apache.amoro.server.table.TableConfigurationsService;
 import org.apache.amoro.shade.guava32.com.google.common.annotations.VisibleForTesting;
 import org.apache.amoro.shade.guava32.com.google.common.cache.CacheBuilder;
 import org.apache.amoro.shade.guava32.com.google.common.cache.CacheLoader;
@@ -223,6 +224,8 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
           metaCache.invalidate(catalogName);
         });
 
+    // drop the table configuration details from db when catalog is dropped
+    TableConfigurationsService.getInstance().deleteCatalog(catalogName);
     disposeCatalog(catalogName);
   }
 

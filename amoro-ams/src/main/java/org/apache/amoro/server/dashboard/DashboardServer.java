@@ -52,6 +52,7 @@ import org.apache.amoro.server.dashboard.controller.OptimizerGroupController;
 import org.apache.amoro.server.dashboard.controller.OverviewController;
 import org.apache.amoro.server.dashboard.controller.PlatformFileInfoController;
 import org.apache.amoro.server.dashboard.controller.SettingController;
+import org.apache.amoro.server.dashboard.controller.TableConfigurationDetails;
 import org.apache.amoro.server.dashboard.controller.TableController;
 import org.apache.amoro.server.dashboard.controller.TerminalController;
 import org.apache.amoro.server.dashboard.controller.VersionController;
@@ -89,6 +90,7 @@ public class DashboardServer {
   private final PlatformFileInfoController platformFileInfoController;
   private final SettingController settingController;
   private final TableController tableController;
+  private final TableConfigurationDetails tableConfigurations;
   private final TerminalController terminalController;
   private final VersionController versionController;
   private final OverviewController overviewController;
@@ -118,6 +120,7 @@ public class DashboardServer {
         new ServerTableDescriptor(catalogManager, tableManager, serviceConfig);
     this.tableController =
         new TableController(catalogManager, tableManager, tableDescriptor, serviceConfig);
+    this.tableConfigurations = new TableConfigurationDetails(catalogManager, tableManager);
     this.terminalController = new TerminalController(terminalManager);
     this.versionController = new VersionController();
     OverviewManager manager = new OverviewManager(serviceConfig);
@@ -300,6 +303,11 @@ public class DashboardServer {
       path(
           "/catalogs",
           () -> {
+            // new Fusion APIs
+            get("/{catalog}/databases/{db}/iceberg-tables", tableConfigurations::getIcebergTables);
+            put("/{catalog}/databases/{db}/tables/config", tableConfigurations::updateConfigurations);
+            get("/{catalog}/databases/{db}/tables/{table}/config", tableConfigurations::getTableConfig);
+
             get("/{catalog}/databases/{db}/tables", tableController::getTableList);
             get("/{catalog}/databases", tableController::getDatabaseList);
             get("", tableController::getCatalogs);

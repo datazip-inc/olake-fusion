@@ -193,8 +193,8 @@ public abstract class AbstractRewriteFilesExecutor
 
   protected long targetSize() {
     return PropertyUtil.propertyAsLong(
-        table.properties(),
-        TableProperties.SELF_OPTIMIZING_TARGET_SIZE,
+        properties,
+        TaskProperties.TARGET_SIZE,
         TableProperties.SELF_OPTIMIZING_TARGET_SIZE_DEFAULT);
   }
 

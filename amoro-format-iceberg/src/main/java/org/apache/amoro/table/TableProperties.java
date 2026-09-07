@@ -138,6 +138,9 @@ public class TableProperties {
   public static final String SELF_OPTIMIZING_FULL_TRIGGER_CRON =
       "self-optimizing.full.trigger.cron";
 
+  // olake-go ingested iceberg tables, will have this property
+  public static final String OLAKE_2PC = "olake_2pc";
+
   public static final String SELF_OPTIMIZING_FULL_REWRITE_ALL_FILES =
       "self-optimizing.full.rewrite-all-files";
   public static final boolean SELF_OPTIMIZING_FULL_REWRITE_ALL_FILES_DEFAULT = true;

@@ -31,6 +31,7 @@ import org.apache.amoro.server.optimizing.OptimizingProcess;
 import org.apache.amoro.server.optimizing.OptimizingStatus;
 import org.apache.amoro.server.scheduler.PeriodicTableScheduler;
 import org.apache.amoro.server.table.DefaultTableRuntime;
+import org.apache.amoro.server.table.TableConfigurationsService;
 import org.apache.amoro.server.table.TableService;
 import org.apache.amoro.server.utils.IcebergTableUtil;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
@@ -180,6 +181,8 @@ public class TableRuntimeRefreshExecutor extends PeriodicTableScheduler {
               tableRuntime, mixedTable, maxPendingPartitions);
       AbstractOptimizingEvaluator.PendingInput pendingInput = evaluator.getPendingInput();
       tableRuntime.setTableSummary(pendingInput);
+      TableConfigurationsService.getInstance()
+          .storeHealthScore(tableRuntime.getTableIdentifier(), pendingInput.getHealthScore());
     } catch (Throwable t) {
       logger.warn(
           "failed to evaluate health score for table {}", tableRuntime.getTableIdentifier(), t);

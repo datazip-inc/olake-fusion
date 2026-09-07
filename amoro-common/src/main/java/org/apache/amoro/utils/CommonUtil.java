@@ -19,6 +19,7 @@
 package org.apache.amoro.utils;
 
 import java.io.File;
+import java.util.function.Consumer;
 
 public class CommonUtil {
   /** Convert size to a different unit, ensuring that the converted value is > 1 */
@@ -39,5 +40,15 @@ public class CommonUtil {
 
   public static String getFileName(String path) {
     return path == null ? null : new File(path).getName();
+  }
+
+  public static <T> void setIfNotEmpty(T value, Consumer<T> setter) {
+    if (value == null) {
+      return;
+    }
+    if (value instanceof String && ((String) value).trim().isEmpty()) {
+      return;
+    }
+    setter.accept(value);
   }
 }
