@@ -74,8 +74,7 @@ public class TableConfigurationDetails {
     ServerTableIdentifier identifier =
         tableManager.getServerTableIdentifier(
             TableIdentifier.of(catalog, db, table).buildTableIdentifier());
-    Preconditions.checkArgument(
-        identifier != null, "Unknown table %s.%s.%s", catalog, db, table);
+    Preconditions.checkArgument(identifier != null, "Unknown table %s.%s.%s", catalog, db, table);
     Preconditions.checkArgument(
         TableFormat.ICEBERG.equals(identifier.getFormat()),
         "%s.%s.%s is not an iceberg table",
@@ -113,5 +112,4 @@ public class TableConfigurationDetails {
         "catalog.database can not be empty in any element");
     Preconditions.checkState(catalogManager.catalogExist(catalog), "invalid catalog!");
   }
-
 }

@@ -26,8 +26,8 @@ import org.apache.amoro.TableFormat;
 import org.apache.amoro.TableRuntime;
 import org.apache.amoro.server.persistence.PersistentBase;
 import org.apache.amoro.server.persistence.TableOptimizingConfigurationsMeta;
-import org.apache.amoro.server.persistence.mapper.TableMetaMapper;
 import org.apache.amoro.server.persistence.mapper.TableConfigurationsMapper;
+import org.apache.amoro.server.persistence.mapper.TableMetaMapper;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Maps;
 import org.apache.amoro.table.TableProperties;
 import org.apache.amoro.table.UnkeyedTable;
@@ -51,10 +51,10 @@ import java.util.Map;
  * wins over whatever the Iceberg table says. Within a row each column is independent: {@code null}
  * means "not overridden", so it falls through to the layer below.
  *
- * <p>The cache is authoritative once loaded, because AMS is the only writer. {@link
- * #update} refreshes it in the same call that writes, and then pushes the new configuration
- * straight into the live {@link DefaultTableRuntime}, so a change takes effect immediately rather
- * than at the next refresh tick.
+ * <p>The cache is authoritative once loaded, because AMS is the only writer. {@link #update}
+ * refreshes it in the same call that writes, and then pushes the new configuration straight into
+ * the live {@link DefaultTableRuntime}, so a change takes effect immediately rather than at the
+ * next refresh tick.
  *
  * <p>A singleton because {@link DefaultTableRuntime} reaches it from {@code refresh}, and that
  * class is built by {@link DefaultTableRuntimeFactory} from nothing but a store — injecting it
@@ -63,8 +63,7 @@ import java.util.Map;
  */
 public class TableConfigurationsService extends PersistentBase {
   private static final Logger LOG = LoggerFactory.getLogger(TableConfigurationsService.class);
-  private static final TableConfigurationsService INSTANCE =
-      new TableConfigurationsService();
+  private static final TableConfigurationsService INSTANCE = new TableConfigurationsService();
 
   public static TableConfigurationsService getInstance() {
     return INSTANCE;
@@ -229,9 +228,7 @@ public class TableConfigurationsService extends PersistentBase {
   }
 
   public void deleteCatalog(String catalogName) {
-    doAs(
-        TableConfigurationsMapper.class,
-        mapper -> mapper.deleteCatalogSettings(catalogName));
+    doAs(TableConfigurationsMapper.class, mapper -> mapper.deleteCatalogSettings(catalogName));
     LOG.info("Removed optimizing settings of dropped catalog {}", catalogName);
   }
 

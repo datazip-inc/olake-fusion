@@ -308,8 +308,12 @@ public class DashboardServer {
           () -> {
             // new Fusion APIs
             get("/{catalog}/databases/{db}/iceberg-tables", tableConfigurations::getIcebergTables);
-            put("/{catalog}/databases/{db}/tables/config", tableConfigurations::updateConfigurations);
-            get("/{catalog}/databases/{db}/tables/{table}/config", tableConfigurations::getTableConfig);
+            put(
+                "/{catalog}/databases/{db}/tables/config",
+                tableConfigurations::updateConfigurations);
+            get(
+                "/{catalog}/databases/{db}/tables/{table}/config",
+                tableConfigurations::getTableConfig);
 
             get("/{catalog}/databases/{db}/tables", tableController::getTableList);
             get("/{catalog}/databases", tableController::getDatabaseList);
