@@ -22,7 +22,6 @@ package org.apache.amoro.server.dashboard.controller;
 
 import io.javalin.http.Context;
 import org.apache.amoro.ServerTableIdentifier;
-import org.apache.amoro.TableFormat;
 import org.apache.amoro.server.catalog.CatalogManager;
 import org.apache.amoro.server.dashboard.model.OptimizingConfigurations;
 import org.apache.amoro.server.dashboard.response.OkResponse;

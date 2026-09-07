@@ -223,7 +223,6 @@ ADD COLUMN retry_number int NOT NULL,
 ADD COLUMN process_parameters text;
 
 create table if not exists table_configurations (
-    setting_id                bigserial primary key,
     catalog_name              varchar(64) not null,
     db_name                   varchar(128) not null,
     table_name                varchar(256) not null,
@@ -235,7 +234,7 @@ create table if not exists table_configurations (
     olake_created             boolean default null,
     health_score              integer default null,
     create_time               timestamptz not null default now(),
-    update_time               timestamptz not null default now()
+    update_time               timestamptz not null default now(),
+    primary key (catalog_name, db_name, table_name)
 );
 
-create unique index if not exists uniq_table_configurations_scope on table_configurations (catalog_name, db_name, table_name);

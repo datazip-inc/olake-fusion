@@ -22,7 +22,6 @@ package org.apache.amoro.server.table;
 
 import org.apache.amoro.AmoroTable;
 import org.apache.amoro.ServerTableIdentifier;
-import org.apache.amoro.TableFormat;
 import org.apache.amoro.server.persistence.PersistentBase;
 import org.apache.amoro.server.persistence.TableOptimizingConfigurationsMeta;
 import org.apache.amoro.server.persistence.mapper.TableConfigurationsMapper;
@@ -65,7 +64,10 @@ public class TableConfigurationsService extends PersistentBase {
     if (meta == null) {
       return merged;
     }
-    put(merged, TableProperties.ENABLE_SELF_OPTIMIZING, String.valueOf(meta.getSelfOptimizingEnabled()));
+    put(
+        merged,
+        TableProperties.ENABLE_SELF_OPTIMIZING,
+        String.valueOf(meta.getSelfOptimizingEnabled()));
     put(merged, TableProperties.SELF_OPTIMIZING_MINOR_TRIGGER_CRON, meta.getMinorTriggerCron());
     put(merged, TableProperties.SELF_OPTIMIZING_MAJOR_TRIGGER_CRON, meta.getMajorTriggerCron());
     put(merged, TableProperties.SELF_OPTIMIZING_FULL_TRIGGER_CRON, meta.getFullTriggerCron());
@@ -130,8 +132,8 @@ public class TableConfigurationsService extends PersistentBase {
     }
     for (ServerTableIdentifier identifier :
         getAs(TableMetaMapper.class, TableMetaMapper::selectAllTableIdentifiers)) {
-      
-      // continue if the iceberg table is already present in the database      
+
+      // continue if the iceberg table is already present in the database
       if (select(identifier) != null) {
         continue;
       }

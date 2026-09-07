@@ -20,9 +20,7 @@
 
 package org.apache.amoro.server.persistence;
 
-/**
- * Per-table state stored in and owned by the AMS db
- */
+/** Per-table state stored in and owned by the AMS db */
 public class TableOptimizingConfigurationsMeta {
 
   public static final long DEFAULT_TARGET_SIZE = 512L * 1024 * 1024;
