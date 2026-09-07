@@ -64,15 +64,15 @@ import org.apache.iceberg.Snapshot;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.HashMap;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.time.format.DateTimeFormatter;
-import java.time.ZoneOffset;
-import java.time.Instant;
-import java.util.LinkedHashMap;
-import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -616,7 +616,6 @@ public class DefaultTableRuntime extends AbstractTableRuntime
         ? throwable.getClass().getName()
         : throwable.getClass().getName() + ": " + message;
   }
-
 
   public void optimizingNotNecessary() {
     if (getOptimizingStatus() == OptimizingStatus.IDLE) {
