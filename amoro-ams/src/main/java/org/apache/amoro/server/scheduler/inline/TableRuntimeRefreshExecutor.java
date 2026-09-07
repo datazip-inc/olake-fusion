@@ -111,7 +111,6 @@ public class TableRuntimeRefreshExecutor extends PeriodicTableScheduler {
       defaultTableRuntime.refresh(table);
 
       MixedTable mixedTable = (MixedTable) table.originalTable();
-      // first, evaluate cron then update healthscore
       evaluateCronTriggers(defaultTableRuntime, mixedTable);
     } catch (Throwable throwable) {
       logger.error("Refreshing table {} failed.", tableRuntime.getTableIdentifier(), throwable);

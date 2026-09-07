@@ -64,15 +64,15 @@ import org.apache.iceberg.Snapshot;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.nio.file.Files;
+import java.util.HashMap;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
-import java.time.Instant;
-import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
-import java.util.HashMap;
+import java.time.ZoneOffset;
+import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.nio.file.Files;
+import java.nio.file.StandardOpenOption;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -90,10 +90,8 @@ public class DefaultTableRuntime extends AbstractTableRuntime
 
   private static final SnowflakeIdGenerator ID_GENERATOR = new SnowflakeIdGenerator();
 
-  /** Matches {@code %c{1}} of the optimizer's JSON_LOG_PATTERN for driver-side entries. */
   private static final String DRIVER_LOG_LOGGER = "OptimizingQueue";
 
-  /** Same instant format as the optimizer's routing appender, so the UI parses both alike. */
   private static final DateTimeFormatter DRIVER_LOG_TIME_FORMATTER =
       DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC);
 
@@ -383,8 +381,7 @@ public class DefaultTableRuntime extends AbstractTableRuntime
   public long beginPlanning() {
     long processId = ID_GENERATOR.generateId();
     long now = System.currentTimeMillis();
-    OptimizingType type =
-        pendingCronType != null ? pendingCronType : OptimizingType.MINOR; // needed?
+    OptimizingType type = pendingCronType != null ? pendingCronType : OptimizingType.MINOR;
     Map<String, String> summary = new HashMap<>();
     summary.put("optimizingType", type.name());
     summary.put("phase", "PLANNING");
@@ -411,8 +408,6 @@ public class DefaultTableRuntime extends AbstractTableRuntime
         .updateState(PROCESS_ID_KEY, any -> processId)
         .commit();
 
-    appendDriverLogEntry(
-        processId, "INFO", String.format("Begin planning %s optimizing", type.name()), null);
     return processId;
   }
 
@@ -556,8 +551,7 @@ public class DefaultTableRuntime extends AbstractTableRuntime
   private void finalizePlanningProcess(
       long processId, ProcessStatus status, String reason, Throwable throwable) {
     long now = System.currentTimeMillis();
-    OptimizingType type =
-        pendingCronType != null ? pendingCronType : OptimizingType.MINOR; // needed?
+    OptimizingType type = pendingCronType != null ? pendingCronType : OptimizingType.MINOR;
     Map<String, String> summary = new HashMap<>();
     summary.put("optimizingType", type.name());
     if (status == ProcessStatus.SKIPPED) {
@@ -577,8 +571,7 @@ public class DefaultTableRuntime extends AbstractTableRuntime
                 reason,
                 new HashMap<>(),
                 summary));
-    // Only FAILED writes a log entry: a SKIPPED tick must not create <processId>/driver.log,
-    // otherwise the logs API reports an existing but near-empty log for every empty plan.
+
     if (status == ProcessStatus.FAILED) {
       appendDriverLogEntry(processId, "ERROR", describeThrowable(throwable, reason), throwable);
     }
@@ -588,12 +581,6 @@ public class DefaultTableRuntime extends AbstractTableRuntime
     appendDriverLogEntry(processId, "ERROR", failedReason, null);
   }
 
-  /**
-   * Appends a single NDJSON entry to {@code <LOG_DIR>/<processId>/driver.log}, the same file the
-   * optimizer's routing appender writes and {@code LogController} reads. Key order and names mirror
-   * JSON_LOG_PATTERN of {@code conf/optimize/log4j2-routing.xml} so consumers cannot tell an
-   * AMS-written entry from an optimizer-written one.
-   */
   private void appendDriverLogEntry(
       long processId, String level, String message, Throwable throwable) {
     String envLogDir = System.getenv("LOG_DIR");
@@ -629,6 +616,7 @@ public class DefaultTableRuntime extends AbstractTableRuntime
         ? throwable.getClass().getName()
         : throwable.getClass().getName() + ": " + message;
   }
+
 
   public void optimizingNotNecessary() {
     if (getOptimizingStatus() == OptimizingStatus.IDLE) {
