@@ -39,7 +39,7 @@ import java.util.List;
 /**
  * Reads and writes the table configuratison in AMS db.
  *
- * Only the configuration keys provided are updated, the rest are left intact.
+ * <p>Only the configuration keys provided are updated, the rest are left intact.
  */
 public class TableConfigurationDetails {
   private final CatalogManager catalogManager;
