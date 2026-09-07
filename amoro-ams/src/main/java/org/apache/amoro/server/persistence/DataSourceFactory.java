@@ -76,6 +76,7 @@ public class DataSourceFactory {
         BaseObjectPoolConfig.DEFAULT_SOFT_MIN_EVICTABLE_IDLE_TIME.toMillis());
     dataSource.setLifo(BaseObjectPoolConfig.DEFAULT_LIFO);
     createTablesIfNeed(dataSource, config);
+    SchemaMigrator.migrate(dataSource, config);
     return dataSource;
   }
 
