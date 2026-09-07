@@ -24,10 +24,6 @@ import org.apache.amoro.server.persistence.TableOptimizingConfigurationsMeta;
 
 import java.util.List;
 
-/**
- * Request body for updating table configurations: the configuration fields themselves, plus the
- * tables of the path's catalog and database they apply to.
- */
 public class OptimizingConfigurations extends TableOptimizingConfigurationsMeta {
 
   private List<String> tables;

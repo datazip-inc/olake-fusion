@@ -23,7 +23,6 @@ package org.apache.amoro.server.table;
 import org.apache.amoro.AmoroTable;
 import org.apache.amoro.ServerTableIdentifier;
 import org.apache.amoro.TableFormat;
-import org.apache.amoro.TableRuntime;
 import org.apache.amoro.server.persistence.PersistentBase;
 import org.apache.amoro.server.persistence.TableOptimizingConfigurationsMeta;
 import org.apache.amoro.server.persistence.mapper.TableConfigurationsMapper;
@@ -31,7 +30,6 @@ import org.apache.amoro.server.persistence.mapper.TableMetaMapper;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Maps;
 import org.apache.amoro.table.TableProperties;
 import org.apache.amoro.table.UnkeyedTable;
-import org.apache.amoro.utils.CommonUtil;
 import org.apache.amoro.utils.PropertyUtil;
 import org.apache.iceberg.HasTableOperations;
 import org.slf4j.Logger;
@@ -51,10 +49,8 @@ import java.util.Map;
  * wins over whatever the Iceberg table says. Within a row each column is independent: {@code null}
  * means "not overridden", so it falls through to the layer below.
  *
- * <p>The cache is authoritative once loaded, because AMS is the only writer. {@link #update}
- * refreshes it in the same call that writes, and then pushes the new configuration straight into
- * the live {@link DefaultTableRuntime}, so a change takes effect immediately rather than at the
- * next refresh tick.
+ * <p>Every read goes to the database; nothing is cached. A stored change reaches the optimizing
+ * scheduler on the next refresh tick, which reloads the configuration before evaluating crons.
  *
  * <p>A singleton because {@link DefaultTableRuntime} reaches it from {@code refresh}, and that
  * class is built by {@link DefaultTableRuntimeFactory} from nothing but a store — injecting it
@@ -128,21 +124,15 @@ public class TableConfigurationsService extends PersistentBase {
             new TableOptimizingConfigurationsMeta(
                 identifier.getCatalog(), identifier.getDatabase(), identifier.getTableName());
       }
-      merge(meta, values);
+      meta.setSelfOptimizingEnabled(values.getSelfOptimizingEnabled());
+      meta.setMinorTriggerCron(values.getMinorTriggerCron());
+      meta.setMajorTriggerCron(values.getMajorTriggerCron());
+      meta.setFullTriggerCron(values.getFullTriggerCron());
+      meta.setTargetSize(values.getTargetSize());
+      // store in db
       persist(meta);
-      applyNow(identifier);
     }
     LOG.info("Updated optimizing settings for {} tables: {}", identifiers.size(), values);
-  }
-
-  /** Copies across only the fields the caller actually set, leaving the rest untouched. */
-  private static void merge(
-      TableOptimizingConfigurationsMeta meta, TableOptimizingConfigurationsMeta values) {
-    CommonUtil.setIfNotEmpty(values.getSelfOptimizingEnabled(), meta::setSelfOptimizingEnabled);
-    CommonUtil.setIfNotEmpty(values.getMinorTriggerCron(), meta::setMinorTriggerCron);
-    CommonUtil.setIfNotEmpty(values.getMajorTriggerCron(), meta::setMajorTriggerCron);
-    CommonUtil.setIfNotEmpty(values.getFullTriggerCron(), meta::setFullTriggerCron);
-    CommonUtil.setIfNotEmpty(values.getTargetSize(), meta::setTargetSize);
   }
 
   // 1. Copies the existing configurations from the metadata.json into db (backward compatibility)
@@ -240,28 +230,6 @@ public class TableConfigurationsService extends PersistentBase {
             mapper.insertSettings(meta);
           }
         });
-  }
-
-  /**
-   * Re-runs the normal refresh for one table so the new settings reach the runtime now instead of
-   * on the next tick. Reusing {@link DefaultTableRuntime#refresh} is what keeps the config change
-   * notifications intact: closing a running process when optimizing is switched off, and moving the
-   * table between optimizer queues when the group changes.
-   */
-  private void applyNow(ServerTableIdentifier identifier) {
-    TableService service = this.tableService;
-    if (service == null || identifier.getId() == null) {
-      return;
-    }
-    try {
-      TableRuntime runtime = service.getRuntime(identifier.getId());
-      if (runtime instanceof DefaultTableRuntime) {
-        ((DefaultTableRuntime) runtime).refresh(service.loadTable(identifier));
-      }
-    } catch (Exception e) {
-      // The settings are already stored, so the next refresh tick will pick them up anyway.
-      LOG.warn("Failed to apply optimizing settings to table {} immediately", identifier, e);
-    }
   }
 
   private static void put(Map<String, String> properties, String key, String value) {
