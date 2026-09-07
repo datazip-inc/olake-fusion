@@ -36,7 +36,7 @@ public interface TableConfigurationsMapper {
   String SELECT_COLS =
       " catalog_name, db_name, table_name, self_optimizing_enabled, "
           + " minor_trigger_cron, major_trigger_cron, full_trigger_cron, target_size, "
-          + " olake_created, health_score ";
+          + " olake_created, health_score, health_score_snapshot_id ";
 
   /* ---------- select ---------- */
 
@@ -61,7 +61,11 @@ public interface TableConfigurationsMapper {
         @Result(column = "full_trigger_cron", property = "fullTriggerCron"),
         @Result(column = "target_size", property = "targetSize", jdbcType = JdbcType.BIGINT),
         @Result(column = "olake_created", property = "olakeCreated", jdbcType = JdbcType.BOOLEAN),
-        @Result(column = "health_score", property = "healthScore", jdbcType = JdbcType.INTEGER)
+        @Result(column = "health_score", property = "healthScore", jdbcType = JdbcType.INTEGER),
+        @Result(
+            column = "health_score_snapshot_id",
+            property = "healthScoreSnapshotId",
+            jdbcType = JdbcType.BIGINT)
       })
   TableOptimizingConfigurationsMeta selectScope(
       @Param("catalogName") String catalogName,
@@ -80,6 +84,7 @@ public interface TableConfigurationsMapper {
           + "     target_size             = #{targetSize, jdbcType=BIGINT}, "
           + "     olake_created           = #{olakeCreated, jdbcType=BOOLEAN}, "
           + "     health_score            = #{healthScore, jdbcType=INTEGER}, "
+          + "     health_score_snapshot_id = #{healthScoreSnapshotId, jdbcType=BIGINT}, "
           + "     update_time             = CURRENT_TIMESTAMP "
           + " WHERE catalog_name = #{catalogName} AND db_name = #{dbName} "
           + "   AND table_name = #{tableName}")
@@ -92,7 +97,7 @@ public interface TableConfigurationsMapper {
           + TABLE_NAME
           + " (catalog_name, db_name, table_name, self_optimizing_enabled, "
           + "  minor_trigger_cron, major_trigger_cron, full_trigger_cron, target_size, "
-          + "  olake_created, health_score) "
+          + "  olake_created, health_score, health_score_snapshot_id) "
           + "VALUES (#{catalogName}, #{dbName}, #{tableName}, "
           + "        #{selfOptimizingEnabled, jdbcType=BOOLEAN}, "
           + "        #{minorTriggerCron, jdbcType=VARCHAR}, "
@@ -100,7 +105,8 @@ public interface TableConfigurationsMapper {
           + "        #{fullTriggerCron, jdbcType=VARCHAR}, "
           + "        #{targetSize, jdbcType=BIGINT}, "
           + "        #{olakeCreated, jdbcType=BOOLEAN}, "
-          + "        #{healthScore, jdbcType=INTEGER})")
+          + "        #{healthScore, jdbcType=INTEGER}, "
+          + "        #{healthScoreSnapshotId, jdbcType=BIGINT})")
   int insertSettings(TableOptimizingConfigurationsMeta meta);
 
   /* ---------- delete ---------- */

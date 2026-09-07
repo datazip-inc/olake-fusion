@@ -480,6 +480,7 @@ create table if not exists table_configurations (
     target_size               bigint not null default 536870912, -- default: 512 MB
     olake_created             boolean default null,
     health_score              integer default null,
+    health_score_snapshot_id  bigint default null,
     create_time               timestamptz not null default now(),
     update_time               timestamptz not null default now(),
     primary key (catalog_name, db_name, table_name)

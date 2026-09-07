@@ -35,6 +35,7 @@ public class TableOptimizingConfigurationsMeta {
   private long targetSize = DEFAULT_TARGET_SIZE;
   private Boolean olakeCreated;
   private Integer healthScore;
+  private Long healthScoreSnapshotId;
 
   public TableOptimizingConfigurationsMeta() {}
 
@@ -122,6 +123,14 @@ public class TableOptimizingConfigurationsMeta {
 
   public void setHealthScore(Integer healthScore) {
     this.healthScore = healthScore;
+  }
+
+  public Long getHealthScoreSnapshotId() {
+    return healthScoreSnapshotId;
+  }
+
+  public void setHealthScoreSnapshotId(Long healthScoreSnapshotId) {
+    this.healthScoreSnapshotId = healthScoreSnapshotId;
   }
 
   @Override

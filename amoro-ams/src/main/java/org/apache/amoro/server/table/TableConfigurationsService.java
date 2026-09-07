@@ -173,7 +173,7 @@ public class TableConfigurationsService extends PersistentBase {
             TableOptimizingConfigurationsMeta.DEFAULT_TARGET_SIZE));
   }
 
-  public void storeHealthScore(ServerTableIdentifier identifier, int healthScore) {
+  public void storeHealthScore(ServerTableIdentifier identifier, int healthScore, long snapshotId) {
     TableOptimizingConfigurationsMeta meta = select(identifier);
     if (meta == null) {
       meta =
@@ -181,7 +181,13 @@ public class TableConfigurationsService extends PersistentBase {
               identifier.getCatalog(), identifier.getDatabase(), identifier.getTableName());
     }
     meta.setHealthScore(healthScore);
+    meta.setHealthScoreSnapshotId(snapshotId);
     persist(meta);
+  }
+
+  public Long healthScoreSnapshotId(ServerTableIdentifier identifier) {
+    TableOptimizingConfigurationsMeta meta = select(identifier);
+    return meta == null ? null : meta.getHealthScoreSnapshotId();
   }
 
   public void deleteAllTablesOfCatalog(String catalogName) {
