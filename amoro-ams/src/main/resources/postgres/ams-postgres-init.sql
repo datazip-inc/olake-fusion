@@ -468,17 +468,17 @@ COMMENT ON COLUMN ha_lease.updated_at IS 'Last update timestamp (ms since epoch)
 COMMENT ON TABLE ha_lease IS 'High-availability lease store';
 
 -- null means: value not set by the user
--- for a table whose entry is present, its configurations are not copied from its metadata.json
+-- to identify if we should copy the table's configurations from its metadata.json: the table's entry should not be present
 create table if not exists table_configurations (
     setting_id                bigserial primary key,
     catalog_name              varchar(64) not null,
     db_name                   varchar(128) not null,
     table_name                varchar(256) not null,
-    self_optimizing_enabled   boolean default null,
+    self_optimizing_enabled   boolean not null default false, -- default: false (disabled)
     minor_trigger_cron        varchar(128) default null,
     major_trigger_cron        varchar(128) default null,
     full_trigger_cron         varchar(128) default null,
-    target_size               bigint default null,
+    target_size               bigint not null default 536870912, -- default: 512 MB
     olake_created             boolean default null,
     health_score              integer default null,
     create_time               timestamptz not null default now(),

@@ -241,7 +241,7 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
         });
 
     // drop the table configuration details from db when catalog is dropped
-    TableConfigurationsService.getInstance().deleteCatalog(catalogName);
+    TableConfigurationsService.getInstance().deleteAllTablesOfCatalog(catalogName);
     disposeCatalog(catalogName);
   }
 

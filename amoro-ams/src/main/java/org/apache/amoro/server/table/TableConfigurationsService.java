@@ -39,23 +39,8 @@ import java.util.Collection;
 import java.util.Map;
 
 /**
- * Owns the self-optimizing settings that live in the AMS database rather than in the table's own
- * properties: {@code self-optimizing.enabled}, the three trigger crons and {@code
- * self-optimizing.target-size}.
- *
- * <p>Amoro resolves optimizing configuration by parsing a property map: the table's properties, on
- * top of the {@code table.}-prefixed catalog defaults, on top of the hard coded defaults in {@link
- * TableProperties}. This service adds one more layer on top of all of them, so a stored setting
- * wins over whatever the Iceberg table says. Within a row each column is independent: {@code null}
- * means "not overridden", so it falls through to the layer below.
- *
- * <p>Every read goes to the database; nothing is cached. A stored change reaches the optimizing
- * scheduler on the next refresh tick, which reloads the configuration before evaluating crons.
- *
- * <p>A singleton because {@link DefaultTableRuntime} reaches it from {@code refresh}, and that
- * class is built by {@link DefaultTableRuntimeFactory} from nothing but a store — injecting it
- * would mean changing the table runtime plugin SPI. This mirrors {@code
- * SqlSessionFactoryProvider.getInstance()}.
+ * The Iceberg Table Configurations are now stored in the AMS database. This class is responsible
+ * for it.
  */
 public class TableConfigurationsService extends PersistentBase {
   private static final Logger LOG = LoggerFactory.getLogger(TableConfigurationsService.class);
@@ -77,19 +62,14 @@ public class TableConfigurationsService extends PersistentBase {
       ServerTableIdentifier identifier, Map<String, String> properties) {
     Map<String, String> merged = Maps.newHashMap(properties);
     TableOptimizingConfigurationsMeta meta = select(identifier);
-    put(
-        merged,
-        TableProperties.ENABLE_SELF_OPTIMIZING,
-        meta.getSelfOptimizingEnabled() == null
-            ? null
-            : String.valueOf(meta.getSelfOptimizingEnabled()));
+    if (meta == null) {
+      return merged;
+    }
+    put(merged, TableProperties.ENABLE_SELF_OPTIMIZING, String.valueOf(meta.getSelfOptimizingEnabled()));
     put(merged, TableProperties.SELF_OPTIMIZING_MINOR_TRIGGER_CRON, meta.getMinorTriggerCron());
     put(merged, TableProperties.SELF_OPTIMIZING_MAJOR_TRIGGER_CRON, meta.getMajorTriggerCron());
     put(merged, TableProperties.SELF_OPTIMIZING_FULL_TRIGGER_CRON, meta.getFullTriggerCron());
-    put(
-        merged,
-        TableProperties.SELF_OPTIMIZING_TARGET_SIZE,
-        meta.getTargetSize() == null ? null : String.valueOf(meta.getTargetSize()));
+    put(merged, TableProperties.SELF_OPTIMIZING_TARGET_SIZE, String.valueOf(meta.getTargetSize()));
     return merged;
   }
 
@@ -102,6 +82,8 @@ public class TableConfigurationsService extends PersistentBase {
                 identifier.getCatalog(), identifier.getDatabase(), identifier.getTableName()));
   }
 
+  // either returns the existing table configurations for an iceberg table from db, or,
+  // stores the entry in db for the new iceberg table, and returns
   public TableOptimizingConfigurationsMeta getOrCreate(ServerTableIdentifier identifier) {
     TableOptimizingConfigurationsMeta existing = select(identifier);
     if (existing != null) {
@@ -111,6 +93,7 @@ public class TableConfigurationsService extends PersistentBase {
         new TableOptimizingConfigurationsMeta(
             identifier.getCatalog(), identifier.getDatabase(), identifier.getTableName());
 
+    // store in db
     persist(meta);
     return meta;
   }
@@ -147,7 +130,9 @@ public class TableConfigurationsService extends PersistentBase {
     }
     for (ServerTableIdentifier identifier :
         getAs(TableMetaMapper.class, TableMetaMapper::selectAllTableIdentifiers)) {
-      if (!TableFormat.ICEBERG.equals(identifier.getFormat()) || select(identifier) != null) {
+      
+      // continue if the iceberg table is already present in the database      
+      if (select(identifier) != null) {
         continue;
       }
       try {
@@ -172,40 +157,20 @@ public class TableConfigurationsService extends PersistentBase {
     persist(meta);
   }
 
-  /**
-   * Copies a table's own metadata into {@code meta}, one field at a time, only where {@code meta}
-   * does not already carry an override. {@link PropertyUtil#propertyAsNullableBoolean} and {@link
-   * PropertyUtil#propertyAsNullableLong} are what let this stay a plain assignment instead of a
-   * manual {@code containsKey} plus parse: both already return null when the property is absent,
-   * which is exactly "leave the field null" here.
-   */
   private static void adopt(
       TableOptimizingConfigurationsMeta meta, Map<String, String> properties) {
-    if (meta.getSelfOptimizingEnabled() == null) {
-      meta.setSelfOptimizingEnabled(
-          PropertyUtil.propertyAsNullableBoolean(
-              properties, TableProperties.ENABLE_SELF_OPTIMIZING));
-    }
-    if (meta.getMinorTriggerCron() == null) {
-      meta.setMinorTriggerCron(properties.get(TableProperties.SELF_OPTIMIZING_MINOR_TRIGGER_CRON));
-    }
-    if (meta.getMajorTriggerCron() == null) {
-      meta.setMajorTriggerCron(properties.get(TableProperties.SELF_OPTIMIZING_MAJOR_TRIGGER_CRON));
-    }
-    if (meta.getFullTriggerCron() == null) {
-      meta.setFullTriggerCron(properties.get(TableProperties.SELF_OPTIMIZING_FULL_TRIGGER_CRON));
-    }
-    if (meta.getTargetSize() == null) {
-      meta.setTargetSize(
-          PropertyUtil.propertyAsNullableLong(
-              properties, TableProperties.SELF_OPTIMIZING_TARGET_SIZE));
-    }
+    meta.setSelfOptimizingEnabled(
+        PropertyUtil.propertyAsBoolean(properties, TableProperties.ENABLE_SELF_OPTIMIZING, false));
+    meta.setMinorTriggerCron(properties.get(TableProperties.SELF_OPTIMIZING_MINOR_TRIGGER_CRON));
+    meta.setMajorTriggerCron(properties.get(TableProperties.SELF_OPTIMIZING_MAJOR_TRIGGER_CRON));
+    meta.setFullTriggerCron(properties.get(TableProperties.SELF_OPTIMIZING_FULL_TRIGGER_CRON));
+    meta.setTargetSize(
+        PropertyUtil.propertyAsLong(
+            properties,
+            TableProperties.SELF_OPTIMIZING_TARGET_SIZE,
+            TableOptimizingConfigurationsMeta.DEFAULT_TARGET_SIZE));
   }
 
-  /**
-   * Records the health score the periodic refresh just evaluated, so the configurations API can
-   * report it without evaluating anything itself.
-   */
   public void storeHealthScore(ServerTableIdentifier identifier, int healthScore) {
     TableOptimizingConfigurationsMeta meta = select(identifier);
     if (meta == null) {
@@ -217,9 +182,9 @@ public class TableConfigurationsService extends PersistentBase {
     persist(meta);
   }
 
-  public void deleteCatalog(String catalogName) {
-    doAs(TableConfigurationsMapper.class, mapper -> mapper.deleteCatalogSettings(catalogName));
-    LOG.info("Removed optimizing settings of dropped catalog {}", catalogName);
+  public void deleteAllTablesOfCatalog(String catalogName) {
+    doAs(TableConfigurationsMapper.class, mapper -> mapper.deleteAllTablesOfCatalog(catalogName));
+    LOG.info("Removed optimizing configurations for all tables of dropped catalog {}", catalogName);
   }
 
   private void persist(TableOptimizingConfigurationsMeta meta) {

@@ -75,12 +75,6 @@ public class TableConfigurationDetails {
         tableManager.getServerTableIdentifier(
             TableIdentifier.of(catalog, db, table).buildTableIdentifier());
     Preconditions.checkArgument(identifier != null, "Unknown table %s.%s.%s", catalog, db, table);
-    Preconditions.checkArgument(
-        TableFormat.ICEBERG.equals(identifier.getFormat()),
-        "%s.%s.%s is not an iceberg table",
-        catalog,
-        db,
-        table);
 
     ctx.json(OkResponse.of(configurations.getOrCreate(identifier)));
   }

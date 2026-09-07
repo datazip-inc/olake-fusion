@@ -30,7 +30,6 @@ import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 import org.apache.ibatis.type.JdbcType;
 
-// Reads and writes the self-optimizing settings owned by AMS, one row per table.
 public interface TableConfigurationsMapper {
   String TABLE_NAME = "table_configurations";
 
@@ -69,25 +68,8 @@ public interface TableConfigurationsMapper {
       @Param("dbName") String dbName,
       @Param("tableName") String tableName);
 
-  /* ---------- upsert ----------
-   *
-   * Written as update-then-insert so the same statements work on Postgres and on the embedded
-   * Derby that backs the default deployment and the tests.
-   * TODO: collapse into a single native upsert per dialect once the write rate makes the extra
-   *   round trip matter, and when MySQL is supported. Branch on _databaseId inside a <script>,
-   *   the way TableRuntimeMapper.queryForGroups does, with:
-   *     postgres: INSERT ... ON CONFLICT (catalog_name, db_name, table_name) DO UPDATE SET ...
-   *     derby:    MERGE INTO table_configurations USING SYSIBM.SYSDUMMY1 ON ... WHEN MATCHED
-   *   See HaLeaseMapper.upsertServerInfo for the trap this pattern avoids: that statement is
-   *   MySQL-only and silently fails everywhere else.
-   */
+  /* ---------- update ---------- */
 
-  /**
-   * Updates an existing scope row. Every column is overwritten, nulls included, so clearing an
-   * override is a plain update.
-   *
-   * @return affected rows, 0 when the scope has no row yet
-   */
   @Update(
       "UPDATE "
           + TABLE_NAME
@@ -103,11 +85,8 @@ public interface TableConfigurationsMapper {
           + "   AND table_name = #{tableName}")
   int updateSettings(TableOptimizingConfigurationsMeta meta);
 
-  /**
-   * Inserts a scope row. Callers must run {@link #updateSettings} first and only insert when it
-   * affected no rows; the unique index on the scope makes a concurrent double insert fail rather
-   * than duplicate.
-   */
+  /* ---------- insert ---------- */
+
   @Insert(
       "INSERT INTO "
           + TABLE_NAME
@@ -126,7 +105,6 @@ public interface TableConfigurationsMapper {
 
   /* ---------- delete ---------- */
 
-  /** Removes every row of a catalog, for when the catalog itself is dropped. */
   @Delete("DELETE FROM " + TABLE_NAME + " WHERE catalog_name = #{catalogName}")
-  int deleteCatalogSettings(@Param("catalogName") String catalogName);
+  int deleteAllTablesOfCatalog(@Param("catalogName") String catalogName);
 }

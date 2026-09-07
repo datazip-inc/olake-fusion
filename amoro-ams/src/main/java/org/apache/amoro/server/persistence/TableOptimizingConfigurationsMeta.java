@@ -21,27 +21,20 @@
 package org.apache.amoro.server.persistence;
 
 /**
- * Per-table state stored in and owned by the AMS database, one row per table, used when
- * transferring data from/to the {@code table_configurations} table.
- *
- * <p>The five self-optimizing fields are overrides and are boxed on purpose: {@code null} means
- * "not overridden here", so the value falls back to the table properties, the catalog defaults and
- * finally the hard coded defaults in {@link org.apache.amoro.table.TableProperties}.
- *
- * <p>{@code olakeCreated} and {@code healthScore} are not overrides. They are facts AMS observes
- * about the table: whether OLake created it, and its score at the last evaluation. Neither is ever
- * overlaid onto the table properties.
+ * Per-table state stored in and owned by the AMS db
  */
 public class TableOptimizingConfigurationsMeta {
+
+  public static final long DEFAULT_TARGET_SIZE = 512L * 1024 * 1024;
 
   private String catalogName;
   private String dbName;
   private String tableName;
-  private Boolean selfOptimizingEnabled;
+  private boolean selfOptimizingEnabled;
   private String minorTriggerCron;
   private String majorTriggerCron;
   private String fullTriggerCron;
-  private Long targetSize;
+  private long targetSize = DEFAULT_TARGET_SIZE;
   private Boolean olakeCreated;
   private Integer healthScore;
 
@@ -77,11 +70,11 @@ public class TableOptimizingConfigurationsMeta {
     this.tableName = tableName;
   }
 
-  public Boolean getSelfOptimizingEnabled() {
+  public boolean getSelfOptimizingEnabled() {
     return selfOptimizingEnabled;
   }
 
-  public void setSelfOptimizingEnabled(Boolean selfOptimizingEnabled) {
+  public void setSelfOptimizingEnabled(boolean selfOptimizingEnabled) {
     this.selfOptimizingEnabled = selfOptimizingEnabled;
   }
 
@@ -109,11 +102,11 @@ public class TableOptimizingConfigurationsMeta {
     this.fullTriggerCron = fullTriggerCron;
   }
 
-  public Long getTargetSize() {
+  public long getTargetSize() {
     return targetSize;
   }
 
-  public void setTargetSize(Long targetSize) {
+  public void setTargetSize(long targetSize) {
     this.targetSize = targetSize;
   }
 
@@ -135,7 +128,7 @@ public class TableOptimizingConfigurationsMeta {
 
   @Override
   public String toString() {
-    return "TableOptimizingSettingsMeta{"
+    return "TableOptimizingConfigurationsMeta{"
         + "catalogName='"
         + catalogName
         + "', dbName='"
