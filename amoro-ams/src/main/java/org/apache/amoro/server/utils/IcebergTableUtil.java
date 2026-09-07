@@ -284,7 +284,10 @@ public class IcebergTableUtil {
                             table, entry.getKey(), entry.getValue()))
                 .reduce(Expressions::or)
                 .orElse(Expressions.alwaysTrue());
-    long processId = snowflakeIdGenerator.generateId();
+    long processId =
+        tableRuntime.getProcessId() != 0
+            ? tableRuntime.getProcessId()
+            : snowflakeIdGenerator.generateId();
     ServerTableIdentifier identifier = tableRuntime.getTableIdentifier();
     OptimizingConfig config = tableRuntime.getOptimizingConfig();
     long lastMinor = tableRuntime.getLastMinorOptimizingTime();
