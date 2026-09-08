@@ -32,20 +32,20 @@
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
-        <hive.version>2.1.1</hive.version>
+        <hive.version>4.0.1</hive.version>
         <airlift.version>214</airlift.version>
         <airlift-units.version>1.6</airlift-units.version>
         <airlift-slice.version>0.44</airlift-slice.version>
-        <jackson.version>2.13.5</jackson.version>
+        <jackson.version>2.18.9</jackson.version>
         <guice.version>5.1.0</guice.version>
         <inject.version>1</inject.version>
         <servlet-api.version>4.0.1</servlet-api.version>
         <commons-collections.version>3.2.2</commons-collections.version>
-        <avro.version>1.10.1</avro.version>
+        <avro.version>1.11.4</avro.version>
         <jersey.version>1.19.4</jersey.version>
         <guava-retrying.version>2.0.0</guava-retrying.version>
         <commons-lang.version>2.6</commons-lang.version>
-        <commons-io.version>2.4</commons-io.version>
+        <commons-io.version>2.14.0</commons-io.version>
         <jol.version>0.16</jol.version>
         <surefire-testng.version>3.2.5</surefire-testng.version>
         <skip-build-mixed-format-trino>true</skip-build-mixed-format-trino>
