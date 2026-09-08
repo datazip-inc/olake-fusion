@@ -90,8 +90,6 @@ public class DefaultTableRuntime extends AbstractTableRuntime
 
   private static final SnowflakeIdGenerator ID_GENERATOR = new SnowflakeIdGenerator();
 
-  private static final String DRIVER_LOG_LOGGER = "OptimizingQueue";
-
   private static final DateTimeFormatter DRIVER_LOG_TIME_FORMATTER =
       DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC);
 
@@ -378,14 +376,16 @@ public class DefaultTableRuntime extends AbstractTableRuntime
     return this;
   }
 
-  public long beginPlanning() {
+  private String triggeredTypeName() {
+    OptimizingType cronType = this.pendingCronType;
+    return cronType == null ? "UNKNOWN" : cronType.name();
+  }
+
+  public void beginPlanning() {
     long processId = ID_GENERATOR.generateId();
     long now = System.currentTimeMillis();
-    OptimizingType type = pendingCronType != null ? pendingCronType : OptimizingType.MINOR;
     Map<String, String> summary = new HashMap<>();
-    summary.put("optimizingType", type.name());
-    summary.put("phase", "PLANNING");
-
+    summary.put("optimizingType", triggeredTypeName());
     doAs(
         TableProcessMapper.class,
         mapper ->
@@ -394,7 +394,7 @@ public class DefaultTableRuntime extends AbstractTableRuntime
                 processId,
                 "",
                 ProcessStatus.RUNNING,
-                type.name().toUpperCase(),
+                triggeredTypeName().toUpperCase(),
                 OptimizingStatus.PLANNING.name().toLowerCase(),
                 "AMORO",
                 0,
@@ -407,19 +407,10 @@ public class DefaultTableRuntime extends AbstractTableRuntime
         .updateStatusCode(code -> OptimizingStatus.PLANNING.getCode())
         .updateState(PROCESS_ID_KEY, any -> processId)
         .commit();
-
-    return processId;
-  }
-
-  public void planFailed(String reason) {
-    planFailed(reason, null);
   }
 
   public void planFailed(String reason, Throwable throwable) {
-    long processId = getProcessId();
-    if (processId != 0) {
-      finalizePlanningProcess(processId, ProcessStatus.FAILED, reason, throwable);
-    }
+    finalizePlanningProcess(ProcessStatus.FAILED, reason, throwable);
 
     store()
         .begin()
@@ -526,18 +517,13 @@ public class DefaultTableRuntime extends AbstractTableRuntime
       return;
     }
 
-    OptimizingType cronType = this.pendingCronType;
     String reason =
         String.format(
             "cron fired for %s but planner evaluated and found no data to process",
-            cronType != null ? cronType : "UNKNOWN");
+            triggeredTypeName());
 
-    long processId = getProcessId();
-    if (processId != 0) {
-      finalizePlanningProcess(processId, ProcessStatus.SKIPPED, reason, null);
-    } else if (cronType != null) {
-      recordSkippedOptimization(cronType, reason);
-    }
+    finalizePlanningProcess(ProcessStatus.SKIPPED, reason, null);
+    recordSkippedOptimization(this.pendingCronType, reason);
 
     store()
         .begin()
@@ -548,29 +534,42 @@ public class DefaultTableRuntime extends AbstractTableRuntime
     this.pendingCronType = null;
   }
 
-  private void finalizePlanningProcess(
-      long processId, ProcessStatus status, String reason, Throwable throwable) {
+  private void finalizePlanningProcess(ProcessStatus status, String reason, Throwable throwable) {
+
+    long processId = getProcessId();
+    if (getOptimizingStatus() != OptimizingStatus.PLANNING || processId == 0) {
+      return;
+    }
+
     long now = System.currentTimeMillis();
-    OptimizingType type = pendingCronType != null ? pendingCronType : OptimizingType.MINOR;
     Map<String, String> summary = new HashMap<>();
-    summary.put("optimizingType", type.name());
+    summary.put("optimizingType", triggeredTypeName());
     if (status == ProcessStatus.SKIPPED) {
       summary.put("skipReason", reason);
     }
-    doAs(
-        TableProcessMapper.class,
-        mapper ->
-            mapper.updateProcess(
-                getTableIdentifier().getId(),
-                processId,
-                "",
-                status,
-                status.name().toLowerCase(),
-                0,
-                now,
-                reason,
-                new HashMap<>(),
-                summary));
+
+    try {
+      doAs(
+          TableProcessMapper.class,
+          mapper ->
+              mapper.updateProcess(
+                  getTableIdentifier().getId(),
+                  processId,
+                  "",
+                  status,
+                  status.name().toLowerCase(),
+                  0,
+                  now,
+                  reason,
+                  new HashMap<>(),
+                  summary));
+    } catch (Exception e) {
+      LOG.warn(
+          "Failed to finalize planning process for table {} and process id {}",
+          getTableIdentifier(),
+          processId,
+          e);
+    }
 
     if (status == ProcessStatus.FAILED) {
       appendDriverLogEntry(processId, "ERROR", describeThrowable(throwable, reason), throwable);
@@ -594,7 +593,7 @@ public class DefaultTableRuntime extends AbstractTableRuntime
       logEntry.put("time", DRIVER_LOG_TIME_FORMATTER.format(Instant.now()));
       logEntry.put("processId", String.valueOf(processId));
       logEntry.put("taskId", "");
-      logEntry.put("logger", DRIVER_LOG_LOGGER);
+      logEntry.put("logger", "");
       logEntry.put("message", message);
       logEntry.put(
           "stackTrace",

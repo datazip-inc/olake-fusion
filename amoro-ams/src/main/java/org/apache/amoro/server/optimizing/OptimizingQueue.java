@@ -137,7 +137,7 @@ public class OptimizingQueue extends PersistentBase {
           "Found orphaned PLANNING status for table {} on startup; marking process failed for re-scheduling.",
           tableRuntime.getTableIdentifier());
       tableRuntime.planFailed(
-          "orphaned PLANNING on AMS startup; process marked failed for re-schedule");
+          "orphaned PLANNING on AMS startup; process marked failed for re-schedule", null);
     }
 
     TableOptimizingProcess process = null;
@@ -346,7 +346,8 @@ public class OptimizingQueue extends PersistentBase {
               tableRuntime.refresh(table),
               (MixedTable) table.originalTable(),
               getAvailableCore(),
-              maxInputSizePerThread());
+              maxInputSizePerThread(),
+              tableRuntime.getProcessId());
       if (planner.isNecessary()) {
         return new TableOptimizingProcess(planner, tableRuntime);
       } else {
@@ -856,6 +857,14 @@ public class OptimizingQueue extends PersistentBase {
                           "",
                           new HashMap<>(),
                           getSummary().summaryAsMap(false))),
+          () ->
+              doAs(
+                  TableProcessMapper.class,
+                  mapper ->
+                      mapper.updateProcessType(
+                          tableRuntime.getTableIdentifier().getId(),
+                          processId,
+                          optimizingType.name().toUpperCase())),
           () ->
               doAs(
                   OptimizingProcessMapper.class,

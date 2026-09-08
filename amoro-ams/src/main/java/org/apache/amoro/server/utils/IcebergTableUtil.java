@@ -80,7 +80,6 @@ import java.util.stream.Collectors;
 public class IcebergTableUtil {
 
   private static final Logger LOG = LoggerFactory.getLogger(IcebergTableUtil.class);
-  private static final SnowflakeIdGenerator snowflakeIdGenerator = new SnowflakeIdGenerator();
 
   public static long getSnapshotId(Table table, boolean refresh) {
     Snapshot currentSnapshot = getSnapshot(table, refresh);
@@ -275,7 +274,8 @@ public class IcebergTableUtil {
       DefaultTableRuntime tableRuntime,
       MixedTable table,
       double availableCore,
-      long maxInputSizePerThread) {
+      long maxInputSizePerThread,
+      long processId) {
     Expression partitionFilter =
         tableRuntime.getPendingInput() == null
             ? Expressions.alwaysTrue()
@@ -286,10 +286,6 @@ public class IcebergTableUtil {
                             table, entry.getKey(), entry.getValue()))
                 .reduce(Expressions::or)
                 .orElse(Expressions.alwaysTrue());
-    long processId =
-        tableRuntime.getProcessId() != 0
-            ? tableRuntime.getProcessId()
-            : snowflakeIdGenerator.generateId();
     ServerTableIdentifier identifier = tableRuntime.getTableIdentifier();
     OptimizingConfig config = tableRuntime.getOptimizingConfig();
     long lastMinor = tableRuntime.getLastMinorOptimizingTime();
