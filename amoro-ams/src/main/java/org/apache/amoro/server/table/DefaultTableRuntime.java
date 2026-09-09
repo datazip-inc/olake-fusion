@@ -384,8 +384,9 @@ public class DefaultTableRuntime extends AbstractTableRuntime
   public void beginPlanning() {
     long processId = ID_GENERATOR.generateId();
     long now = System.currentTimeMillis();
+    String optimizingTypeName = triggeredTypeName();
     Map<String, String> summary = new HashMap<>();
-    summary.put("optimizingType", triggeredTypeName());
+    summary.put("optimizingType", optimizingTypeName);
     doAs(
         TableProcessMapper.class,
         mapper ->
@@ -394,7 +395,7 @@ public class DefaultTableRuntime extends AbstractTableRuntime
                 processId,
                 "",
                 ProcessStatus.RUNNING,
-                triggeredTypeName().toUpperCase(),
+                optimizingTypeName.toUpperCase(),
                 OptimizingStatus.PLANNING.name().toLowerCase(),
                 "AMORO",
                 0,
@@ -523,7 +524,6 @@ public class DefaultTableRuntime extends AbstractTableRuntime
             triggeredTypeName());
 
     finalizePlanningProcess(ProcessStatus.SKIPPED, reason, null);
-    recordSkippedOptimization(this.pendingCronType, reason);
 
     store()
         .begin()
