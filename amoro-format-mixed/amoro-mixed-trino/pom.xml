@@ -15,6 +15,8 @@
   ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
   ~ See the License for the specific language governing permissions and
   ~ limitations under the License.
+  ~
+  ~ Modified by Datazip Inc. in 2026
   -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
@@ -41,7 +43,7 @@
         <inject.version>1</inject.version>
         <servlet-api.version>4.0.1</servlet-api.version>
         <commons-collections.version>3.2.2</commons-collections.version>
-        <avro.version>1.10.1</avro.version>
+        <avro.version>1.11.4</avro.version>
         <jersey.version>1.19.4</jersey.version>
         <guava-retrying.version>2.0.0</guava-retrying.version>
         <commons-lang.version>2.6</commons-lang.version>
