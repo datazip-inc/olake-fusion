@@ -47,6 +47,7 @@ public class SparkOptimizer extends Optimizer {
             .appName(String.format(APP_NAME_FORMAT, config.getResourceId()))
             .getOrCreate();
     JavaSparkContext jsc = new JavaSparkContext(spark.sparkContext());
+    SparkOptimizingLogSupport.registerOnDriver();
     if (!jsc.getConf().getBoolean("spark.dynamicAllocation.enabled", false)) {
       LOG.warn(
           "To better utilize computing resources, it is recommended to enable 'spark.dynamicAllocation.enabled' "

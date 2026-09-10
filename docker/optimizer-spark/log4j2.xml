@@ -31,13 +31,14 @@
             <PatternLayout pattern="${CONSOLE_PATTERN}"/>
         </Console>
 
-        <!-- Routing appender: creates per-process/task log files based on MDC logFilePath -->
+        <!-- Routing appender: file output is keyed by MDC logChannel.
+             rpc  = Spark executor task logs (no per-task file; RPC appender is installed in code)
+             file = Spark driver process logs -> LOG_DIR/<processId>/driver.log
+             unset = console only -->
         <Routing name="RoutingAppender">
-            <Routes pattern="$${ctx:logFilePath}">
-                <!-- When logFilePath MDC is NOT set, route to Console (no file created) -->
-                <Route key="$${ctx:logFilePath}" ref="Console"/>
-                <!-- When logFilePath MDC IS set, create a log file -->
-                <Route>
+            <Routes pattern="$${ctx:logChannel}">
+                <Route key="rpc" ref="Console"/>
+                <Route key="file">
                     <RollingFile name="Route-${ctx:logFilePath}"
                                  fileName="${LOG_DIR}/${ctx:logFilePath}.log"
                                  filePattern="${LOG_DIR}/${ctx:logFilePath}-%i.log.gz"
@@ -52,6 +53,7 @@
                         <DefaultRolloverStrategy max="5"/>
                     </RollingFile>
                 </Route>
+                <Route key="$${ctx:logChannel}" ref="Console"/>
             </Routes>
         </Routing>
     </Appenders>

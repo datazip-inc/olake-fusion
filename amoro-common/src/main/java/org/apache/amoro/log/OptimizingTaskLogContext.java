@@ -29,6 +29,9 @@ public class OptimizingTaskLogContext {
   public static final String PROCESS_ID_KEY = "processId";
   public static final String TASK_ID_KEY = "taskId";
   public static final String LOG_FILE_PATH_KEY = "logFilePath";
+  public static final String LOG_CHANNEL_KEY = "logChannel";
+  public static final String LOG_CHANNEL_RPC = "rpc";
+  public static final String LOG_CHANNEL_FILE = "file";
 
   // per-thread flag indicating whether a caller has already set up logging context.
   private static final ThreadLocal<Boolean> CONTEXT_SET = ThreadLocal.withInitial(() -> false);
@@ -44,6 +47,7 @@ public class OptimizingTaskLogContext {
     ThreadContext.remove(PROCESS_ID_KEY);
     ThreadContext.remove(TASK_ID_KEY);
     ThreadContext.remove(LOG_FILE_PATH_KEY);
+    ThreadContext.remove(LOG_CHANNEL_KEY);    //setcontext mei toh nhi hai --ASHI
   }
 
   public static boolean isContextSet() {
