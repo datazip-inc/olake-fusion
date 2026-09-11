@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.utils;
@@ -78,7 +80,6 @@ import java.util.stream.Collectors;
 public class IcebergTableUtil {
 
   private static final Logger LOG = LoggerFactory.getLogger(IcebergTableUtil.class);
-  private static final SnowflakeIdGenerator snowflakeIdGenerator = new SnowflakeIdGenerator();
 
   public static long getSnapshotId(Table table, boolean refresh) {
     Snapshot currentSnapshot = getSnapshot(table, refresh);
@@ -273,7 +274,8 @@ public class IcebergTableUtil {
       DefaultTableRuntime tableRuntime,
       MixedTable table,
       double availableCore,
-      long maxInputSizePerThread) {
+      long maxInputSizePerThread,
+      long processId) {
     Expression partitionFilter =
         tableRuntime.getPendingInput() == null
             ? Expressions.alwaysTrue()
@@ -284,7 +286,6 @@ public class IcebergTableUtil {
                             table, entry.getKey(), entry.getValue()))
                 .reduce(Expressions::or)
                 .orElse(Expressions.alwaysTrue());
-    long processId = snowflakeIdGenerator.generateId();
     ServerTableIdentifier identifier = tableRuntime.getTableIdentifier();
     OptimizingConfig config = tableRuntime.getOptimizingConfig();
     long lastMinor = tableRuntime.getLastMinorOptimizingTime();

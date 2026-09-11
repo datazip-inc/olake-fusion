@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.persistence.mapper;
@@ -85,6 +87,13 @@ public interface TableProcessMapper {
       @Param("failMessage") String failMessage,
       @Param("processParameters") Map<String, String> processParameters,
       @Param("summary") Map<String, String> summary);
+
+  @Update(
+      "UPDATE table_process SET process_type = #{processType} WHERE process_id = #{processId} AND table_id = #{tableId}")
+  void updateProcessType(
+      @Param("tableId") long tableId,
+      @Param("processId") long processId,
+      @Param("processType") String processType);
 
   @Select(
       "SELECT process_id, table_id, external_process_identifier, status, process_type, process_stage, execution_engine, retry_number, "
