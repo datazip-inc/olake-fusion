@@ -909,7 +909,7 @@ public class OptimizingQueue extends PersistentBase {
           () -> tableRuntime.completeProcess(success),
           () -> clearProcess(this));
       if (!success && failedReason != null) {
-        tableRuntime.appendFailReasonToDriverLogs(failedReason, processId);
+        tableRuntime.appendDriverLogEntry(processId, "ERROR", failedReason, null);
       }
     }
 

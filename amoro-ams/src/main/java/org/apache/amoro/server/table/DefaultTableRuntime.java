@@ -576,11 +576,7 @@ public class DefaultTableRuntime extends AbstractTableRuntime
     }
   }
 
-  public void appendFailReasonToDriverLogs(String failedReason, long processId) {
-    appendDriverLogEntry(processId, "ERROR", failedReason, null);
-  }
-
-  private void appendDriverLogEntry(
+  public void appendDriverLogEntry(
       long processId, String level, String message, Throwable throwable) {
     String envLogDir = System.getenv("LOG_DIR");
     String logBaseDir =
