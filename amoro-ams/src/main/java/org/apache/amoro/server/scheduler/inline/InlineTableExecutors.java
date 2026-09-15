@@ -34,6 +34,7 @@ public class InlineTableExecutors {
   private OptimizingExpiringExecutor optimizingExpiringExecutor;
   private HiveCommitSyncExecutor hiveCommitSyncExecutor;
   private TagsAutoCreatingExecutor tagsAutoCreatingExecutor;
+  private TableHealthScoreExecutor tableHealthScoreExecutor;
   private DataExpiringExecutor dataExpiringExecutor;
 
   public static InlineTableExecutors getInstance() {
@@ -80,8 +81,12 @@ public class InlineTableExecutors {
         new TableRuntimeRefreshExecutor(
             tableService,
             conf.getInteger(AmoroManagementConf.REFRESH_TABLES_THREAD_COUNT),
-            conf.get(AmoroManagementConf.REFRESH_TABLES_INTERVAL).toMillis(),
-            conf.getInteger(AmoroManagementConf.REFRESH_MAX_PENDING_PARTITIONS));
+            conf.get(AmoroManagementConf.REFRESH_TABLES_INTERVAL).toMillis());
+    this.tableHealthScoreExecutor =
+        new TableHealthScoreExecutor(
+            tableService,
+            conf.getInteger(AmoroManagementConf.REFRESH_TABLES_THREAD_COUNT),
+            conf.get(AmoroManagementConf.REFRESH_TABLES_INTERVAL).toMillis());
     if (conf.getBoolean(AmoroManagementConf.AUTO_CREATE_TAGS_ENABLED)) {
       this.tagsAutoCreatingExecutor =
           new TagsAutoCreatingExecutor(
@@ -128,6 +133,10 @@ public class InlineTableExecutors {
 
   public HiveCommitSyncExecutor getHiveCommitSyncExecutor() {
     return hiveCommitSyncExecutor;
+  }
+
+  public TableHealthScoreExecutor getTableHealthScoreExecutor() {
+    return tableHealthScoreExecutor;
   }
 
   public TagsAutoCreatingExecutor getTagsAutoCreatingExecutor() {
