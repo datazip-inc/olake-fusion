@@ -246,10 +246,15 @@ public class TableStatCollector {
     int snapshotCount = 0;
     for (Snapshot snapshot : snapshots) {
       snapshotCount++;
-      lastSnapshot = snapshot;
-      if (firstSnapshot == null) {
+      if (lastSnapshot == null || snapshot.sequenceNumber() > lastSnapshot.sequenceNumber()) {
+        lastSnapshot = snapshot;
+      }
+      if (firstSnapshot == null || snapshot.sequenceNumber() < firstSnapshot.sequenceNumber()) {
         firstSnapshot = snapshot;
       }
+    }
+    if (currentSnapshot != null) {
+      lastSnapshot = currentSnapshot;
     }
 
     Map<String, String> summary = fillSummary(snapshotCount, lastSnapshot, firstSnapshot);
