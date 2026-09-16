@@ -37,24 +37,8 @@
             <Routes pattern="$${ctx:logChannel}">
                 <!-- Spark executor task logs: no per-task file. RPC appender is installed in code. -->
                 <Route key="rpc" ref="Console"/>
-                <!-- Spark driver process logs: LOG_DIR/<processId>/driver.log -->
-                <Route key="file">
-                    <RollingFile name="CompactionDriver-${ctx:processId}"
-                                 fileName="${LOG_DIR}/${ctx:logFilePath}.log"
-                                 filePattern="${LOG_DIR}/${ctx:logFilePath}-%d{yyyy-MM-dd-HH}-%i.log.gz">
-                        <PatternLayout pattern="${JSON_LOG_PATTERN}"/>
-                        <Policies>
-                            <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
-                            <SizeBasedTriggeringPolicy size="100MB"/>
-                        </Policies>
-                        <DefaultRolloverStrategy max="10">
-                            <Delete basePath="${LOG_DIR}" maxDepth="3">
-                                <IfFileName glob="*/*.log.gz"/>
-                                <IfLastModified age="7d"/>
-                            </Delete>
-                        </DefaultRolloverStrategy>
-                    </RollingFile>
-                </Route>
+                <!-- Spark driver process logs: collector on this JVM; AMS writes the dashboard files. -->
+                <Route key="file" ref="Console"/>
                 <!-- When logChannel MDC is NOT set, the pattern evaluates to the raw
                      literal "${ctx:logChannel}" which matches this explicit key.
                      Route to the generic optimizer log (no per-task file). -->

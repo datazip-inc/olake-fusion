@@ -26,6 +26,7 @@ import org.apache.amoro.api.Blocker;
 import org.apache.amoro.api.CatalogMeta;
 import org.apache.amoro.api.NoSuchObjectException;
 import org.apache.amoro.api.OptimizerRegisterInfo;
+import org.apache.amoro.api.OptimizingLogLine;
 import org.apache.amoro.api.OptimizingService;
 import org.apache.amoro.api.OptimizingTask;
 import org.apache.amoro.api.OptimizingTaskId;
@@ -467,6 +468,11 @@ public class MockAmoroManagementServer implements Runnable {
     @Override
     public boolean cancelProcess(long processId) throws TException {
       return false;
+    }
+
+    @Override
+    public void appendLogs(String authToken, List<OptimizingLogLine> lines) throws TException {
+      checkToken(authToken);
     }
 
     public Map<String, OptimizerRegisterInfo> getRegisteredOptimizers() {

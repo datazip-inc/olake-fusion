@@ -59,13 +59,11 @@ public class SparkOptimizerExecutor extends OptimizerExecutor {
     long startTime = System.currentTimeMillis();
 
     long processId = task.getTaskId().getProcessId();
-    String driverFilePath = processId + "/driver";
 
-    // Driver logs still go to <LOG_DIR>/<processId>/driver.log (file channel).
-    // The RPC appender also accepts them into OptimizingLogCollector on this JVM.
+    // logChannel=file tags these events as driver-sourced for AMS. Log4j2 does not write
+    // LOG_DIR/<processId>/driver.log; the RPC appender accepts them into the collector.
     MDC.put(OptimizingTaskLogContext.LOG_CHANNEL_KEY, OptimizingTaskLogContext.LOG_CHANNEL_FILE);
     MDC.put(OptimizingTaskLogContext.PROCESS_ID_KEY, String.valueOf(processId));
-    MDC.put(OptimizingTaskLogContext.LOG_FILE_PATH_KEY, driverFilePath);
 
     try {
       ImmutableList<OptimizingTask> of = ImmutableList.of(task);
@@ -93,7 +91,6 @@ public class SparkOptimizerExecutor extends OptimizerExecutor {
     } finally {
       MDC.remove(OptimizingTaskLogContext.LOG_CHANNEL_KEY);
       MDC.remove(OptimizingTaskLogContext.PROCESS_ID_KEY);
-      MDC.remove(OptimizingTaskLogContext.LOG_FILE_PATH_KEY);
     }
   }
 

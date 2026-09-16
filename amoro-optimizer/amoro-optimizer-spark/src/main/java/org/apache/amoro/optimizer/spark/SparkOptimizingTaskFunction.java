@@ -25,8 +25,8 @@ import org.apache.amoro.api.OptimizingTaskResult;
 import org.apache.amoro.log.OptimizingTaskLogContext;
 import org.apache.amoro.optimizer.common.OptimizerConfig;
 import org.apache.amoro.optimizer.common.OptimizerExecutor;
-import org.apache.spark.api.java.function.Function;
 import org.apache.logging.log4j.status.StatusLogger;
+import org.apache.spark.api.java.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -50,11 +50,11 @@ public class SparkOptimizingTaskFunction implements Function<OptimizingTask, Opt
   public OptimizingTaskResult call(OptimizingTask task) {
     long processId = task.getTaskId().getProcessId();
     int taskId = task.getTaskId().getTaskId();
-    try{
+    try {
       OptimizingTaskRpcLogAppender.install();
       SparkOptimizingLogRpcClient.get().bindDriverEndpoint();
     } catch (Exception e) {
-        STATUS.warn("Failed to bindDriverEndpoint", e);
+      STATUS.warn("Failed to bindDriverEndpoint", e);
     }
 
     // Set OptimizingTaskLogContext FIRST so AbstractRewriteFilesExecutor.execute()

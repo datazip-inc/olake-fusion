@@ -21,35 +21,33 @@
 package org.apache.amoro.optimizer.spark;
 
 import org.apache.amoro.log.OptimizingLogLine;
+import org.apache.amoro.optimizer.common.OptimizingLogBatcher;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Driver-side in-memory store for optimizing logs. Sequence is a single global counter per {@code
+ * Driver-side sequencing point for optimizing logs. Sequence is a single global counter per {@code
  * processId}, assigned as each line arrives (driver-local logs and executor RPC logs share the same
- * counter).
- *
- * <p>FILLER(need-your-change): lines are held in memory only for Phase 1; there is no size cap,
- * eviction, or disk spill. Phase 2 is expected to drain this collector to AMS.
+ * counter). Sequenced lines are offered to {@link OptimizingLogBatcher} for Thrift upload to AMS.
  */
 public class OptimizingLogCollector {
 
   private static volatile OptimizingLogCollector instance;
 
   private final ConcurrentMap<Long, AtomicLong> sequenceByProcess = new ConcurrentHashMap<>();
-  private final ConcurrentMap<Long, ConcurrentLinkedQueue<OptimizingLogLine>> linesByProcess =
-      new ConcurrentHashMap<>();
+  private final OptimizingLogBatcher batcher;
 
-  public static OptimizingLogCollector initialize() {
+  private OptimizingLogCollector(OptimizingLogBatcher batcher) {
+    this.batcher = batcher;
+  }
+
+  public static OptimizingLogCollector initialize(OptimizingLogBatcher batcher) {
     if (instance == null) {
       synchronized (OptimizingLogCollector.class) {
         if (instance == null) {
-          instance = new OptimizingLogCollector();
+          instance = new OptimizingLogCollector(batcher);
         }
       }
     }
@@ -62,7 +60,7 @@ public class OptimizingLogCollector {
 
   public static OptimizingLogCollector get() {
     OptimizingLogCollector collector = instance;
-    if (collector == null) {    //why not just check for instance == null?  --ASHI
+    if (collector == null) { // why not just check for instance == null?  --ASHI
       throw new IllegalStateException("OptimizingLogCollector has not been initialized on driver");
     }
     return collector;
@@ -75,16 +73,6 @@ public class OptimizingLogCollector {
     AtomicLong sequence =
         sequenceByProcess.computeIfAbsent(line.getProcessId(), ignored -> new AtomicLong());
     long next = sequence.incrementAndGet();
-    linesByProcess
-        .computeIfAbsent(line.getProcessId(), ignored -> new ConcurrentLinkedQueue<>())
-        .add(line.withSequence(next));
-  }
-
-  public List<OptimizingLogLine> snapshot(long processId) {
-    ConcurrentLinkedQueue<OptimizingLogLine> lines = linesByProcess.get(processId);
-    if (lines == null) {
-      return new ArrayList<>();
-    }
-    return new ArrayList<>(lines);
+    batcher.offer(line.withSequence(next));
   }
 }

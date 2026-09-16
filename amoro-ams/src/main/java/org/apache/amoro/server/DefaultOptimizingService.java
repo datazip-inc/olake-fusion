@@ -24,6 +24,7 @@ import org.apache.amoro.AmoroTable;
 import org.apache.amoro.OptimizerProperties;
 import org.apache.amoro.TableRuntime;
 import org.apache.amoro.api.OptimizerRegisterInfo;
+import org.apache.amoro.api.OptimizingLogLine;
 import org.apache.amoro.api.OptimizingService;
 import org.apache.amoro.api.OptimizingTask;
 import org.apache.amoro.api.OptimizingTaskId;
@@ -36,6 +37,7 @@ import org.apache.amoro.exception.ObjectNotExistsException;
 import org.apache.amoro.exception.PluginRetryAuthException;
 import org.apache.amoro.resource.ResourceGroup;
 import org.apache.amoro.server.catalog.CatalogManager;
+import org.apache.amoro.server.optimizing.OptimizingLogStore;
 import org.apache.amoro.server.optimizing.OptimizingProcess;
 import org.apache.amoro.server.optimizing.OptimizingQueue;
 import org.apache.amoro.server.optimizing.OptimizingStatus;
@@ -267,6 +269,12 @@ public class DefaultOptimizingService extends StatedPersistentBase
     OptimizerInstance optimizer = new OptimizerInstance(registerInfo, queue.getContainerName());
     registerOptimizer(optimizer, true);
     return optimizer.getToken();
+  }
+
+  @Override
+  public void appendLogs(String authToken, List<OptimizingLogLine> lines) {
+    getAuthenticatedOptimizer(authToken);
+    OptimizingLogStore.get().append(lines);
   }
 
   @Override

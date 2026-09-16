@@ -23,7 +23,7 @@ package org.apache.amoro.log;
 import java.io.Serializable;
 
 /**
- * One optimizing log event. {@code ndjson} is the existing Log4j2 JSON line (level, time, 
+ * One optimizing log event. {@code ndjson} is the existing Log4j2 JSON line (level, time,
  * processId, taskId, logger, message, stackTrace). {@code sequence} is assigned on the optimizer
  * driver when the line enters {@code OptimizingLogCollector}.
  */

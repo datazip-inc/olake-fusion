@@ -47,7 +47,7 @@ public class OptimizingTaskLogContext {
     ThreadContext.remove(PROCESS_ID_KEY);
     ThreadContext.remove(TASK_ID_KEY);
     ThreadContext.remove(LOG_FILE_PATH_KEY);
-    ThreadContext.remove(LOG_CHANNEL_KEY);    //setcontext mei toh nhi hai --ASHI
+    ThreadContext.remove(LOG_CHANNEL_KEY); // setcontext mei toh nhi hai --ASHI
   }
 
   public static boolean isContextSet() {

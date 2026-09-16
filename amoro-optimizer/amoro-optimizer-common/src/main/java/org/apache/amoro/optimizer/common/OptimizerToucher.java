@@ -27,12 +27,14 @@ import org.apache.amoro.shade.thrift.org.apache.thrift.TException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 public class OptimizerToucher extends AbstractOptimizerOperator {
   private static final Logger LOG = LoggerFactory.getLogger(OptimizerToucher.class);
 
-  private TokenChangeListener tokenChangeListener;
+  private final List<TokenChangeListener> tokenChangeListeners = new ArrayList<>();
   private final Map<String, String> registerProperties = Maps.newHashMap();
   private final long startTime;
 
@@ -42,7 +44,7 @@ public class OptimizerToucher extends AbstractOptimizerOperator {
   }
 
   public OptimizerToucher withTokenChangeListener(TokenChangeListener tokenChangeListener) {
-    this.tokenChangeListener = tokenChangeListener;
+    this.tokenChangeListeners.add(tokenChangeListener);
     return this;
   }
 
@@ -86,9 +88,7 @@ public class OptimizerToucher extends AbstractOptimizerOperator {
                   return client.authenticate(registerInfo);
                 });
         setToken(token);
-        if (tokenChangeListener != null) {
-          tokenChangeListener.tokenChange(token);
-        }
+        tokenChangeListeners.forEach(listener -> listener.tokenChange(token));
         LOG.info("Registered optimizer to ams with token:{}", token);
         return true;
       } catch (TException e) {

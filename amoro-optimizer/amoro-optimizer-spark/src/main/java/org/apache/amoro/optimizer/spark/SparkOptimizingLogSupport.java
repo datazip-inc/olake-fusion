@@ -17,27 +17,38 @@
  *
  * Modified by Datazip Inc. in 2026
  */
-//this and the sparkoptimizinglogendpoint can be in the same file. --ASHI
+
 package org.apache.amoro.optimizer.spark;
 
+import org.apache.amoro.optimizer.common.OptimizerConfig;
+import org.apache.amoro.optimizer.common.OptimizingLogBatcher;
 import org.apache.spark.SparkEnv;
 
-/** Registers the driver-side log RPC endpoint and installs the Log4j2 RPC/collector appender. */
+// this and the sparkoptimizinglogendpoint can be in the same file. --ASHI
+/** Registers the driver-side log RPC endpoint, collector, and Thrift log batcher. */
 public final class SparkOptimizingLogSupport {
 
   private SparkOptimizingLogSupport() {}
 
-  public static void registerOnDriver() {
+  public static void registerOnDriver(OptimizerConfig config) {
     SparkEnv env = SparkEnv.get();
     if (env == null) {
-      throw new IllegalStateException(      //throw exception? where will this be caught? --ASHI
+      throw new IllegalStateException( // throw exception? where will this be caught? --ASHI
           "SparkEnv is not available; cannot register optimizing log endpoint");
     }
-    OptimizingLogCollector collector = OptimizingLogCollector.initialize();
+    OptimizingLogBatcher batcher = OptimizingLogBatcher.initialize(config);
+    OptimizingLogCollector collector = OptimizingLogCollector.initialize(batcher);
     env.rpcEnv()
         .setupEndpoint(
             SparkOptimizingLogEndpoint.ENDPOINT_NAME,
             new SparkOptimizingLogEndpoint(env.rpcEnv(), collector));
     OptimizingTaskRpcLogAppender.install();
+    Runtime.getRuntime()
+        .addShutdownHook(
+            new Thread(batcher::stopAndFlush, "amoro-optimizing-log-batcher-shutdown"));
+  }
+
+  public static void onTokenChange(String token) {
+    OptimizingLogBatcher.get().setToken(token);
   }
 }

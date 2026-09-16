@@ -31,28 +31,15 @@
             <PatternLayout pattern="${CONSOLE_PATTERN}"/>
         </Console>
 
-        <!-- Routing appender: file output is keyed by MDC logChannel.
-             rpc  = Spark executor task logs (no per-task file; RPC appender is installed in code)
-             file = Spark driver process logs -> LOG_DIR/<processId>/driver.log
+        <!-- Routing appender: keyed by MDC logChannel. Neither driver nor executor writes
+             per-process/task files under LOG_DIR; AMS is the disk writer.
+             rpc  = Spark executor task logs (RPC appender is installed in code)
+             file = Spark driver process logs (collector on this JVM)
              unset = console only -->
         <Routing name="RoutingAppender">
             <Routes pattern="$${ctx:logChannel}">
                 <Route key="rpc" ref="Console"/>
-                <Route key="file">
-                    <RollingFile name="Route-${ctx:logFilePath}"
-                                 fileName="${LOG_DIR}/${ctx:logFilePath}.log"
-                                 filePattern="${LOG_DIR}/${ctx:logFilePath}-%i.log.gz"
-                                 append="true"
-                                 createOnDemand="true"
-                                 bufferedIO="false"
-                                 immediateFlush="true">
-                        <PatternLayout pattern="${JSON_LOG_PATTERN}"/>
-                        <Policies>
-                            <SizeBasedTriggeringPolicy size="100MB"/>
-                        </Policies>
-                        <DefaultRolloverStrategy max="5"/>
-                    </RollingFile>
-                </Route>
+                <Route key="file" ref="Console"/>
                 <Route key="$${ctx:logChannel}" ref="Console"/>
             </Routes>
         </Routing>
