@@ -22,6 +22,7 @@ package org.apache.amoro.server.table;
 
 import org.apache.amoro.AmoroTable;
 import org.apache.amoro.ServerTableIdentifier;
+import org.apache.amoro.config.OptimizingConfig;
 import org.apache.amoro.server.persistence.PersistentBase;
 import org.apache.amoro.server.persistence.TableOptimizingConfigurationsMeta;
 import org.apache.amoro.server.persistence.mapper.TableConfigurationsMapper;
@@ -183,6 +184,18 @@ public class TableConfigurationsService extends PersistentBase {
     meta.setHealthScore(healthScore);
     meta.setHealthScoreSnapshotId(snapshotId);
     persist(meta);
+  }
+
+  public OptimizingConfig applyStoredCrons(
+      ServerTableIdentifier identifier, OptimizingConfig config) {
+    TableOptimizingConfigurationsMeta meta = select(identifier);
+    if (meta == null) {
+      return config;
+    }
+    return config
+        .setMinorTriggerCron(meta.getMinorTriggerCron())
+        .setMajorTriggerCron(meta.getMajorTriggerCron())
+        .setFullTriggerCron(meta.getFullTriggerCron());
   }
 
   public Long healthScoreSnapshotId(ServerTableIdentifier identifier) {

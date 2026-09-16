@@ -34,6 +34,7 @@ import org.apache.amoro.optimizing.plan.MixedIcebergOptimizingEvaluator;
 import org.apache.amoro.optimizing.plan.MixedIcebergOptimizingPlanner;
 import org.apache.amoro.scan.TableEntriesScan;
 import org.apache.amoro.server.table.DefaultTableRuntime;
+import org.apache.amoro.server.table.TableConfigurationsService;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
 import org.apache.amoro.shade.guava32.com.google.common.base.Predicate;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Iterables;
@@ -225,7 +226,9 @@ public class IcebergTableUtil {
       TableSnapshot snapshot,
       int maxPendingPartitions) {
     ServerTableIdentifier identifier = tableRuntime.getTableIdentifier();
-    OptimizingConfig config = tableRuntime.getOptimizingConfig();
+    OptimizingConfig config =
+        TableConfigurationsService.getInstance()
+            .applyStoredCrons(identifier, tableRuntime.getOptimizingConfig());
     long lastMinor = tableRuntime.getLastMinorOptimizingTime();
     long lastFull = tableRuntime.getLastFullOptimizingTime();
     long lastMajor = tableRuntime.getLastMajorOptimizingTime();
@@ -286,7 +289,9 @@ public class IcebergTableUtil {
                 .orElse(Expressions.alwaysTrue());
     long processId = snowflakeIdGenerator.generateId();
     ServerTableIdentifier identifier = tableRuntime.getTableIdentifier();
-    OptimizingConfig config = tableRuntime.getOptimizingConfig();
+    OptimizingConfig config =
+        TableConfigurationsService.getInstance()
+            .applyStoredCrons(identifier, tableRuntime.getOptimizingConfig());
     long lastMinor = tableRuntime.getLastMinorOptimizingTime();
     long lastFull = tableRuntime.getLastFullOptimizingTime();
     long lastMajor = tableRuntime.getLastMajorOptimizingTime();
