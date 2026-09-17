@@ -436,13 +436,13 @@ public class AmoroManagementConf {
   public static final ConfigOption<String> DB_TYPE =
       ConfigOptions.key("database.type")
           .stringType()
-          .defaultValue("derby")
+          .defaultValue("postgres")
           .withDescription("Database type.");
 
   public static final ConfigOption<String> DB_CONNECTION_URL =
       ConfigOptions.key("database.url")
           .stringType()
-          .defaultValue("jdbc:derby:/tmp/amoro/derby;create=true")
+          .defaultValue("jdbc:postgresql://127.0.0.1:5432/amoro")
           .withDescription("Database connection address");
 
   public static final ConfigOption<Boolean> DB_AUTO_CREATE_TABLES =
@@ -454,7 +454,7 @@ public class AmoroManagementConf {
   public static final ConfigOption<String> DB_DRIVER_CLASS_NAME =
       ConfigOptions.key("database.jdbc-driver-class")
           .stringType()
-          .defaultValue("org.apache.derby.jdbc.EmbeddedDriver")
+          .defaultValue("org.postgresql.Driver")
           .withDescription("The JDBC driver class name for connecting to the database.");
 
   public static final ConfigOption<String> DB_USER_NAME =

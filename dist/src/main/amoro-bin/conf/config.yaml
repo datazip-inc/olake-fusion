@@ -113,12 +113,22 @@ ams:
     max-size: 3360                # Keep 7 days history by default, 7 * 24 * 60 / 3 = 3360
 
   database:
-    type: derby
-    jdbc-driver-class: org.apache.derby.jdbc.EmbeddedDriver
-    url: jdbc:derby:/tmp/amoro/derby;create=true
+    type: postgres
+    jdbc-driver-class: org.postgresql.Driver
+    url: jdbc:postgresql://127.0.0.1:5432/db
+    username: user
+    password: passwd
+    auto-create-tables: true
     connection-pool-max-total: 20
     connection-pool-max-idle: 16
     connection-pool-max-wait-millis: 30000
+    
+    # type: derby
+    # jdbc-driver-class: org.apache.derby.jdbc.EmbeddedDriver
+    # url: jdbc:derby:/tmp/amoro/derby;create=true
+    # connection-pool-max-total: 20
+    # connection-pool-max-idle: 16
+    # connection-pool-max-wait-millis: 30000
 
 #  ha:
 #    enabled: true
