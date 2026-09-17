@@ -28,4 +28,4 @@ A clear and concise description of what you expected to happen.
 
 ## Actual behavior
 
-What's happening now and how it's different from actual behavior
+What's happening now and how it's different from expected behavior
