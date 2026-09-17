@@ -140,6 +140,7 @@
         <snakeyaml.version>2.2</snakeyaml.version>
         <mybatis.version>3.5.15</mybatis.version>
         <postgres-jdbc.version>42.7.2</postgres-jdbc.version>
+        <derby-test.version>10.14.1.0</derby-test.version>
         <commons-dbcp2.version>2.9.0</commons-dbcp2.version>
         <netty.version>4.1.138.Final</netty.version>
         <javalin.version>4.6.8</javalin.version>
@@ -840,6 +841,14 @@
                 <version>${postgres-jdbc.version}</version>
             </dependency>
 
+            <!-- Embedded Derby is only used by tests (AMS persistence and mock Hive metastore); never ship it. -->
+            <dependency>
+                <groupId>org.apache.derby</groupId>
+                <artifactId>derby</artifactId>
+                <version>${derby-test.version}</version>
+                <scope>test</scope>
+            </dependency>
+
             <dependency>
                 <groupId>mysql</groupId>
                 <artifactId>mysql-connector-java</artifactId>
@@ -1089,6 +1098,10 @@
                 <artifactId>hive-metastore</artifactId>
                 <version>${hive.version}</version>
                 <exclusions>
+                    <exclusion>
+                        <groupId>org.apache.derby</groupId>
+                        <artifactId>derby</artifactId>
+                    </exclusion>
                     <exclusion>
                         <groupId>org.apache.curator</groupId>
                         <artifactId>*</artifactId>

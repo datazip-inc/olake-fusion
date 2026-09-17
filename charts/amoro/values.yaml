@@ -157,6 +157,9 @@ amoroConf:
     type: postgres
     driver: org.postgresql.Driver
     url: jdbc:postgresql://127.0.0.1:5432/amoro
+    ## Required: set the database credentials (e.g. --set amoroConf.database.username=...)
+    username: ""
+    password: ""
 
   ## e.g:
   ##    type: mysql
