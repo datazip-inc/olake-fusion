@@ -99,7 +99,7 @@ sync-libs:
 
 setup-debug-mode: start-deps build
 	@echo ""
-	@echo "Setup complete. Run 'AmoroServiceContainer' from your IDE. See .vscode/debug.md"
+	@echo "Setup complete. Run 'AmoroServiceContainer' from your IDE. See CONTRIBUTING.md"
 
 clean-debug-mode: stop-deps
 	@rm -rf "$(RUNTIME_HOME)"
