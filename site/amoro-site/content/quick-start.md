@@ -16,7 +16,7 @@ Once you have those, save the yaml below into a file named docker-compose.yml:
 version: "3"
 services:
   minio:
-    image: minio/minio
+    image: quay.io/minio/minio
     container_name: minio
     environment:
       - MINIO_ROOT_USER=admin
@@ -33,7 +33,7 @@ services:
   mc:
     depends_on:
       - minio
-    image: minio/mc
+    image: quay.io/minio/mc
     container_name: mc
     networks:
       amoro_network:
