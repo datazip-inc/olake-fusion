@@ -207,6 +207,10 @@
                     <groupId>com.fasterxml.jackson.core</groupId>
                     <artifactId>*</artifactId>
                 </exclusion>
+                <exclusion>
+                    <groupId>org.apache.derby</groupId>
+                    <artifactId>derby</artifactId>
+                </exclusion>
             </exclusions>
         </dependency>
 
@@ -223,11 +227,6 @@
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>org.apache.derby</groupId>
-            <artifactId>derby</artifactId>
         </dependency>
 
         <dependency>
@@ -556,6 +555,12 @@
                 </exclusion>
             </exclusions>
         </dependency>
+
+        <dependency>
+            <groupId>org.apache.derby</groupId>
+            <artifactId>derby</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -617,7 +622,6 @@
                 <configuration>
                     <excludes>
                         <exclude>log4j2.xml</exclude>
-                        <exclude>derby/**</exclude>
                         <exclude>mysql/**</exclude>
                         <exclude>postgres/**</exclude>
                     </excludes>

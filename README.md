@@ -35,13 +35,13 @@
   <a href="https://github.com/datazip-inc/olake-fusion/issues">
     <img alt="GitHub issues" src="https://img.shields.io/github/issues/datazip-inc/olake-fusion"/>
   </a>
-  <a href="https://olake.io/docs">
+  <a href="https://olake.io/docs/fusion/getting-started/overview/">
     <img alt="Documentation" src="https://img.shields.io/badge/Docs-olake.io-2563eb"/>
   </a>
   <a href="https://olake.io/slack/">
     <img alt="Join Slack" src="https://img.shields.io/badge/Community-Slack-4A154B"/>
   </a>
-  <a href="https://olake.io/docs/community/contributing/">
+  <a href="https://olake.io/docs/fusion/community/contributing/">
     <img alt="Contribute" src="https://img.shields.io/badge/Contribute-OLake-16a34a"/>
   </a>
 </p>
@@ -69,7 +69,7 @@ With OLake-Fusion, you can:
 
 ## Key Features
 
-- **Self-Optimizing Tables:** Automatically compacts files and organizes data to keep read latency low.
+- **Cron Based Table Configuration:** Define cron to run compaction with an easy UI.
 - **Multi-Catalog Support:** Works with catalogs such as Glue, JDBC, and REST-based catalogs.
 - **Infrastructure Independent:** Deploy on private cloud, public cloud, hybrid cloud, or multi-cloud.
 - **Lakehouse Ready:** Designed for modern analytics workloads on open table formats.
@@ -85,25 +85,26 @@ Read the full benchmark details: [Compaction Benchmark](https://olake.io/docs/be
 
 Start with the first end-to-end setup guide:
 
-- [Configure Your First Compaction](https://olake.io/docs/getting-started/configure-first-compaction/)
+- [Configure Your First Compaction](https://olake.io/docs/fusion/getting-started/configure-first-compaction/)
 
 Helpful next reads:
 
-- [Deployment Guide Docker](https://olake.io/docs/install/olake-ui/)
-- [Deployment Guide Helm](https://olake.io/docs/install/kubernetes-compaction/)
-- [Managing Catalogs](https://olake.io/docs/iceberg-maintenance/catalogs/)
+- [Deployment Guide Docker](https://olake.io/docs/fusion/install/olake-ui/)
+- [Deployment Guide Helm](https://olake.io/docs/fusion/install/kubernetes-compaction/)
+- [Managing Catalogs](https://olake.io/docs/fusion/maintenance/catalogs/)
 
 ## Community
 
 - Join us on [Slack](https://olake.io/slack/)
 - Ask questions and report issues via [GitHub Issues](https://github.com/datazip-inc/olake-fusion/issues)
-- Follow docs and updates at [olake.io/docs](https://olake.io/docs)
+- Follow docs and updates at [OLake Fusion Docs](https://olake.io/docs/fusion/getting-started/overview/)
 
 ## Contributing
 
 Contributions of all sizes are welcome.
 
-- Core project: [CONTRIBUTING.md](https://github.com/datazip-inc/olake/blob/master/CONTRIBUTING.md)
+- This project: [CONTRIBUTING.md](CONTRIBUTING.md) — build, IDE setup, debug mode, and PR requirements
+- Core project: [datazip-inc/olake](https://github.com/datazip-inc/olake/blob/master/CONTRIBUTING.md)
 - UI project: [OLake UI Repository](https://github.com/datazip-inc/olake-ui)
 - Docs and website: [OLake Docs Repository](https://github.com/datazip-inc/olake-docs/)
-- Contributor rewards: [Bounty Program](https://olake.io/docs/community/issues-and-prs#goodies)
+- Contributor rewards: [Bounty Program](https://olake.io/docs/fusion/community/issues-and-prs#goodies)
