@@ -31,7 +31,7 @@
     <url>https://amoro.apache.org</url>
 
     <properties>
-        <flink-optimizer.flink-version>1.18.1</flink-optimizer.flink-version>
+        <flink-optimizer.flink-version>1.20.4</flink-optimizer.flink-version>
         <!--   When the flink version is more than 1.15, the scala suffix is empty     -->
         <flink-optimizer.scala-version_suffix></flink-optimizer.scala-version_suffix>
     </properties>
