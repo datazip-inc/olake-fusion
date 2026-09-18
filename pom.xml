@@ -139,7 +139,7 @@
         <caffeine.version>2.9.3</caffeine.version>
         <snakeyaml.version>2.2</snakeyaml.version>
         <mybatis.version>3.5.15</mybatis.version>
-        <postgres-jdbc.version>42.7.2</postgres-jdbc.version>
+        <postgres-jdbc.version>42.7.12</postgres-jdbc.version>
         <derby-test.version>10.14.1.0</derby-test.version>
         <commons-dbcp2.version>2.9.0</commons-dbcp2.version>
         <netty.version>4.1.138.Final</netty.version>
@@ -165,7 +165,34 @@
         <hudi.version>0.14.1</hudi.version>
         <pagehelper.version>6.1.0</pagehelper.version>
         <jsqlparser.version>4.7</jsqlparser.version>
-        <fasterxml.jackson.version>2.14.2</fasterxml.jackson.version>
+        <fasterxml.jackson.version>2.18.8</fasterxml.jackson.version>
+
+        <!--
+          Versions below pin transitive dependencies that arrive via Spark, Hive, Iceberg
+          and Javalin and that ship with a known High-severity advisory. Nothing declares
+          them directly; the dependencyManagement entries further down are what force them.
+          Bump these rather than adding per-dependency exclusions.
+        -->
+        <jetty9.version>9.4.58.v20250814</jetty9.version>
+        <!-- 1.1.10.5 not 1.1.10.4: hadoop-3 already resolved 1.1.10.5, and the lower
+             pin would have downgraded it. Both are above the CVE-2023-43642 threshold. -->
+        <snappy-java.version>1.1.10.5</snappy-java.version>
+        <!-- org.lz4:lz4-java was relocated to at.yawk.lz4:lz4-java and stops at 1.8.1,
+             which is itself still affected. Pin the old coordinate to its final version
+             (1.8.1, which carries the relocation) and the new coordinate to the fix. -->
+        <lz4-java.version>1.10.1</lz4-java.version>
+        <lz4-java-legacy.version>1.8.1</lz4-java-legacy.version>
+        <httpcore5.version>5.4.3</httpcore5.version>
+        <httpclient5.version>5.4.3</httpclient5.version>
+        <!-- 2.16.1 not 2.14.0: hadoop-3 already resolved 2.16.1. hadoop-2 was on 2.11.0. -->
+        <commons-io.version>2.16.1</commons-io.version>
+        <ivy.version>2.5.2</ivy.version>
+        <ant.version>1.10.9</ant.version>
+        <!-- Also drops json-smart and accessors-smart from the classpath entirely:
+             nimbus-jose-jwt 9.x no longer depends on them. -->
+        <nimbus-jose-jwt.version>9.37.2</nimbus-jose-jwt.version>
+        <json-smart.version>2.4.9</json-smart.version>
+
         <apache-directory-server.version>2.0.0-M15</apache-directory-server.version>
         <apache-directory-api-all.version>1.0.0-M20</apache-directory-api-all.version>
         <rocksdb-dependency-scope>compile</rocksdb-dependency-scope>
@@ -1344,6 +1371,163 @@
                 <version>${mockito.version}</version>
                 <scope>test</scope>
             </dependency>
+
+            <!--
+              ===== Security pins for transitive dependencies =====
+              Each entry below replaces a version that ships with a known High-severity
+              advisory. These artifacts are not declared by any module; they arrive through
+              Spark, Hive, Iceberg, Hadoop or Javalin, so dependencyManagement is the only
+              place their version can be controlled.
+
+              Jetty note: jetty-server CVE-2024-13009 is fixed in 9.4.57. The remaining two
+              Jetty advisories (jetty-http CVE-2026-2332, jetty-security CVE-2026-10050) are
+              fixed only in 9.4.60 / 9.4.63, which are not published to Maven Central -
+              9.4.58 is the newest public 9.4.x. Closing those two requires moving to
+              Jetty 10+, which means upgrading Javalin off 4.x.
+            -->
+            <dependency>
+                <groupId>org.eclipse.jetty</groupId>
+                <artifactId>jetty-server</artifactId>
+                <version>${jetty9.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.eclipse.jetty</groupId>
+                <artifactId>jetty-http</artifactId>
+                <version>${jetty9.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.eclipse.jetty</groupId>
+                <artifactId>jetty-io</artifactId>
+                <version>${jetty9.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.eclipse.jetty</groupId>
+                <artifactId>jetty-security</artifactId>
+                <version>${jetty9.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.eclipse.jetty</groupId>
+                <artifactId>jetty-servlet</artifactId>
+                <version>${jetty9.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.eclipse.jetty</groupId>
+                <artifactId>jetty-util</artifactId>
+                <version>${jetty9.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.eclipse.jetty</groupId>
+                <artifactId>jetty-webapp</artifactId>
+                <version>${jetty9.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.eclipse.jetty</groupId>
+                <artifactId>jetty-xml</artifactId>
+                <version>${jetty9.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.eclipse.jetty</groupId>
+                <artifactId>jetty-client</artifactId>
+                <version>${jetty9.version}</version>
+            </dependency>
+
+            <!-- CVE-2023-43642, CVE-2023-34455: unchecked chunk length leads to DoS -->
+            <dependency>
+                <groupId>org.xerial.snappy</groupId>
+                <artifactId>snappy-java</artifactId>
+                <version>${snappy-java.version}</version>
+            </dependency>
+
+            <!-- CVE-2025-66566, CVE-2025-12183: info leak and out-of-bounds in decompressor.
+                 Both coordinates are pinned: org.lz4 relocates to at.yawk.lz4, and a pin on
+                 the old groupId alone lands on a version that is still affected. -->
+            <dependency>
+                <groupId>at.yawk.lz4</groupId>
+                <artifactId>lz4-java</artifactId>
+                <version>${lz4-java.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.lz4</groupId>
+                <artifactId>lz4-java</artifactId>
+                <version>${lz4-java-legacy.version}</version>
+            </dependency>
+
+            <!-- CVE-2026-54399, CVE-2026-54428: header parsing memory exhaustion -->
+            <dependency>
+                <groupId>org.apache.httpcomponents.core5</groupId>
+                <artifactId>httpcore5</artifactId>
+                <version>${httpcore5.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.httpcomponents.core5</groupId>
+                <artifactId>httpcore5-h2</artifactId>
+                <version>${httpcore5.version}</version>
+            </dependency>
+
+            <!-- CVE-2025-27820: domain checks disabled -->
+            <dependency>
+                <groupId>org.apache.httpcomponents.client5</groupId>
+                <artifactId>httpclient5</artifactId>
+                <version>${httpclient5.version}</version>
+            </dependency>
+
+            <!--
+              protobuf-java CVE-2024-7254 is deliberately NOT pinned here. The shipped
+              version is 2.5.0, which Hadoop's ProtobufRpcEngine is compiled against;
+              forcing 3.25.5 is a major-version jump on the Hadoop RPC path and needs to
+              be validated on its own branch, not batched with patch-level pins.
+            -->
+
+            <!-- CVE-2024-47554: DoS via XmlStreamReader on untrusted input -->
+            <dependency>
+                <groupId>commons-io</groupId>
+                <artifactId>commons-io</artifactId>
+                <version>${commons-io.version}</version>
+            </dependency>
+
+            <!-- CVE-2022-46751: XML external entity reference -->
+            <dependency>
+                <groupId>org.apache.ivy</groupId>
+                <artifactId>ivy</artifactId>
+                <version>${ivy.version}</version>
+            </dependency>
+
+            <!-- CVE-2020-11979: code injection -->
+            <dependency>
+                <groupId>org.apache.ant</groupId>
+                <artifactId>ant</artifactId>
+                <version>${ant.version}</version>
+            </dependency>
+
+            <!-- CVE-2023-52428: denial of service -->
+            <dependency>
+                <groupId>com.nimbusds</groupId>
+                <artifactId>nimbus-jose-jwt</artifactId>
+                <version>${nimbus-jose-jwt.version}</version>
+            </dependency>
+
+            <!-- CVE-2023-1370: uncontrolled recursion -->
+            <dependency>
+                <groupId>net.minidev</groupId>
+                <artifactId>json-smart</artifactId>
+                <version>${json-smart.version}</version>
+            </dependency>
+
+            <!--
+              aircompressor CVE-2025-67721 is deliberately NOT pinned here. The fix is
+              2.0.3 against a shipped 0.27 - a major-version jump across a real API break
+              that Iceberg and Trino compile against. Do it on its own branch with tests.
+            -->
         </dependencies>
     </dependencyManagement>
 
