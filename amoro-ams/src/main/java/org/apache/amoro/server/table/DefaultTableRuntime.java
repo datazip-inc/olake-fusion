@@ -44,6 +44,7 @@ import org.apache.amoro.server.persistence.mapper.OptimizerMapper;
 import org.apache.amoro.server.persistence.mapper.OptimizingProcessMapper;
 import org.apache.amoro.server.persistence.mapper.TableBlockerMapper;
 import org.apache.amoro.server.persistence.mapper.TableProcessMapper;
+import org.apache.amoro.server.process.TableProcessMeta;
 import org.apache.amoro.server.resource.OptimizerInstance;
 import org.apache.amoro.server.table.blocker.TableBlocker;
 import org.apache.amoro.server.table.cleanup.CleanupOperation;
@@ -376,30 +377,29 @@ public class DefaultTableRuntime extends AbstractTableRuntime
     return this;
   }
 
-  private String triggeredTypeName() {
-    OptimizingType cronType = this.pendingCronType;
-    return cronType == null ? "UNKNOWN" : cronType.name();
+  private String triggeredTypeName(long processId) {
+    TableProcessMeta processMeta =
+        getAs(TableProcessMapper.class, m -> m.getProcessMeta(processId));
+    return processMeta.getProcessType();
   }
 
   public void beginPlanning() {
-    long processId = ID_GENERATOR.generateId();
-    long now = System.currentTimeMillis();
-    String optimizingTypeName = triggeredTypeName();
+    long processId = getProcessId();
+    String optimizingTypeName = triggeredTypeName(processId);
     Map<String, String> summary = new HashMap<>();
     summary.put("optimizingType", optimizingTypeName);
     doAs(
         TableProcessMapper.class,
         mapper ->
-            mapper.insertProcess(
+            mapper.updateProcess(
                 getTableIdentifier().getId(),
                 processId,
                 "",
-                ProcessStatus.RUNNING,
-                optimizingTypeName.toUpperCase(),
+                ProcessStatus.PLANNING,
                 OptimizingStatus.PLANNING.name().toLowerCase(),
-                "AMORO",
                 0,
-                now,
+                0L,
+                "",
                 new HashMap<>(),
                 summary));
 
@@ -521,7 +521,7 @@ public class DefaultTableRuntime extends AbstractTableRuntime
     String reason =
         String.format(
             "cron fired for %s but planner evaluated and found no data to process",
-            triggeredTypeName());
+            triggeredTypeName(getProcessId()));
 
     finalizePlanningProcess(ProcessStatus.SKIPPED, reason, null);
 
@@ -534,6 +534,7 @@ public class DefaultTableRuntime extends AbstractTableRuntime
     this.pendingCronType = null;
   }
 
+  // mark the process as failed in the database
   private void finalizePlanningProcess(ProcessStatus status, String reason, Throwable throwable) {
 
     long processId = getProcessId();
@@ -543,7 +544,7 @@ public class DefaultTableRuntime extends AbstractTableRuntime
 
     long now = System.currentTimeMillis();
     Map<String, String> summary = new HashMap<>();
-    summary.put("optimizingType", triggeredTypeName());
+    summary.put("optimizingType", triggeredTypeName(processId));
     if (status == ProcessStatus.SKIPPED) {
       summary.put("skipReason", reason);
     }
@@ -638,6 +639,27 @@ public class DefaultTableRuntime extends AbstractTableRuntime
    */
   public void markAsPending(OptimizingType cronType) {
     this.pendingCronType = cronType;
+    long processId = ID_GENERATOR.generateId();
+    long now = System.currentTimeMillis();
+    String optimizingTypeName = cronType.name();
+    Map<String, String> summary = new HashMap<>();
+    summary.put("optimizingType", optimizingTypeName);
+    doAs(
+        TableProcessMapper.class,
+        mapper ->
+            mapper.insertProcess(
+                getTableIdentifier().getId(),
+                processId,
+                "",
+                ProcessStatus.PENDING,
+                optimizingTypeName.toUpperCase(),
+                ProcessStatus.PENDING.name().toLowerCase(),
+                "AMORO",
+                0,
+                now,
+                new HashMap<>(),
+                summary));
+
     store()
         .begin()
         .updateStatusCode(
@@ -651,6 +673,7 @@ public class DefaultTableRuntime extends AbstractTableRuntime
               }
               return code;
             })
+        .updateState(PROCESS_ID_KEY, any -> processId)
         .commit();
   }
 
