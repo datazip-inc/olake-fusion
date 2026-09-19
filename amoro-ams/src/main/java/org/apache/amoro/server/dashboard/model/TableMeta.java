@@ -14,15 +14,52 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.dashboard.model;
+
+import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.util.Objects;
 
 public class TableMeta {
   public String name;
   public String type;
+  public Integer healthScore = -1;
+
+  @JsonProperty("enabled")
+  public Boolean optimizingEnabled;
+
+  @JsonProperty("olake_created")
+  public Boolean olakeCreated = false;
+
+  @JsonProperty("lite")
+  public CompactionInfo lastMinorCompaction;
+
+  @JsonProperty("medium")
+  public CompactionInfo lastMajorCompaction;
+
+  @JsonProperty("full")
+  public CompactionInfo lastFullCompaction;
+
+  public static class CompactionInfo {
+    @JsonProperty("run_id")
+    private String processId;
+
+    @JsonProperty("finish_time")
+    private Long finishTime;
+
+    @JsonProperty("status")
+    private String status;
+
+    public CompactionInfo(Long processId, Long finishTime, String status) {
+      this.processId = processId == null ? null : String.valueOf(processId);
+      this.finishTime = finishTime;
+      this.status = status;
+    }
+  }
 
   public TableMeta(String name, String type) {
     this.name = name;
@@ -43,6 +80,30 @@ public class TableMeta {
 
   public void setType(String type) {
     this.type = type;
+  }
+
+  public void setHealthScore(Integer healthScore) {
+    this.healthScore = healthScore;
+  }
+
+  public void setOptimizingEnabled(Boolean optimizingEnabled) {
+    this.optimizingEnabled = optimizingEnabled;
+  }
+
+  public void setOlakeCreated(Boolean olakeCreated) {
+    this.olakeCreated = olakeCreated;
+  }
+
+  public void setLastMinorCompaction(CompactionInfo lastMinorCompaction) {
+    this.lastMinorCompaction = lastMinorCompaction;
+  }
+
+  public void setLastMajorCompaction(CompactionInfo lastMajorCompaction) {
+    this.lastMajorCompaction = lastMajorCompaction;
+  }
+
+  public void setLastFullCompaction(CompactionInfo lastFullCompaction) {
+    this.lastFullCompaction = lastFullCompaction;
   }
 
   @Override
