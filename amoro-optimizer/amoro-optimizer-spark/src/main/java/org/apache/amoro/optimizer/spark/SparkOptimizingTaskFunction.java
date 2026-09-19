@@ -22,6 +22,7 @@ package org.apache.amoro.optimizer.spark;
 
 import org.apache.amoro.api.OptimizingTask;
 import org.apache.amoro.api.OptimizingTaskResult;
+import org.apache.amoro.log.OptimizerLogContextRegistry;
 import org.apache.amoro.log.OptimizingTaskLogContext;
 import org.apache.amoro.optimizer.common.OptimizerConfig;
 import org.apache.amoro.optimizer.common.OptimizerExecutor;
@@ -50,7 +51,7 @@ public class SparkOptimizingTaskFunction implements Function<OptimizingTask, Opt
     // Executor logs go to: <LOG_DIR>/<processId>/<taskId>.log
     long processId = task.getTaskId().getProcessId();
     int taskId = task.getTaskId().getTaskId();
-    String logFilePath = processId + "/" + taskId;
+    String logFilePath = OptimizerLogContextRegistry.taskLogFilePath(processId, taskId);
 
     // Set OptimizingTaskLogContext FIRST so AbstractRewriteFilesExecutor.execute()
     // sees isContextSet()==true and does NOT override our MDC with its own format.
@@ -60,6 +61,8 @@ public class SparkOptimizingTaskFunction implements Function<OptimizingTask, Opt
     MDC.put("processId", String.valueOf(processId));
     MDC.put("taskId", String.valueOf(taskId));
     MDC.put("logFilePath", logFilePath);
+    // Sends this executor's other threads (block manager, shuffle, RPC) to the same task log.
+    OptimizerLogContextRegistry.bind(processId, taskId, logFilePath);
 
     try {
       OptimizingTaskResult result = OptimizerExecutor.executeTask(config, threadId, task, LOG);
@@ -68,6 +71,7 @@ public class SparkOptimizingTaskFunction implements Function<OptimizingTask, Opt
       LOG.error("Task execution failed on executor", e);
       throw e;
     } finally {
+      OptimizerLogContextRegistry.unbind();
       OptimizingTaskLogContext.clearContext();
       MDC.remove("processId");
       MDC.remove("taskId");

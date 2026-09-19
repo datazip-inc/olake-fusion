@@ -33,7 +33,7 @@ ARG TARGETARCH
 USER root
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends wget \
+    && apt-get install -y --no-install-recommends wget unzip \
     && rm -rf /var/lib/apt/lists/*
 
 ENV JAVA_HOME=/opt/java/openjdk
@@ -52,3 +52,23 @@ RUN rm -f $SPARK_HOME/conf/log4j2.properties $SPARK_HOME/conf/log4j2.properties.
 COPY docker/optimizer-spark/log4j2.xml $SPARK_HOME/conf/log4j2.xml
 
 COPY $OPTIMIZER_JOB $SPARK_HOME/usrlib/optimizer-job.jar
+
+# Log4j2 resolves ContextDataProvider services once at first log call, before Spark loads the job
+# jar into a child classloader, so the provider must live here on the system classpath instead.
+#
+# Only these four classes: the rest of org/apache/amoro/log has dependencies absent from
+# $SPARK_HOME/jars, and parent first delegation would break them. The checks fail the build early.
+RUN mkdir -p /tmp/amoro-log-context \
+    && unzip -q $SPARK_HOME/usrlib/optimizer-job.jar \
+        'org/apache/amoro/log/AmoroContextDataProvider.class' \
+        'org/apache/amoro/log/OptimizerLogContextRegistry.class' \
+        'org/apache/amoro/log/OptimizerLogContextRegistry$LogContext.class' \
+        'org/apache/amoro/log/OptimizingTaskLogContext.class' \
+        'META-INF/services/org.apache.logging.log4j.core.util.ContextDataProvider' \
+        -d /tmp/amoro-log-context \
+    && grep -q 'org.apache.amoro.log.AmoroContextDataProvider' \
+        /tmp/amoro-log-context/META-INF/services/org.apache.logging.log4j.core.util.ContextDataProvider \
+    && test "$(find /tmp/amoro-log-context/org -name '*.class' | wc -l)" -eq 4 \
+    && jar cf $SPARK_HOME/jars/amoro-log-context.jar -C /tmp/amoro-log-context . \
+    && chown spark:spark $SPARK_HOME/jars/amoro-log-context.jar \
+    && rm -rf /tmp/amoro-log-context
