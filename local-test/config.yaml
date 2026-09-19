@@ -62,6 +62,14 @@ ams:
     task-execute-timeout: 1h # 3600000
     polling-timeout: 3s # 3000
     max-planning-parallelism: 1 # default 1
+    # On AMS startup, this group is created/updated, all existing optimizers in it are
+    # released, and exactly one fresh Spark optimizer is submitted. This guarantees a single
+    # optimizer per group across AMS restarts.
+    bootstrap:
+      group-name: "spark-container"
+      container: "sparkContainer"
+      parallelism: 1
+      memory-mb: 1024
 
   blocker:
     timeout: 1min # 60000
