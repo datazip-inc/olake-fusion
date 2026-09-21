@@ -386,6 +386,11 @@ public class OptimizingQueue extends PersistentBase {
     findProcess(taskRuntime.getTaskId()).resetTask((TaskRuntime<RewriteStageTask>) taskRuntime);
   }
 
+  // fails the task's whole process at once, without retrying, for a case when its optimizer died.
+  public void failProcess(TaskRuntime<?> taskRuntime, String reason) {
+    findProcess(taskRuntime.getTaskId()).fail(reason);
+  }
+
   public ResourceGroup getOptimizerGroup() {
     return optimizerGroup;
   }
@@ -657,6 +662,21 @@ public class OptimizingQueue extends PersistentBase {
             }
           }
         }
+      } finally {
+        lock.unlock();
+      }
+    }
+
+    private void fail(String reason) {
+      lock.lock();
+      try {
+        if (status != ProcessStatus.RUNNING) {
+          return;
+        }
+        failedReason = reason;
+        status = ProcessStatus.FAILED;
+        endTime = System.currentTimeMillis();
+        persistAndSetCompleted(false);
       } finally {
         lock.unlock();
       }
