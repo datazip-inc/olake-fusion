@@ -527,7 +527,7 @@ public class DefaultOptimizingService extends StatedPersistentBase
       if (StringUtils.isNotBlank(task.getToken()) && !authOptimizers.containsKey(task.getToken())) {
         String reason =
             String.format(
-                "Optimizer %s died while running task %s (e.g., due to an OOM kill)",
+                "Optimizer %s died while running task %s (e.g., due to an OOM kill, or Fusion Pod restart)",
                 task.getResourceDesc(), task.getTaskId());
         LOG.warn(reason);
         queue.failProcess(task, reason);
