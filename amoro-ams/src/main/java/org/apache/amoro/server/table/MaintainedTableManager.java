@@ -40,6 +40,13 @@ public interface MaintainedTableManager {
   List<ServerTableIdentifier> listManagedTables();
 
   /**
+   * Load the iceberg tables of one database.
+   *
+   * @return {@link ServerTableIdentifier} list
+   */
+  List<ServerTableIdentifier> listIcebergTables(String catalogName, String databaseName);
+
+  /**
    * Get the ServerTableIdentifier instance of the specified table identifier
    *
    * @return the {@link ServerTableIdentifier} instance

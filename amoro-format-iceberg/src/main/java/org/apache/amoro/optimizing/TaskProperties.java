@@ -19,6 +19,7 @@
 package org.apache.amoro.optimizing;
 
 import org.apache.amoro.OptimizerProperties;
+import org.apache.amoro.table.TableProperties;
 import org.apache.amoro.utils.PropertyUtil;
 import org.apache.amoro.utils.map.StructLikeCollections;
 
@@ -44,6 +45,9 @@ public class TaskProperties {
   public static final String OUTPUT_DIR = "output_location";
 
   public static final String MOVE_FILE_TO_HIVE_LOCATION = "move-files-to-hive-location";
+
+  // executor must read this value from db not from the table's metadata.json
+  public static final String TARGET_SIZE = TableProperties.SELF_OPTIMIZING_TARGET_SIZE;
 
   public static StructLikeCollections getStructLikeCollections(Map<String, String> properties) {
     boolean enableSpillMap =
