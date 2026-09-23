@@ -90,14 +90,37 @@ public interface TableConfigurationsMapper {
           + "   AND table_name = #{tableName}")
   int updateSettings(TableOptimizingConfigurationsMeta meta);
 
+  @Update(
+      "UPDATE "
+          + TABLE_NAME
+          + " SET self_optimizing_enabled = #{selfOptimizingEnabled, jdbcType=BOOLEAN}, "
+          + "     minor_trigger_cron      = #{minorTriggerCron, jdbcType=VARCHAR}, "
+          + "     major_trigger_cron      = #{majorTriggerCron, jdbcType=VARCHAR}, "
+          + "     full_trigger_cron       = #{fullTriggerCron, jdbcType=VARCHAR}, "
+          + "     target_size             = #{targetSize, jdbcType=BIGINT}, "
+          + "     update_time             = CURRENT_TIMESTAMP "
+          + " WHERE catalog_name = #{catalogName} AND db_name = #{dbName} "
+          + "   AND table_name = #{tableName}")
+  int updateConfigurations(TableOptimizingConfigurationsMeta meta);
+
+  @Update(
+      "UPDATE "
+          + TABLE_NAME
+          + " SET health_score            = #{healthScore, jdbcType=INTEGER}, "
+          + "     health_score_snapshot_id = #{healthScoreSnapshotId, jdbcType=BIGINT}, "
+          + "     update_time             = CURRENT_TIMESTAMP "
+          + " WHERE catalog_name = #{catalogName} AND db_name = #{dbName} "
+          + "   AND table_name = #{tableName}")
+  int updateHealthScore(TableOptimizingConfigurationsMeta meta);
+
   /* ---------- insert ---------- */
 
   @Insert(
       "INSERT INTO "
           + TABLE_NAME
-          + " (catalog_name, db_name, table_name, self_optimizing_enabled, "
-          + "  minor_trigger_cron, major_trigger_cron, full_trigger_cron, target_size, "
-          + "  olake_created, health_score, health_score_snapshot_id) "
+          + " ("
+          + SELECT_COLS
+          + ") "
           + "VALUES (#{catalogName}, #{dbName}, #{tableName}, "
           + "        #{selfOptimizingEnabled, jdbcType=BOOLEAN}, "
           + "        #{minorTriggerCron, jdbcType=VARCHAR}, "

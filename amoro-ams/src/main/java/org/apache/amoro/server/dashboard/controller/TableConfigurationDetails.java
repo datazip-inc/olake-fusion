@@ -41,6 +41,10 @@ import java.util.List;
  * <p>Only the configuration keys provided are updated, the rest are left intact.
  */
 public class TableConfigurationDetails {
+  private static final String CATALOG_KEY = "catalog";
+  private static final String DB_KEY = "db";
+  private static final String TABLE_KEY = "table";
+
   private final CatalogManager catalogManager;
   private final TableManager tableManager;
   private final TableConfigurationsService configurations;
@@ -52,8 +56,8 @@ public class TableConfigurationDetails {
   }
 
   public void getIcebergTables(Context ctx) {
-    String catalog = ctx.pathParam("catalog");
-    String db = ctx.pathParam("db");
+    String catalog = ctx.pathParam(CATALOG_KEY);
+    String db = ctx.pathParam(DB_KEY);
     check(catalog, db);
 
     List<TableOptimizingConfigurationsMeta> result = Lists.newArrayList();
@@ -64,32 +68,28 @@ public class TableConfigurationDetails {
   }
 
   public void getTableConfig(Context ctx) {
-    String catalog = ctx.pathParam("catalog");
-    String db = ctx.pathParam("db");
-    String table = ctx.pathParam("table");
+    String catalog = ctx.pathParam(CATALOG_KEY);
+    String db = ctx.pathParam(DB_KEY);
+    String table = ctx.pathParam(TABLE_KEY);
     check(catalog, db);
     Preconditions.checkArgument(StringUtils.isNotBlank(table), "table can not be empty");
 
-    ServerTableIdentifier identifier =
-        tableManager.getServerTableIdentifier(
-            TableIdentifier.of(catalog, db, table).buildTableIdentifier());
+    ServerTableIdentifier identifier = resolve(catalog, db, table);
     Preconditions.checkArgument(identifier != null, "Unknown table %s.%s.%s", catalog, db, table);
 
     ctx.json(OkResponse.of(configurations.getOrCreate(identifier)));
   }
 
   public void updateConfigurations(Context ctx) {
-    String catalog = ctx.pathParam("catalog");
-    String db = ctx.pathParam("db");
+    String catalog = ctx.pathParam(CATALOG_KEY);
+    String db = ctx.pathParam(DB_KEY);
     check(catalog, db);
 
     OptimizingConfigurations info = ctx.bodyAsClass(OptimizingConfigurations.class);
 
     List<ServerTableIdentifier> identifiers = Lists.newArrayList();
     for (String tableName : info.getTables()) {
-      ServerTableIdentifier identifier =
-          tableManager.getServerTableIdentifier(
-              TableIdentifier.of(catalog, db, tableName).buildTableIdentifier());
+      ServerTableIdentifier identifier = resolve(catalog, db, tableName);
       if (identifier != null) {
         identifiers.add(identifier);
       }
@@ -97,6 +97,11 @@ public class TableConfigurationDetails {
 
     configurations.update(identifiers, info);
     ctx.json(OkResponse.ok());
+  }
+
+  private ServerTableIdentifier resolve(String catalog, String db, String table) {
+    return tableManager.getServerTableIdentifier(
+        TableIdentifier.of(catalog, db, table).buildTableIdentifier());
   }
 
   private void check(String catalog, String db) {

@@ -36,6 +36,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
 import java.util.Map;
+import java.util.function.BiFunction;
 
 /**
  * The Iceberg Table Configurations are now stored in the AMS database. This class is responsible
@@ -84,6 +85,11 @@ public class TableConfigurationsService extends PersistentBase {
                 identifier.getCatalog(), identifier.getDatabase(), identifier.getTableName()));
   }
 
+  private static TableOptimizingConfigurationsMeta newMeta(ServerTableIdentifier identifier) {
+    return new TableOptimizingConfigurationsMeta(
+        identifier.getCatalog(), identifier.getDatabase(), identifier.getTableName());
+  }
+
   // either returns the existing table configurations for an iceberg table from db, or,
   // stores the entry in db for the new iceberg table, and returns
   public TableOptimizingConfigurationsMeta getOrCreate(ServerTableIdentifier identifier) {
@@ -91,31 +97,24 @@ public class TableConfigurationsService extends PersistentBase {
     if (existing != null) {
       return existing;
     }
-    TableOptimizingConfigurationsMeta meta =
-        new TableOptimizingConfigurationsMeta(
-            identifier.getCatalog(), identifier.getDatabase(), identifier.getTableName());
+    TableOptimizingConfigurationsMeta meta = newMeta(identifier);
 
     // store in db
-    persist(meta);
+    persist(meta, TableConfigurationsMapper::updateSettings);
     return meta;
   }
 
   public void update(
       Collection<ServerTableIdentifier> identifiers, TableOptimizingConfigurationsMeta values) {
     for (ServerTableIdentifier identifier : identifiers) {
-      TableOptimizingConfigurationsMeta meta = select(identifier);
-      if (meta == null) {
-        meta =
-            new TableOptimizingConfigurationsMeta(
-                identifier.getCatalog(), identifier.getDatabase(), identifier.getTableName());
-      }
+      TableOptimizingConfigurationsMeta meta = newMeta(identifier);
       meta.setSelfOptimizingEnabled(values.getSelfOptimizingEnabled());
       meta.setMinorTriggerCron(values.getMinorTriggerCron());
       meta.setMajorTriggerCron(values.getMajorTriggerCron());
       meta.setFullTriggerCron(values.getFullTriggerCron());
       meta.setTargetSize(values.getTargetSize());
-      // store in db
-      persist(meta);
+      // store in db, only the configuration columns so a concurrent health score write is kept
+      persist(meta, TableConfigurationsMapper::updateConfigurations);
     }
     LOG.info("Updated optimizing settings for {} tables: {}", identifiers.size(), values);
   }
@@ -151,12 +150,10 @@ public class TableConfigurationsService extends PersistentBase {
     UnkeyedTable unkeyed = (UnkeyedTable) table.originalTable();
     Map<String, String> stored = ((HasTableOperations) unkeyed).operations().current().properties();
 
-    TableOptimizingConfigurationsMeta meta =
-        new TableOptimizingConfigurationsMeta(
-            identifier.getCatalog(), identifier.getDatabase(), identifier.getTableName());
+    TableOptimizingConfigurationsMeta meta = newMeta(identifier);
     adopt(meta, stored);
     meta.setOlakeCreated(stored.containsKey(TableProperties.OLAKE_2PC));
-    persist(meta);
+    persist(meta, TableConfigurationsMapper::updateSettings);
   }
 
   private static void adopt(
@@ -174,15 +171,11 @@ public class TableConfigurationsService extends PersistentBase {
   }
 
   public void storeHealthScore(ServerTableIdentifier identifier, int healthScore, long snapshotId) {
-    TableOptimizingConfigurationsMeta meta = select(identifier);
-    if (meta == null) {
-      meta =
-          new TableOptimizingConfigurationsMeta(
-              identifier.getCatalog(), identifier.getDatabase(), identifier.getTableName());
-    }
+    TableOptimizingConfigurationsMeta meta = newMeta(identifier);
     meta.setHealthScore(healthScore);
     meta.setHealthScoreSnapshotId(snapshotId);
-    persist(meta);
+    // only the health score columns, so a configuration saved meanwhile is not overwritten
+    persist(meta, TableConfigurationsMapper::updateHealthScore);
   }
 
   public Long healthScoreSnapshotId(ServerTableIdentifier identifier) {
@@ -195,11 +188,14 @@ public class TableConfigurationsService extends PersistentBase {
     LOG.info("Removed optimizing configurations for all tables of dropped catalog {}", catalogName);
   }
 
-  private void persist(TableOptimizingConfigurationsMeta meta) {
+  // runs the given update on the existing row, or inserts the full row when the table has none
+  private void persist(
+      TableOptimizingConfigurationsMeta meta,
+      BiFunction<TableConfigurationsMapper, TableOptimizingConfigurationsMeta, Integer> update) {
     doAs(
         TableConfigurationsMapper.class,
         mapper -> {
-          if (mapper.updateSettings(meta) == 0) {
+          if (update.apply(mapper, meta) == 0) {
             mapper.insertSettings(meta);
           }
         });
