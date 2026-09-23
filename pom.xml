@@ -116,7 +116,7 @@
         <scala.binary.version>2.13</scala.binary.version>
         <args4j.version>2.33</args4j.version>
         <slf4j.version>2.0.17</slf4j.version>
-        <log4j.version>2.20.0</log4j.version>
+        <log4j.version>2.25.4</log4j.version>
         <junit4.version>4.13.2</junit4.version>
         <junit5.version>5.9.1</junit5.version>
         <commons-beanutils.version>1.11.0</commons-beanutils.version>
@@ -139,7 +139,7 @@
         <caffeine.version>2.9.3</caffeine.version>
         <snakeyaml.version>2.2</snakeyaml.version>
         <mybatis.version>3.5.15</mybatis.version>
-        <postgres-jdbc.version>42.7.2</postgres-jdbc.version>
+        <postgres-jdbc.version>42.7.12</postgres-jdbc.version>
         <derby-test.version>10.14.1.0</derby-test.version>
         <commons-dbcp2.version>2.9.0</commons-dbcp2.version>
         <netty.version>4.1.138.Final</netty.version>
