@@ -1,0 +1,32 @@
+overrides:
+  lodash-es@<4.18.0: ^4.18.1
+  tar-fs@2: ^2.1.2
+  immutable@3: 3.8.4
+  nanoid@3: ^3.3.19
+  nanoid@5: ^5.1.16
+  micromatch@3: ^4.0.8
+  svgo@2: ^2.8.4
+  flatted: ^3.4.4
+  browserslist: ^4.29.0
+  js-yaml@4: 4.3.2
+
+patchedDependencies:
+  mockjs@1.1.0: patches/mockjs@1.1.0.patch
+
+onlyBuiltDependencies:
+  - esbuild
+  - vue-demi
+  - core-js
+  - core-js-pure
+  - '@scarf/scarf'
+  - tree-sitter
+  - tree-sitter-json
+  - tree-sitter-yaml
+
+allowBuilds:
+  '@scarf/scarf': set this to true or false
+  core-js: set this to true or false
+  core-js-pure: set this to true or false
+  esbuild: set this to true or false
+  tree-sitter: set this to true or false
+  vue-demi: set this to true or false

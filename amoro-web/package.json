@@ -22,7 +22,7 @@
     "swagger-ui-dist": "^5.17.14",
     "vue": "^3.4.27",
     "vue-clipboard3": "^2.0.0",
-    "vue-i18n": "^9.13.1",
+    "vue-i18n": "^9.14.5",
     "vue-router": "^4.3.3",
     "vue-virtual-scroller": "2.0.0-beta.8"
   },
