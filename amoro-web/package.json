@@ -50,7 +50,20 @@
   "pnpm": {
     "overrides": {
       "form-data": ">=4.0.4",
-      "sha.js": ">=2.4.12"
+      "sha.js": ">=2.4.12",
+      "lodash-es@<4.18.0": "^4.18.1",
+      "tar-fs@2": "^2.1.5",
+      "immutable@3": "3.8.4",
+      "nanoid@3": "^3.3.19",
+      "nanoid@5": "^5.1.16",
+      "micromatch@3": "^4.0.8",
+      "svgo@2": "^2.8.4",
+      "flatted": "^3.4.4",
+      "browserslist": "^4.29.0",
+      "js-yaml@4": "4.3.2"
+    },
+    "patchedDependencies": {
+      "mockjs@1.1.0": "patches/mockjs@1.1.0.patch"
     }
   }
 }
