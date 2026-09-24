@@ -29,6 +29,7 @@ import org.apache.commons.lang3.tuple.Pair;
 
 import javax.annotation.Nullable;
 
+import java.util.Collection;
 import java.util.List;
 
 public interface MaintainedTableManager {
@@ -57,6 +58,9 @@ public interface MaintainedTableManager {
 
   /** Get the table process meta. */
   TableProcessMeta getTableProcessMeta(long processId);
+
+  /** Get the latest process of each process type, for each of the given tables. */
+  List<TableProcessMeta> listLatestProcessOfEachType(Collection<Long> tableIds);
 
   /** Get the table runtime meta. */
   TableRuntimeMeta getTableRuntimeMata(ServerTableIdentifier id);

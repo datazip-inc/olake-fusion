@@ -478,7 +478,7 @@ create table if not exists table_configurations (
     major_trigger_cron        varchar(128) default null,
     full_trigger_cron         varchar(128) default null,
     target_size               bigint not null default 536870912, -- default: 512 MB
-    olake_created             boolean default null,
+    olake_created             boolean not null default false,
     health_score              integer default null,
     health_score_snapshot_id  bigint default null,
     create_time               timestamptz not null default now(),

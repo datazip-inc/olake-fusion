@@ -22,13 +22,14 @@ package org.apache.amoro.server.table;
 
 import org.apache.amoro.AmoroTable;
 import org.apache.amoro.ServerTableIdentifier;
+import org.apache.amoro.server.catalog.CatalogManager;
+import org.apache.amoro.server.dashboard.model.OptimizingConfigurations;
 import org.apache.amoro.server.persistence.PersistentBase;
 import org.apache.amoro.server.persistence.TableOptimizingConfigurationsMeta;
 import org.apache.amoro.server.persistence.mapper.TableConfigurationsMapper;
 import org.apache.amoro.server.persistence.mapper.TableMetaMapper;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Maps;
 import org.apache.amoro.table.TableProperties;
-import org.apache.amoro.table.UnkeyedTable;
 import org.apache.amoro.utils.PropertyUtil;
 import org.apache.iceberg.HasTableOperations;
 import org.slf4j.Logger;
@@ -36,7 +37,10 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.BiFunction;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * The Iceberg Table Configurations are now stored in the AMS database. This class is responsible
@@ -58,13 +62,12 @@ public class TableConfigurationsService extends PersistentBase {
     this.tableService = tableService;
   }
 
+  // the optimizing configurations of a table are always the ones stored in db (the defaults when
+  // it has none stored), never the ones of its metadata.json
   public Map<String, String> overlay(
       ServerTableIdentifier identifier, Map<String, String> properties) {
     Map<String, String> merged = Maps.newHashMap(properties);
-    TableOptimizingConfigurationsMeta meta = select(identifier);
-    if (meta == null) {
-      return merged;
-    }
+    TableOptimizingConfigurationsMeta meta = get(identifier);
     put(
         merged,
         TableProperties.ENABLE_SELF_OPTIMIZING,
@@ -90,45 +93,66 @@ public class TableConfigurationsService extends PersistentBase {
         identifier.getCatalog(), identifier.getDatabase(), identifier.getTableName());
   }
 
-  // either returns the existing table configurations for an iceberg table from db, or,
-  // stores the entry in db for the new iceberg table, and returns
-  public TableOptimizingConfigurationsMeta getOrCreate(ServerTableIdentifier identifier) {
-    TableOptimizingConfigurationsMeta existing = select(identifier);
-    if (existing != null) {
-      return existing;
-    }
-    TableOptimizingConfigurationsMeta meta = newMeta(identifier);
+  // stores fresh configurations for the tables that have none stored yet, a table already stored
+  // (one recreated under the same name too) keeps the configurations it has
+  public void storeFresh(String catalogName, String dbName, Collection<String> tableNames) {
+    doAs(
+        TableConfigurationsMapper.class,
+        mapper -> mapper.insertFresh(catalogName, dbName, tableNames));
+  }
 
-    // store in db
-    persist(meta, TableConfigurationsMapper::updateSettings);
-    return meta;
+  /** Returns the stored configurations of the tables of one database, by table name. */
+  public Map<String, TableOptimizingConfigurationsMeta> listByDatabase(
+      String catalogName, String dbName) {
+    return getAs(
+            TableConfigurationsMapper.class, mapper -> mapper.selectByDatabase(catalogName, dbName))
+        .stream()
+        .collect(
+            Collectors.toMap(TableOptimizingConfigurationsMeta::getTableName, Function.identity()));
+  }
+
+  // returns the stored configurations of the table, or the defaults when it has none stored,
+  // without storing them: only the startup adoption, a new table and an update store them
+  public TableOptimizingConfigurationsMeta get(ServerTableIdentifier identifier) {
+    return Optional.ofNullable(select(identifier)).orElseGet(() -> newMeta(identifier));
   }
 
   public void update(
-      Collection<ServerTableIdentifier> identifiers, TableOptimizingConfigurationsMeta values) {
+      Collection<ServerTableIdentifier> identifiers, OptimizingConfigurations values) {
     for (ServerTableIdentifier identifier : identifiers) {
-      TableOptimizingConfigurationsMeta meta = newMeta(identifier);
-      meta.setSelfOptimizingEnabled(values.getSelfOptimizingEnabled());
-      meta.setMinorTriggerCron(values.getMinorTriggerCron());
-      meta.setMajorTriggerCron(values.getMajorTriggerCron());
-      meta.setFullTriggerCron(values.getFullTriggerCron());
-      meta.setTargetSize(values.getTargetSize());
+      // the configurations not provided keep their stored value
+      TableOptimizingConfigurationsMeta meta = get(identifier);
+      values.applyTo(meta);
       // store in db, only the configuration columns so a concurrent health score write is kept
       persist(meta, TableConfigurationsMapper::updateConfigurations);
+      LOG.info("Updated optimizing settings: {}", meta);
+      applyToRuntime(identifier);
     }
-    LOG.info("Updated optimizing settings for {} tables: {}", identifiers.size(), values);
+  }
+
+  // the table runtime takes the stored configurations right away rather than on its next refresh,
+  // so optimizing never works on configurations the db no longer holds
+  private void applyToRuntime(ServerTableIdentifier identifier) {
+    TableService service = tableService;
+    // a table AMS has not synced from the catalog yet has no runtime, it starts on the stored ones
+    if (service == null || identifier.getId() == null || !service.contains(identifier.getId())) {
+      return;
+    }
+    try {
+      ((DefaultTableRuntime) service.getRuntime(identifier.getId())).applyStoredConfigurations();
+    } catch (Exception e) {
+      // stored already, its next refresh applies them
+      LOG.warn("Failed to apply the optimizing settings to the runtime of {}", identifier, e);
+    }
   }
 
   // 1. Copies the existing configurations from the metadata.json into db (backward compatibility)
   // 2. Skips tables that already have been added in db
   // 3. Works for catalog already existing during Fusion restart
-  // 4. Will not work for tables if someone manually modified the database-filter after
-  //    startup (until Fusion is restarted)
-  public void adoptExistingTables() {
-    TableService service = this.tableService;
-    if (service == null) {
-      return;
-    }
+  // 4. Runs at startup only. Will not work for tables with configurations in its metadata.json
+  // introduced after startup.
+  // 5. A table that failed to load keeps no entry, and is tried again on the next startup
+  public void adoptExistingTables(CatalogManager catalogManager) {
     for (ServerTableIdentifier identifier :
         getAs(TableMetaMapper.class, TableMetaMapper::selectAllTableIdentifiers)) {
 
@@ -137,7 +161,7 @@ public class TableConfigurationsService extends PersistentBase {
         continue;
       }
       try {
-        adoptTableProperties(identifier, service.loadTable(identifier));
+        adoptTableProperties(identifier, catalogManager.loadTable(identifier.getIdentifier()));
       } catch (Exception e) {
         // must not stop for the others
         LOG.warn("Failed to adopt optimizing properties of table {}", identifier, e);
@@ -147,13 +171,35 @@ public class TableConfigurationsService extends PersistentBase {
   }
 
   private void adoptTableProperties(ServerTableIdentifier identifier, AmoroTable<?> table) {
-    UnkeyedTable unkeyed = (UnkeyedTable) table.originalTable();
-    Map<String, String> stored = ((HasTableOperations) unkeyed).operations().current().properties();
+    Map<String, String> stored = properties(table);
 
     TableOptimizingConfigurationsMeta meta = newMeta(identifier);
     adopt(meta, stored);
     meta.setOlakeCreated(stored.containsKey(TableProperties.OLAKE_2PC));
     persist(meta, TableConfigurationsMapper::updateSettings);
+  }
+
+  /**
+   * Marks a stored table as created by OLake once OLake has committed to it: OLake writes its
+   * property with its first data commit, which may come after the table was stored. Once marked, a
+   * table stays marked.
+   */
+  public void storeOlakeCreated(ServerTableIdentifier identifier, AmoroTable<?> table) {
+    if (!properties(table).containsKey(TableProperties.OLAKE_2PC)) {
+      return;
+    }
+    // a table with no row stored keeps none
+    doAs(
+        TableConfigurationsMapper.class,
+        mapper ->
+            mapper.markOlakeCreated(
+                identifier.getCatalog(), identifier.getDatabase(), identifier.getTableName()));
+  }
+
+  // the table's metadata.json properties as the catalog holds them, without catalog level defaults
+  // merged in
+  private static Map<String, String> properties(AmoroTable<?> table) {
+    return ((HasTableOperations) table.originalTable()).operations().current().properties();
   }
 
   private static void adopt(
@@ -174,13 +220,9 @@ public class TableConfigurationsService extends PersistentBase {
     TableOptimizingConfigurationsMeta meta = newMeta(identifier);
     meta.setHealthScore(healthScore);
     meta.setHealthScoreSnapshotId(snapshotId);
-    // only the health score columns, so a configuration saved meanwhile is not overwritten
-    persist(meta, TableConfigurationsMapper::updateHealthScore);
-  }
-
-  public Long healthScoreSnapshotId(ServerTableIdentifier identifier) {
-    TableOptimizingConfigurationsMeta meta = select(identifier);
-    return meta == null ? null : meta.getHealthScoreSnapshotId();
+    // only the health score columns of a stored table, so a configuration saved meanwhile is not
+    // overwritten, and a table is never stored with defaults ahead of its own configurations
+    doAs(TableConfigurationsMapper.class, mapper -> mapper.updateHealthScore(meta));
   }
 
   public void deleteAllTablesOfCatalog(String catalogName) {
@@ -201,8 +243,11 @@ public class TableConfigurationsService extends PersistentBase {
         });
   }
 
+  // a cron not set is removed, so the one of the metadata.json does not apply
   private static void put(Map<String, String> properties, String key, String value) {
-    if (value != null) {
+    if (value == null) {
+      properties.remove(key);
+    } else {
       properties.put(key, value);
     }
   }

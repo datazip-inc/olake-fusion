@@ -33,7 +33,7 @@ public class TableOptimizingConfigurationsMeta {
   private String majorTriggerCron;
   private String fullTriggerCron;
   private long targetSize = DEFAULT_TARGET_SIZE;
-  private Boolean olakeCreated;
+  private boolean olakeCreated;
   private Integer healthScore;
   private Long healthScoreSnapshotId;
 
@@ -109,11 +109,11 @@ public class TableOptimizingConfigurationsMeta {
     this.targetSize = targetSize;
   }
 
-  public Boolean getOlakeCreated() {
+  public boolean getOlakeCreated() {
     return olakeCreated;
   }
 
-  public void setOlakeCreated(Boolean olakeCreated) {
+  public void setOlakeCreated(boolean olakeCreated) {
     this.olakeCreated = olakeCreated;
   }
 

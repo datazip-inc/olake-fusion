@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS table_configurations
     major_trigger_cron       VARCHAR(128) DEFAULT NULL,
     full_trigger_cron        VARCHAR(128) DEFAULT NULL,
     target_size              BIGINT NOT NULL DEFAULT 536870912,
-    olake_created            BOOLEAN DEFAULT NULL,
+    olake_created            BOOLEAN NOT NULL DEFAULT FALSE,
     health_score             INTEGER DEFAULT NULL,
     health_score_snapshot_id BIGINT DEFAULT NULL,
     create_time              TIMESTAMPTZ NOT NULL DEFAULT now(),

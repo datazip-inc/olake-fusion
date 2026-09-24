@@ -246,6 +246,12 @@ public class DashboardServer {
 
   private EndpointGroup apiGroup() {
     return () -> {
+      // new fusion apis
+      get("/{catalog}/{db}/tables", tableConfigurations::getIcebergTables);
+      get("/{catalog}/{db}/{table}/config", tableConfigurations::getTableConfig);
+      get("/{catalog}/{db}/{table}/optimizing", tableConfigurations::getOptimizing);
+      put("/{catalog}/{db}/tables/config", tableConfigurations::updateConfigurations);
+
       // table apis
       path(
           "/tables",
@@ -303,15 +309,6 @@ public class DashboardServer {
       path(
           "/catalogs",
           () -> {
-            // new Fusion APIs
-            get("/{catalog}/databases/{db}/iceberg-tables", tableConfigurations::getIcebergTables);
-            put(
-                "/{catalog}/databases/{db}/tables/config",
-                tableConfigurations::updateConfigurations);
-            get(
-                "/{catalog}/databases/{db}/tables/{table}/config",
-                tableConfigurations::getTableConfig);
-
             get("/{catalog}/databases/{db}/tables", tableController::getTableList);
             get("/{catalog}/databases", tableController::getDatabaseList);
             get("", tableController::getCatalogs);

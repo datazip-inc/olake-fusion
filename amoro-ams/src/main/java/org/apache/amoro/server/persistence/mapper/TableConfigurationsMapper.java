@@ -25,10 +25,14 @@ import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Result;
+import org.apache.ibatis.annotations.ResultMap;
 import org.apache.ibatis.annotations.Results;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 import org.apache.ibatis.type.JdbcType;
+
+import java.util.Collection;
+import java.util.List;
 
 public interface TableConfigurationsMapper {
   String TABLE_NAME = "table_configurations";
@@ -48,6 +52,7 @@ public interface TableConfigurationsMapper {
           + " WHERE catalog_name = #{catalogName} AND db_name = #{dbName} "
           + "   AND table_name = #{tableName}")
   @Results(
+      id = "tableConfigurationsMap",
       value = {
         @Result(column = "catalog_name", property = "catalogName"),
         @Result(column = "db_name", property = "dbName"),
@@ -71,6 +76,16 @@ public interface TableConfigurationsMapper {
       @Param("catalogName") String catalogName,
       @Param("dbName") String dbName,
       @Param("tableName") String tableName);
+
+  @Select(
+      "SELECT "
+          + SELECT_COLS
+          + "FROM "
+          + TABLE_NAME
+          + " WHERE catalog_name = #{catalogName} AND db_name = #{dbName}")
+  @ResultMap("tableConfigurationsMap")
+  List<TableOptimizingConfigurationsMeta> selectByDatabase(
+      @Param("catalogName") String catalogName, @Param("dbName") String dbName);
 
   /* ---------- update ---------- */
 
@@ -113,6 +128,18 @@ public interface TableConfigurationsMapper {
           + "   AND table_name = #{tableName}")
   int updateHealthScore(TableOptimizingConfigurationsMeta meta);
 
+  // only ever from false to true, once
+  @Update(
+      "UPDATE "
+          + TABLE_NAME
+          + " SET olake_created = TRUE, update_time = CURRENT_TIMESTAMP "
+          + " WHERE catalog_name = #{catalogName} AND db_name = #{dbName} "
+          + "   AND table_name = #{tableName} AND olake_created = FALSE")
+  int markOlakeCreated(
+      @Param("catalogName") String catalogName,
+      @Param("dbName") String dbName,
+      @Param("tableName") String tableName);
+
   /* ---------- insert ---------- */
 
   @Insert(
@@ -131,6 +158,21 @@ public interface TableConfigurationsMapper {
           + "        #{healthScore, jdbcType=INTEGER}, "
           + "        #{healthScoreSnapshotId, jdbcType=BIGINT})")
   int insertSettings(TableOptimizingConfigurationsMeta meta);
+
+  // stores fresh configurations (the column defaults) for the tables that have none stored yet
+  @Insert({
+    "<script>",
+    "INSERT INTO " + TABLE_NAME + " (catalog_name, db_name, table_name) VALUES ",
+    "<foreach collection='tableNames' item='tableName' separator=','>",
+    "(#{catalogName}, #{dbName}, #{tableName})",
+    "</foreach>",
+    " ON CONFLICT (catalog_name, db_name, table_name) DO NOTHING",
+    "</script>"
+  })
+  int insertFresh(
+      @Param("catalogName") String catalogName,
+      @Param("dbName") String dbName,
+      @Param("tableNames") Collection<String> tableNames);
 
   /* ---------- delete ---------- */
 

@@ -210,6 +210,8 @@ public class AmoroServiceContainer {
     optimizerManager = new DefaultOptimizerManager(serviceConfig, catalogManager);
     terminalManager = new TerminalManager(serviceConfig, catalogManager);
 
+    TableConfigurationsService.getInstance().adoptExistingTables(catalogManager);
+
     initHttpService();
     startHttpService();
     registerAmsServiceMetric();
@@ -263,7 +265,6 @@ public class AmoroServiceContainer {
     tableService.initialize();
     LOG.info("AMS table service have been initialized");
 
-    TableConfigurationsService.getInstance().adoptExistingTables();
     tableManager.setTableService(tableService);
 
     initThriftService();

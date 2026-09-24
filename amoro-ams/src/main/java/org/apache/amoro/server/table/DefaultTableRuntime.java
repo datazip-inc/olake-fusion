@@ -379,6 +379,20 @@ public class DefaultTableRuntime extends AbstractTableRuntime
     return this;
   }
 
+  /** Takes the configurations stored in the AMS database now, rather than on its next refresh. */
+  public void applyStoredConfigurations() {
+    store()
+        .begin()
+        .updateTableConfig(
+            config -> {
+              Map<String, String> stored =
+                  TableConfigurationsService.getInstance().overlay(getTableIdentifier(), config);
+              config.clear();
+              config.putAll(stored);
+            })
+        .commit();
+  }
+
   private String triggeredTypeName(long processId) {
     TableProcessMeta processMeta =
         getAs(TableProcessMapper.class, m -> m.getProcessMeta(processId));

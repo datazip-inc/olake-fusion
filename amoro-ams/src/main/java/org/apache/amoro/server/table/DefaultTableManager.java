@@ -24,7 +24,6 @@ import com.github.pagehelper.Page;
 import com.github.pagehelper.PageHelper;
 import com.github.pagehelper.PageInfo;
 import org.apache.amoro.ServerTableIdentifier;
-import org.apache.amoro.TableFormat;
 import org.apache.amoro.api.BlockableOperation;
 import org.apache.amoro.api.Blocker;
 import org.apache.amoro.api.TableIdentifier;
@@ -64,6 +63,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -142,11 +142,8 @@ public class DefaultTableManager extends PersistentBase implements TableManager 
   @Override
   public List<ServerTableIdentifier> listIcebergTables(String catalogName, String databaseName) {
     return getAs(
-            TableMetaMapper.class,
-            mapper -> mapper.selectTableIdentifiersByDb(catalogName, databaseName))
-        .stream()
-        .filter(identifier -> TableFormat.ICEBERG.equals(identifier.getFormat()))
-        .collect(Collectors.toList());
+        TableMetaMapper.class,
+        mapper -> mapper.selectTableIdentifiersByDb(catalogName, databaseName));
   }
 
   @Override
@@ -253,6 +250,15 @@ public class DefaultTableManager extends PersistentBase implements TableManager 
   @Override
   public TableProcessMeta getTableProcessMeta(long processId) {
     return getAs(TableProcessMapper.class, mapper -> mapper.getProcessMeta(processId));
+  }
+
+  @Override
+  public List<TableProcessMeta> listLatestProcessOfEachType(Collection<Long> tableIds) {
+    if (tableIds.isEmpty()) {
+      return Collections.emptyList();
+    }
+    return getAs(
+        TableProcessMapper.class, mapper -> mapper.selectLatestProcessOfEachType(tableIds));
   }
 
   @Override

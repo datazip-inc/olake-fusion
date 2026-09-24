@@ -20,15 +20,15 @@
 
 package org.apache.amoro.server.scheduler.inline;
 
-import org.apache.amoro.AmoroTable;
-import org.apache.amoro.TableFormat;
 import org.apache.amoro.TableRuntime;
 import org.apache.amoro.optimizing.plan.AbstractOptimizingEvaluator;
+import org.apache.amoro.server.persistence.TableOptimizingConfigurationsMeta;
 import org.apache.amoro.server.scheduler.PeriodicTableScheduler;
 import org.apache.amoro.server.table.DefaultTableRuntime;
 import org.apache.amoro.server.table.TableConfigurationsService;
 import org.apache.amoro.server.table.TableService;
 import org.apache.amoro.server.utils.IcebergTableUtil;
+import org.apache.amoro.table.BasicTableSnapshot;
 import org.apache.amoro.table.MixedTable;
 
 import java.util.Objects;
@@ -53,11 +53,11 @@ public class TableHealthScoreExecutor extends PeriodicTableScheduler {
     return interval;
   }
 
+  // every table stays scheduled, whether its optimizing is enabled is read from the db on each run,
+  // so the scheduling itself never depends on the db
   @Override
   protected boolean enabled(TableRuntime tableRuntime) {
-    return tableRuntime instanceof DefaultTableRuntime
-        && TableFormat.ICEBERG.equals(tableRuntime.getFormat())
-        && tableRuntime.getTableConfiguration().getOptimizingConfig().isEnabled();
+    return true;
   }
 
   @Override
@@ -69,21 +69,26 @@ public class TableHealthScoreExecutor extends PeriodicTableScheduler {
   protected void execute(TableRuntime tableRuntime) {
     try {
       DefaultTableRuntime runtime = (DefaultTableRuntime) tableRuntime;
-      long currentSnapshotId = runtime.getCurrentSnapshotId();
       TableConfigurationsService configurations = TableConfigurationsService.getInstance();
-      if (Objects.equals(
-          currentSnapshotId, configurations.healthScoreSnapshotId(runtime.getTableIdentifier()))) {
+      TableOptimizingConfigurationsMeta stored = configurations.get(runtime.getTableIdentifier());
+      if (!stored.getSelfOptimizingEnabled()) {
         return;
       }
 
-      AmoroTable<?> table = loadTable(tableRuntime);
+      // the table is loaded fresh, so a snapshot committed since its last refresh is scored too
+      MixedTable table = (MixedTable) loadTable(tableRuntime).originalTable();
+      long snapshotId = IcebergTableUtil.getSnapshotId(table.asUnkeyedTable(), false);
+      if (Objects.equals(snapshotId, stored.getHealthScoreSnapshotId())) {
+        return;
+      }
+
       AbstractOptimizingEvaluator.PendingInput pendingInput =
           IcebergTableUtil.createOptimizingEvaluator(
-                  runtime, (MixedTable) table.originalTable(), Integer.MAX_VALUE)
+                  runtime, table, new BasicTableSnapshot(snapshotId), Integer.MAX_VALUE)
               .getPendingInput();
       runtime.setTableSummary(pendingInput);
       configurations.storeHealthScore(
-          runtime.getTableIdentifier(), pendingInput.getHealthScore(), currentSnapshotId);
+          runtime.getTableIdentifier(), pendingInput.getHealthScore(), snapshotId);
     } catch (Throwable t) {
       logger.warn(
           "Failed to evaluate health score for table {}", tableRuntime.getTableIdentifier(), t);
