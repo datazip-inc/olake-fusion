@@ -34,7 +34,7 @@
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
-        <hive.version>2.1.1</hive.version>
+        <hive.version>2.3.9</hive.version>
         <airlift.version>214</airlift.version>
         <airlift-units.version>1.6</airlift-units.version>
         <airlift-slice.version>0.44</airlift-slice.version>
@@ -642,6 +642,7 @@
             <plugin>
                 <groupId>com.diffplug.spotless</groupId>
                 <artifactId>spotless-maven-plugin</artifactId>
+                <version>${maven-spotless-plugin.version}</version>
                 <configuration>
                     <skip>true</skip>
                     <java>
@@ -699,6 +700,7 @@
                     <plugin>
                         <groupId>com.diffplug.spotless</groupId>
                         <artifactId>spotless-maven-plugin</artifactId>
+                        <version>${maven-spotless-plugin.version}</version>
                         <configuration>
                             <skip>false</skip>
                             <java>
