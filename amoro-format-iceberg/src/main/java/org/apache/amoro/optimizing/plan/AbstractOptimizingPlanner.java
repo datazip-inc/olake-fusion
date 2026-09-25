@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.optimizing.plan;
@@ -157,7 +159,9 @@ public abstract class AbstractOptimizingPlanner extends AbstractOptimizingEvalua
     // prioritize partitions with high cost to avoid starvation
     evaluators.sort(Comparator.comparing(PartitionEvaluator::getWeight, Comparator.reverseOrder()));
 
-    double maxInputSize = maxInputSizePerThread * availableCore;
+    // max input for a single run
+    // TODO: maxInputSizePerThread is dead code now. Clean it up later from everywhere.
+    double maxInputSize = Double.MAX_VALUE;
     actualPartitionPlans = Lists.newArrayList();
     long actualInputSize = 0;
     List<RewriteStageTask> plannedTasks = Lists.newArrayList();
@@ -192,13 +196,13 @@ public abstract class AbstractOptimizingPlanner extends AbstractOptimizingEvalua
     }
     long endTime = System.nanoTime();
     LOG.info(
-        "{} finish plan, type = {}, get {} tasks, cost {} ns, {} ms maxInputSize {} actualInputSize {}",
+        "{} finish plan, type = {}, get {} tasks from {} partitions, cost {} ns, {} ms actualInputSize {}",
         identifier,
         getOptimizingType(),
         plannedTasks.size(),
+        actualPartitionPlans.size(),
         endTime - startTime,
         (endTime - startTime) / 1_000_000,
-        maxInputSize,
         actualInputSize);
     return cacheAndReturnTasks(plannedTasks);
   }
