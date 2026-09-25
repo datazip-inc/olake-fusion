@@ -348,7 +348,9 @@ public class DefaultTableRuntime extends AbstractTableRuntime
   }
 
   public DefaultTableRuntime refresh(AmoroTable<?> table) {
-    Map<String, String> tableConfig = table.properties();
+    // Configurations stored in the AMS database get priority over the table's own properties.
+    Map<String, String> tableConfig =
+        TableConfigurationsService.getInstance().overlay(getTableIdentifier(), table.properties());
     TableConfiguration newConfiguration = TableConfigurations.parseTableConfig(tableConfig);
     String newGroupName = newConfiguration.getOptimizingConfig().getOptimizerGroup();
 
@@ -375,6 +377,20 @@ public class DefaultTableRuntime extends AbstractTableRuntime
             })
         .commit();
     return this;
+  }
+
+  /** Takes the configurations stored in the AMS database now, rather than on its next refresh. */
+  public void applyStoredConfigurations() {
+    store()
+        .begin()
+        .updateTableConfig(
+            config -> {
+              Map<String, String> stored =
+                  TableConfigurationsService.getInstance().overlay(getTableIdentifier(), config);
+              config.clear();
+              config.putAll(stored);
+            })
+        .commit();
   }
 
   private String triggeredTypeName(long processId) {

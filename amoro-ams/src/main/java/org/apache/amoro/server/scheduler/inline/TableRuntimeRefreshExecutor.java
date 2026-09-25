@@ -25,14 +25,13 @@ import org.apache.amoro.TableRuntime;
 import org.apache.amoro.config.OptimizingConfig;
 import org.apache.amoro.config.TableConfiguration;
 import org.apache.amoro.optimizing.OptimizingType;
-import org.apache.amoro.optimizing.plan.AbstractOptimizingEvaluator;
 import org.apache.amoro.process.ProcessStatus;
 import org.apache.amoro.server.optimizing.OptimizingProcess;
 import org.apache.amoro.server.optimizing.OptimizingStatus;
 import org.apache.amoro.server.scheduler.PeriodicTableScheduler;
 import org.apache.amoro.server.table.DefaultTableRuntime;
+import org.apache.amoro.server.table.TableConfigurationsService;
 import org.apache.amoro.server.table.TableService;
-import org.apache.amoro.server.utils.IcebergTableUtil;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
 import org.apache.amoro.table.MixedTable;
 import org.apache.amoro.utils.CronUtils;
@@ -63,13 +62,10 @@ public class TableRuntimeRefreshExecutor extends PeriodicTableScheduler {
 
   // 1 minutes
   private final long interval;
-  private final int maxPendingPartitions;
 
-  public TableRuntimeRefreshExecutor(
-      TableService tableService, int poolSize, long interval, int maxPendingPartitions) {
+  public TableRuntimeRefreshExecutor(TableService tableService, int poolSize, long interval) {
     super(tableService, poolSize);
     this.interval = interval;
-    this.maxPendingPartitions = maxPendingPartitions;
   }
 
   @Override
@@ -110,8 +106,9 @@ public class TableRuntimeRefreshExecutor extends PeriodicTableScheduler {
       AmoroTable<?> table = loadTable(tableRuntime);
       defaultTableRuntime.refresh(table);
 
-      MixedTable mixedTable = (MixedTable) table.originalTable();
-      evaluateCronTriggers(defaultTableRuntime, mixedTable);
+      evaluateCronTriggers(defaultTableRuntime, (MixedTable) table.originalTable());
+      TableConfigurationsService.getInstance()
+          .storeOlakeCreated(tableRuntime.getTableIdentifier(), table);
     } catch (Throwable throwable) {
       logger.error("Refreshing table {} failed.", tableRuntime.getTableIdentifier(), throwable);
     }
@@ -165,22 +162,6 @@ public class TableRuntimeRefreshExecutor extends PeriodicTableScheduler {
         }
         break;
       }
-    }
-  }
-
-  private void updateHealthScore(DefaultTableRuntime tableRuntime, MixedTable mixedTable) {
-    if (!tableRuntime.getOptimizingConfig().isEnabled()) {
-      return;
-    }
-    try {
-      AbstractOptimizingEvaluator evaluator =
-          IcebergTableUtil.createOptimizingEvaluator(
-              tableRuntime, mixedTable, maxPendingPartitions);
-      AbstractOptimizingEvaluator.PendingInput pendingInput = evaluator.getPendingInput();
-      tableRuntime.setTableSummary(pendingInput);
-    } catch (Throwable t) {
-      logger.warn(
-          "failed to evaluate health score for table {}", tableRuntime.getTableIdentifier(), t);
     }
   }
 

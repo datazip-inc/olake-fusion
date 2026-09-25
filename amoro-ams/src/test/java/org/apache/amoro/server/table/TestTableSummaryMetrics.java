@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.table;
@@ -142,7 +144,7 @@ public class TestTableSummaryMetrics extends AMSTableTestBase {
 
   void refreshPending() {
     TableRuntimeRefreshExecutor refresher =
-        new TableRuntimeRefreshExecutor(tableService(), 1, Integer.MAX_VALUE, Integer.MAX_VALUE);
+        new TableRuntimeRefreshExecutor(tableService(), 1, Integer.MAX_VALUE);
     refresher.execute(getDefaultTableRuntime(serverTableIdentifier().getId()));
     refresher.dispose();
   }

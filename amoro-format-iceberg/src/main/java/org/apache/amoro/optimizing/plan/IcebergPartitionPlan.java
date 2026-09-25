@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.optimizing.plan;
@@ -63,6 +65,7 @@ public class IcebergPartitionPlan extends AbstractPartitionPlan {
     Map<String, String> properties = Maps.newHashMap();
     properties.put(
         TaskProperties.TASK_EXECUTOR_FACTORY_IMPL, IcebergRewriteExecutorFactory.class.getName());
+    properties.put(TaskProperties.TARGET_SIZE, String.valueOf(config.getTargetSize()));
     return properties;
   }
 
