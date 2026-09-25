@@ -65,6 +65,9 @@ public class OptimizingLogStore {
 
   private static final Logger LOG = LoggerFactory.getLogger(OptimizingLogStore.class);
   private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+  // Same time format as the optimizer's JSON log lines.
+  private static final DateTimeFormatter DRIVER_LOG_TIME_FORMAT =
+      DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC);
 
   public static final String DRIVER_LOG_FILE = "driver.log";
   public static final String DEFAULT_LOG_DIR = "/mnt/amoro-logs/compaction";
@@ -117,28 +120,25 @@ public class OptimizingLogStore {
     contentByPath.forEach(this::write);
   }
 
-  public void appendDriverFailReason(long processId, String failedReason) {
-    String time =
-        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS")
-            .withZone(ZoneOffset.UTC)
-            .format(Instant.now());
+  /** Appends a line written by AMS itself (not by the optimizer) to the process driver.log. */
+  public void appendDriverEntry(long processId, String level, String message, String stackTrace) {
     try {
       Map<String, String> logEntry = new LinkedHashMap<>();
-      logEntry.put("level", "ERROR");
-      logEntry.put("time", time);
+      logEntry.put("level", level);
+      logEntry.put("time", DRIVER_LOG_TIME_FORMAT.format(Instant.now()));
       logEntry.put("processId", String.valueOf(processId));
       logEntry.put("taskId", "");
       logEntry.put("logger", "");
-      logEntry.put("message", failedReason);
-      logEntry.put("stackTrace", "");
-      // Written by AMS itself, outside the optimizer's per-process sequence, so sequence is 0.
+      logEntry.put("message", message);
+      logEntry.put("stackTrace", stackTrace == null ? "" : stackTrace);
+      // Outside the optimizer's per-process sequence, so sequence is 0.
       OptimizingLogLine line =
           new OptimizingLogLine(
               new OptimizingTaskId(processId, 0), OBJECT_MAPPER.writeValueAsString(logEntry), 0L);
       line.setSource(OptimizingLogEvent.SOURCE_DRIVER);
       append(Collections.singletonList(line));
     } catch (Exception e) {
-      LOG.warn("Failed to append fail reason to driver log for process {}", processId, e);
+      LOG.warn("Failed to append {} entry to driver log for process {}", level, processId, e);
     }
   }
 
