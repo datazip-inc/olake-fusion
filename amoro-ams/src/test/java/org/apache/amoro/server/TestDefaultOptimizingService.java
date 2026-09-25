@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server;
@@ -248,18 +250,10 @@ public class TestDefaultOptimizingService extends AMSTableTestBase {
     Assertions.assertThrows(PluginRetryAuthException.class, () -> optimizingService().touch(token));
     Assertions.assertThrows(
         PluginRetryAuthException.class, () -> optimizingService().pollTask(token, THREAD_ID));
-    assertTaskStatus(TaskRuntime.Status.SCHEDULED);
-    token = optimizingService().authenticate(buildRegisterInfo());
-    toucher = new Toucher();
-    Thread.sleep(1000);
-    assertTaskStatus(TaskRuntime.Status.PLANNED);
-    OptimizingTask task2 = optimizingService().pollTask(token, THREAD_ID);
-    Assertions.assertEquals(task2.getTaskId(), task.getTaskId());
-    TableOptimizing.OptimizingInput input =
-        SerializationUtil.simpleDeserialize(task.getTaskInput());
-    TableOptimizing.OptimizingInput input2 =
-        SerializationUtil.simpleDeserialize(task2.getTaskInput());
-    Assertions.assertEquals(input2.toString(), input.toString());
+    // The expired optimizer held the task, so its process fails instead of rerunning the task.
+    Thread.sleep(200);
+    Assertions.assertNull(
+        getDefaultTableRuntime(serverTableIdentifier().getId()).getOptimizingProcess());
   }
 
   @Test

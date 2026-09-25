@@ -497,12 +497,6 @@ public class DefaultOptimizingService extends StatedPersistentBase
           OptimizerKeepingTask keepingTask = suspendingQueue.take();
           String token = keepingTask.getToken();
           boolean isExpired = !keepingTask.tryKeeping();
-          Optional.ofNullable(keepingTask.getQueue())
-              .ifPresent(
-                  queue ->
-                      queue
-                          .collectTasks(buildSuspendingPredication(authOptimizers.keySet()))
-                          .forEach(task -> retryTask(task, queue)));
           if (isExpired) {
             LOG.info("Optimizer {} has been expired, unregister it", keepingTask.getOptimizer());
             unregisterOptimizer(token);
@@ -510,6 +504,13 @@ public class DefaultOptimizingService extends StatedPersistentBase
             LOG.debug("Optimizer {} is being touched, keep it", keepingTask.getOptimizer());
             keepInTouch(keepingTask.getOptimizer());
           }
+          // Runs after the unregister above, so an expired optimizer's tasks are failed this round.
+          Optional.ofNullable(keepingTask.getQueue())
+              .ifPresent(
+                  queue ->
+                      queue
+                          .collectTasks(buildSuspendingPredication(authOptimizers.keySet()))
+                          .forEach(task -> retryTask(task, queue)));
         } catch (InterruptedException ignored) {
         } catch (Throwable t) {
           LOG.error("OptimizerKeeper has encountered a problem.", t);
@@ -518,6 +519,20 @@ public class DefaultOptimizingService extends StatedPersistentBase
     }
 
     private void retryTask(TaskRuntime<?> task, OptimizingQueue queue) {
+      // canceled because an earlier task of the same process already failed it.
+      if (task.finished()) {
+        return;
+      }
+      // The optimizer died while holding the task. Fail the process.
+      if (StringUtils.isNotBlank(task.getToken()) && !authOptimizers.containsKey(task.getToken())) {
+        String reason =
+            String.format(
+                "Optimizer %s died while running task %s (for eg, OOM killed)",
+                task.getResourceDesc(), task.getTaskId());
+        LOG.warn(reason);
+        queue.failProcess(task, reason);
+        return;
+      }
       if (isTaskExecTimeout(task)) {
         LOG.warn(
             "Task {} has been suspended in ACK state for {} (start time: {}), put it to retry queue, optimizer {}. (Note: The task may have finished executing, but ams did not receive the COMPLETE message from the optimizer.)",
@@ -527,7 +542,7 @@ public class DefaultOptimizingService extends StatedPersistentBase
             task.getResourceDesc());
       } else {
         LOG.info(
-            "Task {} is suspending, since it's optimizer is expired, put it to retry queue, optimizer {}",
+            "Task {} was not acknowledged in time, put it to retry queue, optimizer {}",
             task.getTaskId(),
             task.getResourceDesc());
       }
