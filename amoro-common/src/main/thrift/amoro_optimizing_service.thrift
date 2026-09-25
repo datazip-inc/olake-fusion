@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 namespace java org.apache.amoro.api
@@ -48,6 +50,13 @@ struct OptimizerRegisterInfo {
     6: optional map<string, string> properties;
 }
 
+struct OptimizingLogLine {
+    1: OptimizingTaskId taskId;
+    2: string ndjson;
+    3: i64 sequence;
+    4: optional string source;
+}
+
 service OptimizingService {
 
     void ping()
@@ -67,4 +76,7 @@ service OptimizingService {
             throws (1: amoro_commons.AmoroException e1)
 
     bool cancelProcess(1:i64 processId)
+
+    void appendLogs(1: string authToken, 2: list<OptimizingLogLine> lines)
+            throws (1: amoro_commons.AmoroException e1)
 }

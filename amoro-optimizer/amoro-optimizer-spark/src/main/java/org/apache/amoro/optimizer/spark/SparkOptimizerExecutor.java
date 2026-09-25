@@ -22,6 +22,7 @@ package org.apache.amoro.optimizer.spark;
 
 import org.apache.amoro.api.OptimizingTask;
 import org.apache.amoro.api.OptimizingTaskResult;
+import org.apache.amoro.log.OptimizingTaskLogContext;
 import org.apache.amoro.optimizer.common.OptimizerConfig;
 import org.apache.amoro.optimizer.common.OptimizerExecutor;
 import org.apache.amoro.optimizing.RewriteFilesInput;
@@ -58,13 +59,10 @@ public class SparkOptimizerExecutor extends OptimizerExecutor {
     long startTime = System.currentTimeMillis();
 
     long processId = task.getTaskId().getProcessId();
-    int taskId = task.getTaskId().getTaskId();
-    String driverFilePath = processId + "/driver";
 
-    // Set MDC context for Log4j2 routing
-    // Driver logs go to: <LOG_DIR>/<processId>/driver.log
-    MDC.put("processId", String.valueOf(processId));
-    MDC.put("logFilePath", driverFilePath);
+    // Ships this thread's logs to AMS as driver lines (AMS writes <processId>/driver.log).
+    MDC.put(OptimizingTaskLogContext.LOG_CHANNEL_KEY, OptimizingTaskLogContext.LOG_CHANNEL_DRIVER);
+    MDC.put(OptimizingTaskLogContext.PROCESS_ID_KEY, String.valueOf(processId));
 
     try {
       ImmutableList<OptimizingTask> of = ImmutableList.of(task);
@@ -90,8 +88,8 @@ public class SparkOptimizerExecutor extends OptimizerExecutor {
       result.setErrorMessage(ExceptionUtil.getErrorMessage(r, ERROR_MESSAGE_MAX_LENGTH));
       return result;
     } finally {
-      MDC.remove("processId");
-      MDC.remove("logFilePath");
+      MDC.remove(OptimizingTaskLogContext.LOG_CHANNEL_KEY);
+      MDC.remove(OptimizingTaskLogContext.PROCESS_ID_KEY);
     }
   }
 

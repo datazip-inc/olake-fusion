@@ -25,6 +25,7 @@ import org.apache.amoro.api.OptimizingTaskResult;
 import org.apache.amoro.log.OptimizingTaskLogContext;
 import org.apache.amoro.optimizer.common.OptimizerConfig;
 import org.apache.amoro.optimizer.common.OptimizerExecutor;
+import org.apache.logging.log4j.status.StatusLogger;
 import org.apache.spark.api.java.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,6 +37,7 @@ import org.slf4j.MDC;
  */
 public class SparkOptimizingTaskFunction implements Function<OptimizingTask, OptimizingTaskResult> {
   private static final Logger LOG = LoggerFactory.getLogger(SparkOptimizingTaskFunction.class);
+  private static final StatusLogger STATUS = StatusLogger.getLogger();
   private final OptimizerConfig config;
   private final int threadId;
 
@@ -46,20 +48,23 @@ public class SparkOptimizingTaskFunction implements Function<OptimizingTask, Opt
 
   @Override
   public OptimizingTaskResult call(OptimizingTask task) {
-    // Set MDC context on Spark executor for Log4j2 routing
-    // Executor logs go to: <LOG_DIR>/<processId>/<taskId>.log
     long processId = task.getTaskId().getProcessId();
     int taskId = task.getTaskId().getTaskId();
-    String logFilePath = processId + "/" + taskId;
+    try {
+      OptimizingTaskRpcLogAppender.install();
+      SparkOptimizingLogRpcClient.get().bindDriverEndpoint();
+    } catch (Exception e) {
+      // Lines stay buffered (capped) and the next task retries the bind.
+      STATUS.warn("Failed to bind optimizing log RPC client to driver", e);
+    }
 
     // Set OptimizingTaskLogContext FIRST so AbstractRewriteFilesExecutor.execute()
     // sees isContextSet()==true and does NOT override our MDC with its own format.
     OptimizingTaskLogContext.setContext(processId, taskId);
-
-    // Override logFilePath to our desired format
-    MDC.put("processId", String.valueOf(processId));
-    MDC.put("taskId", String.valueOf(taskId));
-    MDC.put("logFilePath", logFilePath);
+    MDC.put(
+        OptimizingTaskLogContext.LOG_CHANNEL_KEY, OptimizingTaskLogContext.LOG_CHANNEL_EXECUTOR);
+    MDC.put(OptimizingTaskLogContext.PROCESS_ID_KEY, String.valueOf(processId));
+    MDC.put(OptimizingTaskLogContext.TASK_ID_KEY, String.valueOf(taskId));
 
     try {
       OptimizingTaskResult result = OptimizerExecutor.executeTask(config, threadId, task, LOG);
@@ -68,10 +73,14 @@ public class SparkOptimizingTaskFunction implements Function<OptimizingTask, Opt
       LOG.error("Task execution failed on executor", e);
       throw e;
     } finally {
+      // Wait (bounded) for this task's lines to be acknowledged by the driver before returning.
+      if (!SparkOptimizingLogRpcClient.get().drain(SparkOptimizingLogRpcClient.DRAIN_TIMEOUT_MS)) {
+        STATUS.warn("Optimizing logs of task {} not yet delivered to driver", taskId);
+      }
       OptimizingTaskLogContext.clearContext();
-      MDC.remove("processId");
-      MDC.remove("taskId");
-      MDC.remove("logFilePath");
+      MDC.remove(OptimizingTaskLogContext.LOG_CHANNEL_KEY);
+      MDC.remove(OptimizingTaskLogContext.PROCESS_ID_KEY);
+      MDC.remove(OptimizingTaskLogContext.TASK_ID_KEY);
     }
   }
 }
