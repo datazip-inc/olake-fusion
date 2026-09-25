@@ -20,7 +20,7 @@
 
 package org.apache.amoro.optimizer.spark;
 
-import org.apache.amoro.log.OptimizingLogLine;
+import org.apache.amoro.log.OptimizingLogEvent;
 import org.apache.amoro.log.OptimizingTaskLogContext;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.Appender;
@@ -39,14 +39,16 @@ import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 /**
- * Log4j2 appender that formats a log event as the existing NDJSON line and either accepts it into
- * the driver collector or sends it to the driver via Spark RPC.
+ * Log4j2 appender that ships optimizing task logs toward AMS. Only events whose MDC has {@code
+ * logChannel} set are shipped. Each event is formatted as the NDJSON line AMS stores, then handed
+ * to the driver collector (driver JVM, including Spark local mode) or buffered for the executor RPC
+ * client.
  */
 public class OptimizingTaskRpcLogAppender extends AbstractAppender {
 
   public static final String APPENDER_NAME = "OptimizingTaskRpc";
 
-  private static final String ROUTING_APPENDER_KEY = "RoutingAppender";
+  private static final String ROUTING_APPENDER_NAME = "RoutingAppender";
 
   // Same pattern as docker/optimizer-spark/log4j2.xml JSON_LOG_PATTERN.
   static final String JSON_LOG_PATTERN =
@@ -84,12 +86,12 @@ public class OptimizingTaskRpcLogAppender extends AbstractAppender {
   }
 
   private static void addToLoggersWithRouting(Configuration config, Appender appender) {
-    if (config.getRootLogger().getAppenders().containsKey(ROUTING_APPENDER_KEY)) {
+    if (config.getRootLogger().getAppenders().containsKey(ROUTING_APPENDER_NAME)) {
       config.getRootLogger().addAppender(appender, null, null);
     }
     for (Map.Entry<String, LoggerConfig> entry : config.getLoggers().entrySet()) {
       LoggerConfig loggerConfig = entry.getValue();
-      if (loggerConfig.getAppenders().containsKey("RoutingAppender")
+      if (loggerConfig.getAppenders().containsKey(ROUTING_APPENDER_NAME)
           && !loggerConfig.getAppenders().containsKey(APPENDER_NAME)) {
         loggerConfig.addAppender(appender, null, null);
       }
@@ -98,8 +100,9 @@ public class OptimizingTaskRpcLogAppender extends AbstractAppender {
 
   @Override
   public void append(LogEvent event) {
-    String channel = event.getContextData().getValue(OptimizingTaskLogContext.LOG_CHANNEL_KEY);
-    if (channel == null) {
+    String source = event.getContextData().getValue(OptimizingTaskLogContext.LOG_CHANNEL_KEY);
+    if (!OptimizingTaskLogContext.LOG_CHANNEL_DRIVER.equals(source)
+        && !OptimizingTaskLogContext.LOG_CHANNEL_EXECUTOR.equals(source)) {
       return;
     }
     Layout<? extends Serializable> layout = getLayout();
@@ -113,15 +116,12 @@ public class OptimizingTaskRpcLogAppender extends AbstractAppender {
     long processId =
         parseLong(event.getContextData().getValue(OptimizingTaskLogContext.PROCESS_ID_KEY));
     int taskId = parseInt(event.getContextData().getValue(OptimizingTaskLogContext.TASK_ID_KEY));
-    String source =
-        OptimizingTaskLogContext.LOG_CHANNEL_RPC.equals(channel)
-            ? OptimizingLogLine.SOURCE_EXECUTOR
-            : OptimizingLogLine.SOURCE_DRIVER;
-    OptimizingLogLine line = new OptimizingLogLine(processId, taskId, ndjson, source);
-    if (OptimizingLogCollector.isInitialized()) {
-      OptimizingLogCollector.get().accept(line);
+    OptimizingLogEvent logEvent = new OptimizingLogEvent(processId, taskId, ndjson, source);
+    OptimizingLogCollector collector = OptimizingLogCollector.getIfInitialized();
+    if (collector != null) {
+      collector.accept(logEvent);
     } else {
-      SparkOptimizingLogRpcClient.get().send(line);
+      SparkOptimizingLogRpcClient.get().add(logEvent);
     }
   }
 
@@ -138,7 +138,7 @@ public class OptimizingTaskRpcLogAppender extends AbstractAppender {
 
   private static int parseInt(String value) {
     if (value == null || value.isEmpty()) {
-      // FILLER(need-your-change): driver lines have empty taskId in NDJSON; envelope uses 0.
+      // Driver lines have no taskId in MDC; 0 marks them as process-level.
       return 0;
     }
     try {

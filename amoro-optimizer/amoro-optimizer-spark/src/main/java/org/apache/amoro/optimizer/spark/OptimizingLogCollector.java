@@ -20,23 +20,32 @@
 
 package org.apache.amoro.optimizer.spark;
 
-import org.apache.amoro.log.OptimizingLogLine;
+import org.apache.amoro.log.OptimizingLogEvent;
 import org.apache.amoro.optimizer.common.OptimizingLogBatcher;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Driver-side sequencing point for optimizing logs. Sequence is a single global counter per {@code
- * processId}, assigned as each line arrives (driver-local logs and executor RPC logs share the same
- * counter). Sequenced lines are offered to {@link OptimizingLogBatcher} for Thrift upload to AMS.
+ * Driver-side sequencing point for optimizing logs. Driver-local events and executor events (via
+ * Spark RPC) share one counter per {@code processId}, assigned as each event arrives. Sequenced
+ * events are offered to {@link OptimizingLogBatcher} for Thrift upload to AMS.
+ *
+ * <p>AMS does not use the sequence yet; it is carried so a future log destination can order lines
+ * that arrive out of order.
  */
 public class OptimizingLogCollector {
 
+  // A process with no log line for this long is forgotten; its counter restarts if it logs again.
+  static final long IDLE_PROCESS_EVICT_MS = TimeUnit.HOURS.toMillis(1);
+  private static final int EVICT_CHECK_EVERY = 1024;
+
   private static volatile OptimizingLogCollector instance;
 
-  private final ConcurrentMap<Long, AtomicLong> sequenceByProcess = new ConcurrentHashMap<>();
+  private final ConcurrentMap<Long, ProcessSequence> sequenceByProcess = new ConcurrentHashMap<>();
+  private final AtomicLong acceptedCount = new AtomicLong();
   private final OptimizingLogBatcher batcher;
 
   private OptimizingLogCollector(OptimizingLogBatcher batcher) {
@@ -54,25 +63,27 @@ public class OptimizingLogCollector {
     return instance;
   }
 
-  public static boolean isInitialized() {
-    return instance != null;
+  /** Returns the driver collector, or null when this JVM is not a driver with log shipping. */
+  public static OptimizingLogCollector getIfInitialized() {
+    return instance;
   }
 
-  public static OptimizingLogCollector get() {
-    OptimizingLogCollector collector = instance;
-    if (collector == null) { // why not just check for instance == null?  --ASHI
-      throw new IllegalStateException("OptimizingLogCollector has not been initialized on driver");
-    }
-    return collector;
-  }
-
-  public void accept(OptimizingLogLine line) {
-    if (line == null || line.getNdjson() == null || line.getNdjson().isEmpty()) {
+  public void accept(OptimizingLogEvent event) {
+    if (event == null || event.isEmpty()) {
       return;
     }
-    AtomicLong sequence =
-        sequenceByProcess.computeIfAbsent(line.getProcessId(), ignored -> new AtomicLong());
-    long next = sequence.incrementAndGet();
-    batcher.offer(line.withSequence(next));
+    long now = System.currentTimeMillis();
+    ProcessSequence sequence =
+        sequenceByProcess.computeIfAbsent(event.getProcessId(), ignored -> new ProcessSequence());
+    sequence.lastUsedMs = now;
+    batcher.offer(event.withSequence(sequence.counter.incrementAndGet()));
+    if (acceptedCount.incrementAndGet() % EVICT_CHECK_EVERY == 0) {
+      sequenceByProcess.values().removeIf(s -> now - s.lastUsedMs > IDLE_PROCESS_EVICT_MS);
+    }
+  }
+
+  private static class ProcessSequence {
+    private final AtomicLong counter = new AtomicLong();
+    private volatile long lastUsedMs;
   }
 }

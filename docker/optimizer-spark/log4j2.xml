@@ -32,14 +32,16 @@
         </Console>
 
         <!-- Routing appender: keyed by MDC logChannel. Neither driver nor executor writes
-             per-process/task files under LOG_DIR; AMS is the disk writer.
-             rpc  = Spark executor task logs (RPC appender is installed in code)
-             file = Spark driver process logs (collector on this JVM)
-             unset = console only -->
+             per-process/task files under LOG_DIR; AMS is the only disk writer.
+             executor = Spark executor task logs, driver = Spark driver process logs; both are
+             shipped to AMS by the RPC appender installed in code and printed here once.
+             unset = console only.
+             Amoro loggers reference only this appender (not Console directly) so each line
+             is printed once. -->
         <Routing name="RoutingAppender">
             <Routes pattern="$${ctx:logChannel}">
-                <Route key="rpc" ref="Console"/>
-                <Route key="file" ref="Console"/>
+                <Route key="executor" ref="Console"/>
+                <Route key="driver" ref="Console"/>
                 <Route key="$${ctx:logChannel}" ref="Console"/>
             </Routes>
         </Routing>
@@ -50,19 +52,16 @@
             <AppenderRef ref="Console"/>
         </Root>
 
-        <!-- Catch-all for all Amoro code: routes to per-task/process log files -->
+        <!-- Amoro code: printed via RoutingAppender; the RPC appender attaches to these loggers. -->
         <Logger name="org.apache.amoro" level="info" additivity="false">
-            <AppenderRef ref="Console"/>
             <AppenderRef ref="RoutingAppender"/>
         </Logger>
 
         <Logger name="org.apache.amoro.optimizing" level="debug" additivity="false">
-            <AppenderRef ref="Console"/>
             <AppenderRef ref="RoutingAppender"/>
         </Logger>
 
         <Logger name="org.apache.amoro.optimizer" level="info" additivity="false">
-            <AppenderRef ref="Console"/>
             <AppenderRef ref="RoutingAppender"/>
         </Logger>
 

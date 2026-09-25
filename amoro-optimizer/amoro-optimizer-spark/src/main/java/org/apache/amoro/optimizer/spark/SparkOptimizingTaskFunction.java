@@ -54,13 +54,15 @@ public class SparkOptimizingTaskFunction implements Function<OptimizingTask, Opt
       OptimizingTaskRpcLogAppender.install();
       SparkOptimizingLogRpcClient.get().bindDriverEndpoint();
     } catch (Exception e) {
-      STATUS.warn("Failed to bindDriverEndpoint", e);
+      // Lines stay buffered (capped) and the next task retries the bind.
+      STATUS.warn("Failed to bind optimizing log RPC client to driver", e);
     }
 
     // Set OptimizingTaskLogContext FIRST so AbstractRewriteFilesExecutor.execute()
     // sees isContextSet()==true and does NOT override our MDC with its own format.
     OptimizingTaskLogContext.setContext(processId, taskId);
-    MDC.put(OptimizingTaskLogContext.LOG_CHANNEL_KEY, OptimizingTaskLogContext.LOG_CHANNEL_RPC);
+    MDC.put(
+        OptimizingTaskLogContext.LOG_CHANNEL_KEY, OptimizingTaskLogContext.LOG_CHANNEL_EXECUTOR);
     MDC.put(OptimizingTaskLogContext.PROCESS_ID_KEY, String.valueOf(processId));
     MDC.put(OptimizingTaskLogContext.TASK_ID_KEY, String.valueOf(taskId));
 
@@ -71,7 +73,10 @@ public class SparkOptimizingTaskFunction implements Function<OptimizingTask, Opt
       LOG.error("Task execution failed on executor", e);
       throw e;
     } finally {
-      SparkOptimizingLogRpcClient.get().flushPending();
+      // Wait (bounded) for this task's lines to be acknowledged by the driver before returning.
+      if (!SparkOptimizingLogRpcClient.get().drain(SparkOptimizingLogRpcClient.DRAIN_TIMEOUT_MS)) {
+        STATUS.warn("Optimizing logs of task {} not yet delivered to driver", taskId);
+      }
       OptimizingTaskLogContext.clearContext();
       MDC.remove(OptimizingTaskLogContext.LOG_CHANNEL_KEY);
       MDC.remove(OptimizingTaskLogContext.PROCESS_ID_KEY);

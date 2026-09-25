@@ -33,12 +33,15 @@
             <ThresholdFilter level="${CONSOLE_LEVEL}" onMatch="ACCEPT" onMismatch="DENY"/>
         </Console>
 
+        <Null name="Discard"/>
+
         <Routing name="RoutingAppender">
             <Routes pattern="$${ctx:logChannel}">
-                <!-- Spark executor task logs: no per-task file. RPC appender is installed in code. -->
-                <Route key="rpc" ref="Console"/>
-                <!-- Spark driver process logs: collector on this JVM; AMS writes the dashboard files. -->
-                <Route key="file" ref="Console"/>
+                <!-- Spark optimizer task logs (logChannel=driver|executor) are shipped to AMS by the
+                     RPC appender installed in code; AMS writes the dashboard files. Loggers already
+                     print them to Console directly, so the route discards them to avoid duplicates. -->
+                <Route key="executor" ref="Discard"/>
+                <Route key="driver" ref="Discard"/>
                 <!-- When logChannel MDC is NOT set, the pattern evaluates to the raw
                      literal "${ctx:logChannel}" which matches this explicit key.
                      Route to the generic optimizer log (no per-task file). -->

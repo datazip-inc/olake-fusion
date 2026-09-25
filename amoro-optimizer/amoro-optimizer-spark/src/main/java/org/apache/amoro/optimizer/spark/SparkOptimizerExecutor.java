@@ -60,9 +60,8 @@ public class SparkOptimizerExecutor extends OptimizerExecutor {
 
     long processId = task.getTaskId().getProcessId();
 
-    // logChannel=file tags these events as driver-sourced for AMS. Log4j2 does not write
-    // LOG_DIR/<processId>/driver.log; the RPC appender accepts them into the collector.
-    MDC.put(OptimizingTaskLogContext.LOG_CHANNEL_KEY, OptimizingTaskLogContext.LOG_CHANNEL_FILE);
+    // Ships this thread's logs to AMS as driver lines (AMS writes <processId>/driver.log).
+    MDC.put(OptimizingTaskLogContext.LOG_CHANNEL_KEY, OptimizingTaskLogContext.LOG_CHANNEL_DRIVER);
     MDC.put(OptimizingTaskLogContext.PROCESS_ID_KEY, String.valueOf(processId));
 
     try {

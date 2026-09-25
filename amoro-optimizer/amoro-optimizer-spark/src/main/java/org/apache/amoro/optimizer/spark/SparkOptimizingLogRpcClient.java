@@ -20,100 +20,177 @@
 
 package org.apache.amoro.optimizer.spark;
 
-import org.apache.amoro.log.OptimizingLogLine;
+import org.apache.amoro.log.OptimizingLogEvent;
+import org.apache.amoro.optimizer.common.OptimizingLogBuffer;
 import org.apache.logging.log4j.status.StatusLogger;
 import org.apache.spark.SparkEnv;
 import org.apache.spark.rpc.RpcAddress;
 import org.apache.spark.rpc.RpcEndpointRef;
+import org.apache.spark.rpc.RpcTimeout;
+import scala.concurrent.duration.FiniteDuration;
+import scala.reflect.ClassTag;
+import scala.reflect.ClassTag$;
 
-import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * Executor-side Spark RPC client. Each log line is offered to a local buffer and flushed
- * immediately; if send fails the line stays in the buffer and is retried.
+ * Executor-side sender of optimizing log events to the driver endpoint.
  *
- * <p>FILLER(need-your-change): the retry buffer is unbounded (priority is not to drop a line).
+ * <p>Events wait in a size-capped {@link OptimizingLogBuffer}. A background thread sends them in
+ * batches with {@code askSync}; a batch is removed only after the driver acknowledges it, otherwise
+ * it goes back to the head of the buffer and is retried on the next flush. Delivery is
+ * at-least-once: a batch whose ack times out after the driver accepted it is sent again.
+ *
+ * <p>Uses Log4j2 {@link StatusLogger} for its own warnings, because this class runs inside a Log4j2
+ * appender and must not log through it.
  */
 public class SparkOptimizingLogRpcClient {
 
   private static final StatusLogger STATUS = StatusLogger.getLogger();
-  private static final SparkOptimizingLogRpcClient INSTANCE = new SparkOptimizingLogRpcClient();
 
-  // FILLER(need-your-change): how often the executor retries sending buffered lines after RPC
-  // failure.
-  private static final long RETRY_INTERVAL_MS = 200L;
+  static final long FLUSH_INTERVAL_MS = 200L;
+  static final long ASK_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(5);
+  // Max time a task waits at its end for its lines to reach the driver.
+  static final long DRAIN_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(10);
+  static final long MAX_BATCH_BYTES = 1024L * 1024L;
+  static final long MAX_BUFFER_BYTES = 16L * 1024L * 1024L;
+
   private static final String DRIVER_HOST_KEY = "spark.driver.host";
   private static final String DRIVER_PORT_KEY = "spark.driver.port";
-  private static final String RPC_RETRY_THREAD_NAME = "amoro-optimizing-log-rpc-retry";
+  private static final ClassTag<Boolean> ACK_TAG = ClassTag$.MODULE$.apply(Boolean.class);
+  private static final SparkOptimizingLogRpcClient INSTANCE = new SparkOptimizingLogRpcClient();
 
-  private final ConcurrentLinkedQueue<OptimizingLogLine> pending = new ConcurrentLinkedQueue<>();
-  private final AtomicReference<RpcEndpointRef> driverRef = new AtomicReference<>();
-  private final ScheduledExecutorService retryExecutor =
+  private final OptimizingLogBuffer buffer =
+      new OptimizingLogBuffer(MAX_BUFFER_BYTES, OptimizingLogEvent.SOURCE_EXECUTOR);
+  private final RpcTimeout askTimeout =
+      new RpcTimeout(
+          FiniteDuration.apply(ASK_TIMEOUT_MS, TimeUnit.MILLISECONDS),
+          "amoro.optimizing.log.askTimeout");
+  private final ReentrantLock sendLock = new ReentrantLock();
+  private final ScheduledExecutorService flushExecutor =
       Executors.newSingleThreadScheduledExecutor(
           runnable -> {
-            Thread thread = new Thread(runnable, RPC_RETRY_THREAD_NAME);
+            Thread thread = new Thread(runnable, "amoro-optimizing-log-rpc-flush");
             thread.setDaemon(true);
             return thread;
           });
+  private volatile RpcEndpointRef driverRef;
+  // Guarded by sendLock. Used to warn once per outage, not once per flush.
+  private boolean failing = false;
 
   private SparkOptimizingLogRpcClient() {
-    retryExecutor.scheduleWithFixedDelay(
-        this::flushPending, RETRY_INTERVAL_MS, RETRY_INTERVAL_MS, TimeUnit.MILLISECONDS);
+    flushExecutor.scheduleWithFixedDelay(
+        this::flush, FLUSH_INTERVAL_MS, FLUSH_INTERVAL_MS, TimeUnit.MILLISECONDS);
+    Runtime.getRuntime()
+        .addShutdownHook(
+            new Thread(() -> drain(DRAIN_TIMEOUT_MS), "amoro-optimizing-log-rpc-shutdown"));
   }
 
   public static SparkOptimizingLogRpcClient get() {
     return INSTANCE;
   }
 
-  /** Resolve the driver log endpoint once per Spark task and cache the ref for subsequent sends. */
+  /** Resolves the driver endpoint once per executor JVM. Safe to call on every task. */
   public void bindDriverEndpoint() {
-    SparkEnv env = SparkEnv.get();
-    if (env == null) {
-      STATUS.warn("SparkEnv is not available; cannot bind optimizing log RPC client");
-      return;
-    }
-    String host = env.conf().get(DRIVER_HOST_KEY);
-    int port = Integer.parseInt(env.conf().get(DRIVER_PORT_KEY));
-    RpcEndpointRef ref =
-        env.rpcEnv()
-            .setupEndpointRef(
-                RpcAddress.apply(host, port), SparkOptimizingLogEndpoint.ENDPOINT_NAME);
-    driverRef.set(ref);
-    flushPending();
-  }
-
-  public void send(OptimizingLogLine line) {
-    if (line == null) {
-      return;
-    }
-    pending.add(line);
-    flushPending();
-  }
-
-  public void flushPending() {
-    RpcEndpointRef ref = driverRef.get();
-    if (ref == null) {
+    if (driverRef != null) {
       return;
     }
     synchronized (this) {
-      while (true) {
-        OptimizingLogLine head = pending.peek();
-        if (head == null) {
-          return;
+      if (driverRef != null) {
+        return;
+      }
+      SparkEnv env = SparkEnv.get();
+      if (env == null) {
+        throw new IllegalStateException("SparkEnv is not available");
+      }
+      String host = env.conf().get(DRIVER_HOST_KEY);
+      int port = Integer.parseInt(env.conf().get(DRIVER_PORT_KEY));
+      driverRef =
+          env.rpcEnv()
+              .setupEndpointRef(
+                  RpcAddress.apply(host, port), SparkOptimizingLogSupport.ENDPOINT_NAME);
+    }
+  }
+
+  /** Buffers an event; the flush thread sends it. Never blocks on the network. */
+  public void add(OptimizingLogEvent event) {
+    buffer.add(event);
+  }
+
+  /**
+   * Sends buffered events until the buffer is empty, a send fails, or {@code timeoutMs} passes.
+   *
+   * @return true when the buffer was fully sent
+   */
+  public boolean drain(long timeoutMs) {
+    if (driverRef == null) {
+      // Not bound: waiting cannot help, keep lines buffered for a later bind.
+      return buffer.isEmpty();
+    }
+    long deadline = System.currentTimeMillis() + timeoutMs;
+    try {
+      if (!sendLock.tryLock(timeoutMs, TimeUnit.MILLISECONDS)) {
+        return false;
+      }
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      return false;
+    }
+    try {
+      while (System.currentTimeMillis() < deadline) {
+        if (sendAll()) {
+          return true;
         }
-        try {
-          ref.send(head);
-          pending.poll();
-        } catch (Throwable t) {
+        Thread.sleep(FLUSH_INTERVAL_MS);
+      }
+      return false;
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      return false;
+    } finally {
+      sendLock.unlock();
+    }
+  }
+
+  private void flush() {
+    if (sendLock.tryLock()) {
+      try {
+        sendAll();
+      } finally {
+        sendLock.unlock();
+      }
+    }
+  }
+
+  private boolean sendAll() {
+    RpcEndpointRef ref = driverRef;
+    if (ref == null) {
+      return buffer.isEmpty();
+    }
+    while (true) {
+      List<OptimizingLogEvent> batch = buffer.drain(MAX_BATCH_BYTES);
+      if (batch.isEmpty()) {
+        return true;
+      }
+      try {
+        ref.askSync(new SparkOptimizingLogSupport.LogBatch(batch), askTimeout, ACK_TAG);
+        if (failing) {
+          STATUS.info("Resumed sending optimizing logs to driver");
+          failing = false;
+        }
+      } catch (Throwable t) {
+        buffer.requeue(batch);
+        if (!failing) {
           STATUS.warn(
-              "Failed to send optimizing log line to driver; will retry from local buffer: {}",
+              "Failed to send optimizing logs to driver; keeping them buffered: {}",
               t.getMessage());
-          return;
+          failing = true;
         }
+        return false;
       }
     }
   }

@@ -20,41 +20,46 @@
 
 package org.apache.amoro.optimizer.common;
 
+import org.apache.amoro.api.OptimizingLogLine;
 import org.apache.amoro.api.OptimizingTaskId;
-import org.apache.amoro.log.OptimizingLogLine;
-import org.apache.amoro.shade.thrift.org.apache.thrift.TException;
+import org.apache.amoro.client.OptimizingClientPools;
+import org.apache.amoro.log.OptimizingLogEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * Drains sequenced optimizer log lines to AMS over existing {@code OptimizingService.appendLogs}.
- * Each line stays a discrete Thrift {@code OptimizingLogLine}; batches are split at 10 MB.
+ * Sends sequenced optimizer log events to AMS through {@code OptimizingService.appendLogs}.
  *
- * <p>FILLER(need-your-change): the pending deque is unbounded so a line is never dropped. A single
- * line larger than {@link #MAX_BATCH_BYTES} is sent as its own batch.
+ * <p>Events wait in a size-capped {@link OptimizingLogBuffer} and are flushed every {@link
+ * #FLUSH_INTERVAL_MS}, or sooner when a full batch is buffered. Each flush makes one attempt per
+ * batch; a failed batch goes back to the head of the buffer and the next scheduled flush is the
+ * retry. There is no inner retry loop, so a flush never blocks longer than one Thrift call.
  */
 public class OptimizingLogBatcher extends AbstractOptimizerOperator {
 
   private static final Logger LOG = LoggerFactory.getLogger(OptimizingLogBatcher.class);
 
-  // FILLER(need-your-change): flush period agreed for Phase 2.
   static final long FLUSH_INTERVAL_MS = TimeUnit.SECONDS.toMillis(1);
-  // FILLER(need-your-change): max Thrift payload per appendLogs call.
+  // Max payload of one appendLogs call. Must stay well below AMS thrift-server.max-message-size
+  // (100 MB by default).
   static final long MAX_BATCH_BYTES = 10L * 1024L * 1024L;
+  // Cap on buffered bytes while AMS is unreachable; the oldest lines are dropped past it.
+  static final long MAX_BUFFER_BYTES = 64L * 1024L * 1024L;
+  // Upper bound for the final flush in the JVM shutdown hook.
+  static final long SHUTDOWN_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(10);
 
   private static volatile OptimizingLogBatcher instance;
 
-  private final ConcurrentLinkedDeque<OptimizingLogLine> pending = new ConcurrentLinkedDeque<>();
-  private final AtomicLong pendingBytes = new AtomicLong();
+  private final OptimizingLogBuffer buffer =
+      new OptimizingLogBuffer(MAX_BUFFER_BYTES, OptimizingLogEvent.SOURCE_DRIVER);
   private final ScheduledExecutorService flushExecutor =
       Executors.newSingleThreadScheduledExecutor(
           runnable -> {
@@ -62,7 +67,9 @@ public class OptimizingLogBatcher extends AbstractOptimizerOperator {
             thread.setDaemon(true);
             return thread;
           });
-  private final Object sendLock = new Object();
+  private final ReentrantLock sendLock = new ReentrantLock();
+  // Guarded by sendLock. Used to log a delivery failure once per outage, not once per flush.
+  private boolean failing = false;
 
   public OptimizingLogBatcher(OptimizerConfig config) {
     super(config);
@@ -88,117 +95,117 @@ public class OptimizingLogBatcher extends AbstractOptimizerOperator {
     return batcher;
   }
 
+  public static boolean isInitialized() {
+    return instance != null;
+  }
+
   private void startFlushing() {
     flushExecutor.scheduleWithFixedDelay(
         this::flush, FLUSH_INTERVAL_MS, FLUSH_INTERVAL_MS, TimeUnit.MILLISECONDS);
   }
 
-  public void offer(OptimizingLogLine line) {
-    if (line == null || line.getNdjson() == null || line.getNdjson().isEmpty()) {
-      return;
-    }
-    pending.addLast(line);
-    long size = sizeOf(line);
-    if (pendingBytes.addAndGet(size) >= MAX_BATCH_BYTES) {
-      flushExecutor.execute(this::flush);
-    }
-  }
-
-  public void flush() {
-    synchronized (sendLock) {
-      List<OptimizingLogLine> drained = drainPending();
-      if (drained.isEmpty()) {
-        return;
-      }
-      List<List<OptimizingLogLine>> chunks = splitBySize(drained);
-      for (int i = 0; i < chunks.size(); i++) {
-        try {
-          sendChunk(chunks.get(i));
-        } catch (Exception e) {
-          LOG.warn("Failed to append optimizing logs to AMS; re-queueing remaining chunks", e);
-          for (int j = chunks.size() - 1; j >= i; j--) {
-            requeue(chunks.get(j));
-          }
-          return;
-        }
+  public void offer(OptimizingLogEvent event) {
+    buffer.add(event);
+    if (buffer.pendingBytes() >= MAX_BATCH_BYTES) {
+      try {
+        flushExecutor.execute(this::flush);
+      } catch (RejectedExecutionException e) {
+        // Shutting down: stopAndFlush sends what is left.
       }
     }
   }
 
+  /**
+   * Sends everything buffered, stopping at the first batch that fails.
+   *
+   * @return true when the buffer was fully sent
+   */
+  public boolean flush() {
+    sendLock.lock();
+    try {
+      return sendAll();
+    } finally {
+      sendLock.unlock();
+    }
+  }
+
+  /**
+   * Stops the periodic flush and makes a final attempt to send what is buffered. Bounded by {@link
+   * #SHUTDOWN_TIMEOUT_MS} plus at most one Thrift call, so it cannot hang the JVM shutdown.
+   */
   public void stopAndFlush() {
+    long deadline = System.currentTimeMillis() + SHUTDOWN_TIMEOUT_MS;
     flushExecutor.shutdown();
     try {
-      flushExecutor.awaitTermination(FLUSH_INTERVAL_MS, TimeUnit.MILLISECONDS);
+      flushExecutor.awaitTermination(SHUTDOWN_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      long remaining = Math.max(0, deadline - System.currentTimeMillis());
+      if (sendLock.tryLock(remaining, TimeUnit.MILLISECONDS)) {
+        try {
+          if (!sendAll()) {
+            LOG.warn(
+                "{} bytes of optimizing logs were not delivered to AMS before shutdown",
+                buffer.pendingBytes());
+          }
+        } finally {
+          sendLock.unlock();
+        }
+      }
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
-    }
-    flush();
-    stop();
-  }
-
-  private List<OptimizingLogLine> drainPending() {
-    List<OptimizingLogLine> drained = new ArrayList<>();
-    OptimizingLogLine line;
-    while ((line = pending.pollFirst()) != null) {
-      drained.add(line);
-      pendingBytes.addAndGet(-sizeOf(line));
-    }
-    return drained;
-  }
-
-  private void requeue(List<OptimizingLogLine> chunk) {
-    for (int i = chunk.size() - 1; i >= 0; i--) {
-      OptimizingLogLine line = chunk.get(i);
-      pending.addFirst(line);
-      pendingBytes.addAndGet(sizeOf(line));
+    } finally {
+      stop();
     }
   }
 
-  private void sendChunk(List<OptimizingLogLine> chunk) throws TException {
-    List<org.apache.amoro.api.OptimizingLogLine> thriftLines = new ArrayList<>(chunk.size());
-    for (OptimizingLogLine line : chunk) {
-      thriftLines.add(toThrift(line));
-    }
-    callAuthenticatedAms(
-        (client, token) -> {
-          client.appendLogs(token, thriftLines);
-          return null;
-        });
-  }
-
-  private static List<List<OptimizingLogLine>> splitBySize(List<OptimizingLogLine> lines) {
-    List<List<OptimizingLogLine>> chunks = new ArrayList<>();
-    List<OptimizingLogLine> current = new ArrayList<>();
-    long currentBytes = 0;
-    for (OptimizingLogLine line : lines) {
-      long size = sizeOf(line);
-      if (!current.isEmpty() && currentBytes + size > MAX_BATCH_BYTES) {
-        chunks.add(current);
-        current = new ArrayList<>();
-        currentBytes = 0;
+  private boolean sendAll() {
+    while (true) {
+      List<OptimizingLogEvent> batch = buffer.drain(MAX_BATCH_BYTES);
+      if (batch.isEmpty()) {
+        return true;
       }
-      current.add(line);
-      currentBytes += size;
+      if (!send(batch)) {
+        buffer.requeue(batch);
+        return false;
+      }
     }
-    if (!current.isEmpty()) {
-      chunks.add(current);
-    }
-    return chunks;
   }
 
-  private static long sizeOf(OptimizingLogLine line) {
-    return line.getNdjson().getBytes(StandardCharsets.UTF_8).length + 1L;
+  private boolean send(List<OptimizingLogEvent> batch) {
+    String token = getToken();
+    if (token == null) {
+      // Not registered yet, or re-registering; the token listener sets the new token.
+      return false;
+    }
+    try {
+      OptimizingClientPools.getClient(getConfig().getAmsUrl()).appendLogs(token, toThrift(batch));
+      if (failing) {
+        LOG.info("Resumed sending optimizing logs to AMS");
+        failing = false;
+      }
+      return true;
+    } catch (Throwable t) {
+      if (!failing) {
+        LOG.warn(
+            "Failed to send optimizing logs to AMS; keeping them buffered and retrying every {} ms",
+            FLUSH_INTERVAL_MS,
+            t);
+        failing = true;
+      }
+      return false;
+    }
   }
 
-  private static org.apache.amoro.api.OptimizingLogLine toThrift(OptimizingLogLine line) {
-    org.apache.amoro.api.OptimizingLogLine thrift =
-        new org.apache.amoro.api.OptimizingLogLine(
-            new OptimizingTaskId(line.getProcessId(), line.getTaskId()),
-            line.getNdjson(),
-            line.getSequence());
-    if (line.getSource() != null) {
-      thrift.setSource(line.getSource());
+  private static List<OptimizingLogLine> toThrift(List<OptimizingLogEvent> events) {
+    List<OptimizingLogLine> lines = new ArrayList<>(events.size());
+    for (OptimizingLogEvent event : events) {
+      OptimizingLogLine line =
+          new OptimizingLogLine(
+              new OptimizingTaskId(event.getProcessId(), event.getTaskId()),
+              event.getNdjson(),
+              event.getSequence());
+      line.setSource(event.getSource());
+      lines.add(line);
     }
-    return thrift;
+    return lines;
   }
 }
