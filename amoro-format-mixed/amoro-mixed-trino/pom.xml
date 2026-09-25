@@ -35,27 +35,28 @@
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <hive.version>2.1.1</hive.version>
+        <!-- hive-exec is test-only here; kept >= 2.3.4 for CVE-2018-1314. Metastore stays on hive.version (2.1.1 API). -->
+        <hive-exec-test.version>2.3.9</hive-exec-test.version>
         <airlift.version>214</airlift.version>
         <airlift-units.version>1.6</airlift-units.version>
         <airlift-slice.version>0.44</airlift-slice.version>
-        <jackson.version>2.13.5</jackson.version>
+        <jackson.version>2.18.9</jackson.version>
         <guice.version>5.1.0</guice.version>
         <inject.version>1</inject.version>
         <servlet-api.version>4.0.1</servlet-api.version>
         <commons-collections.version>3.2.2</commons-collections.version>
         <!--
-  Stay on 1.11.5 (not 1.12.x): this module pins jackson.version=2.13.5.
-  Avro 1.12.0/1.12.1 raise the Jackson floor to 2.17.2 / 2.20.0.
+  Stay on 1.11.5 (not 1.12.x): this module pins jackson.version=2.18.9.
+  Avro 1.12.0/1.12.1/1.12.2 raise the Jackson floor to 2.17.2 / 2.20.0 / 2.22.1.
   1.11.5 closes CVE-2024-47561 and CVE-2025-33042 and keeps Jackson at 2.14.3.
   The AMS dist still runs Iceberg 1.7.2 on Avro 1.12.0.
   Do not "align" this pin to 1.12.x without first lifting jackson.version.
-  pin to 1.12.x without first lifting jackson.version.
 -->
         <avro.version>1.11.5</avro.version>
         <jersey.version>1.19.4</jersey.version>
         <guava-retrying.version>2.0.0</guava-retrying.version>
         <commons-lang.version>2.6</commons-lang.version>
-        <commons-io.version>2.4</commons-io.version>
+        <commons-io.version>2.14.0</commons-io.version>
         <jol.version>0.16</jol.version>
         <surefire-testng.version>3.2.5</surefire-testng.version>
         <skip-build-mixed-format-trino>true</skip-build-mixed-format-trino>
@@ -179,6 +180,12 @@
             <groupId>io.airlift</groupId>
             <artifactId>units</artifactId>
             <version>${airlift-units.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+            <version>${jackson.version}</version>
         </dependency>
 
         <dependency>
@@ -552,7 +559,7 @@
         <dependency>
             <groupId>org.apache.hive</groupId>
             <artifactId>hive-exec</artifactId>
-            <version>${hive.version}</version>
+            <version>${hive-exec-test.version}</version>
             <classifier>core</classifier>
             <scope>test</scope>
         </dependency>
@@ -637,6 +644,7 @@
             <plugin>
                 <groupId>com.diffplug.spotless</groupId>
                 <artifactId>spotless-maven-plugin</artifactId>
+                <version>${maven-spotless-plugin.version}</version>
                 <configuration>
                     <skip>true</skip>
                     <java>
@@ -694,6 +702,7 @@
                     <plugin>
                         <groupId>com.diffplug.spotless</groupId>
                         <artifactId>spotless-maven-plugin</artifactId>
+                        <version>${maven-spotless-plugin.version}</version>
                         <configuration>
                             <skip>false</skip>
                             <java>

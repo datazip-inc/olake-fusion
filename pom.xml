@@ -116,7 +116,7 @@
         <scala.binary.version>2.13</scala.binary.version>
         <args4j.version>2.33</args4j.version>
         <slf4j.version>2.0.17</slf4j.version>
-        <log4j.version>2.20.0</log4j.version>
+        <log4j.version>2.25.4</log4j.version>
         <junit4.version>4.13.2</junit4.version>
         <junit5.version>5.9.1</junit5.version>
         <commons-beanutils.version>1.11.0</commons-beanutils.version>
@@ -129,7 +129,7 @@
         <curator.version>5.7.0</curator.version>
         <mockito.version>4.11.0</mockito.version>
         <parquet.version>1.15.2</parquet.version>
-        <mysql-jdbc.version>8.0.33</mysql-jdbc.version>
+        <mysql-jdbc.version>8.4.0</mysql-jdbc.version>
         <orc-core.version>1.9.7</orc-core.version>
         <awssdk.version>2.24.12</awssdk.version>
         <aliyun-sdk-oss.version>3.10.2</aliyun-sdk-oss.version>
@@ -139,7 +139,7 @@
         <caffeine.version>2.9.3</caffeine.version>
         <snakeyaml.version>2.2</snakeyaml.version>
         <mybatis.version>3.5.15</mybatis.version>
-        <postgres-jdbc.version>42.7.2</postgres-jdbc.version>
+        <postgres-jdbc.version>42.7.12</postgres-jdbc.version>
         <derby-test.version>10.14.1.0</derby-test.version>
         <commons-dbcp2.version>2.9.0</commons-dbcp2.version>
         <netty.version>4.1.138.Final</netty.version>
@@ -151,7 +151,7 @@
         <lucene.version>8.11.2</lucene.version>
         <bitmap.version>1.0.1</bitmap.version>
         <prometheus.version>0.16.0</prometheus.version>
-        <flink.version>1.20.3</flink.version>
+        <flink.version>1.20.4</flink.version>
         <flink.scala.binary.version>2.12</flink.scala.binary.version>
         <fabric8-kubernetes-client.version.version>7.4.0</fabric8-kubernetes-client.version.version>
         <amoro-shade.version>0.7.0-incubating</amoro-shade.version>
@@ -850,9 +850,16 @@
             </dependency>
 
             <dependency>
-                <groupId>mysql</groupId>
-                <artifactId>mysql-connector-java</artifactId>
+                <groupId>com.mysql</groupId>
+                <artifactId>mysql-connector-j</artifactId>
                 <version>${mysql-jdbc.version}</version>
+                <exclusions>
+                    <!-- protobuf is only used by the X DevAPI, not by the JDBC driver -->
+                    <exclusion>
+                        <groupId>com.google.protobuf</groupId>
+                        <artifactId>protobuf-java</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
 
             <dependency>
