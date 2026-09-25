@@ -1,0 +1,12 @@
+diff --git a/dist/mock.js b/dist/mock.js
+index 35d5b9af3eff34324656879705dcb81470fc9697..ecc248850d033c993e4f74af78adeac68e3a2b10 100644
+--- a/dist/mock.js
++++ b/dist/mock.js
+@@ -734,6 +734,7 @@ return /******/ (function(modules) { // webpackBootstrap
+ 	        if (!options) continue
+ 
+ 	        for (name in options) {
++	            if (name === '__proto__' || name === 'constructor' || name === 'prototype') continue
+ 	            src = target[name]
+ 	            copy = options[name]
+ 
