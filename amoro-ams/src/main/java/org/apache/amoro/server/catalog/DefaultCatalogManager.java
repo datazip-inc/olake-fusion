@@ -36,6 +36,7 @@ import org.apache.amoro.server.AmoroManagementConf;
 import org.apache.amoro.server.dashboard.utils.AmsUtil;
 import org.apache.amoro.server.persistence.PersistentBase;
 import org.apache.amoro.server.persistence.mapper.CatalogMetaMapper;
+import org.apache.amoro.server.utils.Telemetry;
 import org.apache.amoro.shade.guava32.com.google.common.annotations.VisibleForTesting;
 import org.apache.amoro.shade.guava32.com.google.common.cache.CacheBuilder;
 import org.apache.amoro.shade.guava32.com.google.common.cache.CacheLoader;
@@ -58,6 +59,7 @@ import java.util.stream.Collectors;
 public class DefaultCatalogManager extends PersistentBase implements CatalogManager {
 
   private static final Logger LOG = LoggerFactory.getLogger(DefaultCatalogManager.class);
+  private static final String OLAKE_CREATED_PROPERTY = "olake_created";
   protected final Configurations serverConfiguration;
   private final LoadingCache<String, Optional<CatalogMeta>> metaCache;
 
@@ -177,18 +179,31 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
 
   @Override
   public void createCatalog(CatalogMeta catalogMeta) {
-    if (catalogExist(catalogMeta.getCatalogName())) {
-      throw new AlreadyExistsException("Catalog " + catalogMeta.getCatalogName());
+    try {
+      if (catalogExist(catalogMeta.getCatalogName())) {
+        throw new AlreadyExistsException("Catalog " + catalogMeta.getCatalogName());
+      }
+      fillCatalogProperties(catalogMeta);
+      validateCatalogConnection(catalogMeta);
+      // Build to make sure the catalog is valid
+      ServerCatalog catalog = CatalogBuilder.buildServerCatalog(catalogMeta, serverConfiguration);
+      doAs(CatalogMetaMapper.class, mapper -> mapper.insertCatalog(catalog.getMetadata()));
+      disposeCatalog(catalogMeta.getCatalogName());
+      serverCatalogMap.put(catalogMeta.getCatalogName(), catalog);
+      LOG.info(
+          "Create catalog {}, type:{}", catalogMeta.getCatalogName(), catalogMeta.getCatalogType());
+      Telemetry.getInstance()
+          .trackCatalogCreated(catalogMeta.getCatalogType(), isOlakeCreated(catalogMeta), true);
+    } catch (Exception e) {
+      Telemetry.getInstance()
+          .trackCatalogCreated(catalogMeta.getCatalogType(), isOlakeCreated(catalogMeta), false);
+      throw e instanceof RuntimeException ? (RuntimeException) e : new RuntimeException(e);
     }
-    fillCatalogProperties(catalogMeta);
-    validateCatalogConnection(catalogMeta);
-    // Build to make sure the catalog is valid
-    ServerCatalog catalog = CatalogBuilder.buildServerCatalog(catalogMeta, serverConfiguration);
-    doAs(CatalogMetaMapper.class, mapper -> mapper.insertCatalog(catalog.getMetadata()));
-    disposeCatalog(catalogMeta.getCatalogName());
-    serverCatalogMap.put(catalogMeta.getCatalogName(), catalog);
-    LOG.info(
-        "Create catalog {}, type:{}", catalogMeta.getCatalogName(), catalogMeta.getCatalogType());
+  }
+
+  private static boolean isOlakeCreated(CatalogMeta catalogMeta) {
+    Map<String, String> properties = catalogMeta.getCatalogProperties();
+    return properties != null && Boolean.parseBoolean(properties.get(OLAKE_CREATED_PROPERTY));
   }
 
   private void fillCatalogProperties(CatalogMeta catalogMeta) {
@@ -228,15 +243,22 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
 
   @Override
   public void updateCatalog(CatalogMeta catalogMeta) {
-    ServerCatalog catalog = getServerCatalog(catalogMeta.getCatalogName());
-    validateCatalogUpdate(catalog.getMetadata(), catalogMeta);
-    CatalogMeta copy = catalogMeta.deepCopy();
-    fillCatalogProperties(copy);
-    validateCatalogConnection(copy);
-
-    catalog.updateMetadata(catalogMeta);
-    metaCache.invalidate(catalogMeta.getCatalogName());
-    LOG.info("Update catalog metadata: {}", catalogMeta.getCatalogName());
+    try {
+      ServerCatalog catalog = getServerCatalog(catalogMeta.getCatalogName());
+      validateCatalogUpdate(catalog.getMetadata(), catalogMeta);
+      CatalogMeta copy = catalogMeta.deepCopy();
+      fillCatalogProperties(copy);
+      validateCatalogConnection(copy);
+      catalog.updateMetadata(catalogMeta);
+      metaCache.invalidate(catalogMeta.getCatalogName());
+      LOG.info("Update catalog metadata: {}", catalogMeta.getCatalogName());
+      Telemetry.getInstance()
+          .trackCatalogUpdated(catalogMeta.getCatalogType(), isOlakeCreated(catalogMeta), true);
+    } catch (Exception e) {
+      Telemetry.getInstance()
+          .trackCatalogUpdated(catalogMeta.getCatalogType(), isOlakeCreated(catalogMeta), false);
+      LOG.error("Failed to update catalog {}", catalogMeta.getCatalogName(), e);
+    }
   }
 
   @Override
