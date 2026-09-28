@@ -83,6 +83,11 @@
                     <groupId>org.apache.logging.log4j</groupId>
                     <artifactId>log4j-slf4j2-impl</artifactId>
                 </exclusion>
+                <!-- flink-runtime brings at.yawk.lz4:lz4-java (same net.jpountz classes, CVE-2025-12183 fixed) -->
+                <exclusion>
+                    <groupId>org.lz4</groupId>
+                    <artifactId>lz4-java</artifactId>
+                </exclusion>
                 <exclusion>
                     <groupId>com.fasterxml.jackson.core</groupId>
                     <artifactId>*</artifactId>
@@ -375,6 +380,13 @@
             <artifactId>paimon-spark-${spark.major.version}</artifactId>
             <version>${paimon.version}</version>
             <scope>runtime</scope>
+            <exclusions>
+                <!-- flink-runtime brings at.yawk.lz4:lz4-java (same net.jpountz classes, CVE-2025-12183 fixed) -->
+                <exclusion>
+                    <groupId>org.lz4</groupId>
+                    <artifactId>lz4-java</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>
