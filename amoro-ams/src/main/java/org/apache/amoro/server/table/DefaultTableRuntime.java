@@ -44,6 +44,7 @@ import org.apache.amoro.server.persistence.mapper.OptimizerMapper;
 import org.apache.amoro.server.persistence.mapper.OptimizingProcessMapper;
 import org.apache.amoro.server.persistence.mapper.TableBlockerMapper;
 import org.apache.amoro.server.persistence.mapper.TableProcessMapper;
+import org.apache.amoro.server.process.TableProcessMeta;
 import org.apache.amoro.server.resource.OptimizerInstance;
 import org.apache.amoro.server.table.blocker.TableBlocker;
 import org.apache.amoro.server.table.cleanup.CleanupOperation;
@@ -51,6 +52,7 @@ import org.apache.amoro.server.table.cleanup.TableRuntimeCleanupState;
 import org.apache.amoro.server.utils.IcebergTableUtil;
 import org.apache.amoro.server.utils.SnowflakeIdGenerator;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Lists;
+import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.amoro.shade.zookeeper3.org.apache.curator.shaded.com.google.common.collect.Maps;
 import org.apache.amoro.table.BaseTable;
 import org.apache.amoro.table.ChangeTable;
@@ -58,10 +60,20 @@ import org.apache.amoro.table.MixedTable;
 import org.apache.amoro.table.StateKey;
 import org.apache.amoro.table.TableRuntimeStore;
 import org.apache.amoro.table.UnkeyedTable;
+import org.apache.amoro.utils.ExceptionUtil;
 import org.apache.iceberg.Snapshot;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -78,6 +90,9 @@ public class DefaultTableRuntime extends AbstractTableRuntime
   private static final Logger LOG = LoggerFactory.getLogger(DefaultTableRuntime.class);
 
   private static final SnowflakeIdGenerator ID_GENERATOR = new SnowflakeIdGenerator();
+
+  private static final DateTimeFormatter DRIVER_LOG_TIME_FORMATTER =
+      DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC);
 
   private static final StateKey<TableRuntimeOptimizingState> OPTIMIZING_STATE_KEY =
       StateKey.stateKey("optimizing_state")
@@ -362,18 +377,51 @@ public class DefaultTableRuntime extends AbstractTableRuntime
     return this;
   }
 
-  public void beginPlanning() {
-    OptimizingStatus originalStatus = getOptimizingStatus();
-    store().begin().updateStatusCode(code -> OptimizingStatus.PLANNING.getCode()).commit();
+  private String triggeredTypeName(long processId) {
+    TableProcessMeta processMeta =
+        getAs(TableProcessMapper.class, m -> m.getProcessMeta(processId));
+    return processMeta.getProcessType();
   }
 
-  public void planFailed() {
-    OptimizingStatus originalStatus = getOptimizingStatus();
-    store().begin().updateStatusCode(code -> OptimizingStatus.IDLE.getCode()).commit();
+  public void beginPlanning() {
+    long processId = getProcessId();
+    String optimizingTypeName = triggeredTypeName(processId);
+    Map<String, String> summary = new HashMap<>();
+    summary.put("optimizingType", optimizingTypeName);
+    doAs(
+        TableProcessMapper.class,
+        mapper ->
+            mapper.updateProcess(
+                getTableIdentifier().getId(),
+                processId,
+                "",
+                ProcessStatus.PLANNING,
+                OptimizingStatus.PLANNING.name().toLowerCase(),
+                0,
+                0L,
+                "",
+                new HashMap<>(),
+                summary));
+
+    store()
+        .begin()
+        .updateStatusCode(code -> OptimizingStatus.PLANNING.getCode())
+        .updateState(PROCESS_ID_KEY, any -> processId)
+        .commit();
+  }
+
+  public void planFailed(String reason, Throwable throwable) {
+    finalizePlanningProcess(ProcessStatus.FAILED, reason, throwable);
+
+    store()
+        .begin()
+        .updateStatusCode(code -> OptimizingStatus.IDLE.getCode())
+        .updateState(PROCESS_ID_KEY, any -> 0L)
+        .commit();
+    this.pendingCronType = null;
   }
 
   public void beginProcess(OptimizingProcess optimizingProcess) {
-    OptimizingStatus originalStatus = getOptimizingStatus();
     this.optimizingProcess = optimizingProcess;
 
     store()
@@ -466,21 +514,103 @@ public class DefaultTableRuntime extends AbstractTableRuntime
     OptimizingStatus originalStatus = getOptimizingStatus();
     boolean needUpdate =
         originalStatus == OptimizingStatus.PLANNING || originalStatus == OptimizingStatus.PENDING;
-    if (needUpdate) {
-      OptimizingType cronType = this.pendingCronType;
-      if (cronType != null) {
-        recordSkippedOptimization(
-            cronType,
-            String.format(
-                "cron fired for %s but planner evaluated and found no data to process", cronType));
-      }
-      store()
-          .begin()
-          .updateStatusCode(code -> OptimizingStatus.IDLE.getCode())
-          .updateState(PENDING_INPUT_KEY, any -> new AbstractOptimizingEvaluator.PendingInput())
-          .commit();
-      this.pendingCronType = null;
+    if (!needUpdate) {
+      return;
     }
+
+    String reason =
+        String.format(
+            "cron fired for %s but planner evaluated and found no data to process",
+            triggeredTypeName(getProcessId()));
+
+    finalizePlanningProcess(ProcessStatus.SKIPPED, reason, null);
+
+    store()
+        .begin()
+        .updateStatusCode(code -> OptimizingStatus.IDLE.getCode())
+        .updateState(PENDING_INPUT_KEY, any -> new AbstractOptimizingEvaluator.PendingInput())
+        .updateState(PROCESS_ID_KEY, any -> 0L)
+        .commit();
+    this.pendingCronType = null;
+  }
+
+  // mark the process as failed in the database
+  private void finalizePlanningProcess(ProcessStatus status, String reason, Throwable throwable) {
+
+    long processId = getProcessId();
+    if (getOptimizingStatus() != OptimizingStatus.PLANNING || processId == 0) {
+      return;
+    }
+
+    long now = System.currentTimeMillis();
+    Map<String, String> summary = new HashMap<>();
+    summary.put("optimizingType", triggeredTypeName(processId));
+    if (status == ProcessStatus.SKIPPED) {
+      summary.put("skipReason", reason);
+    }
+
+    try {
+      doAs(
+          TableProcessMapper.class,
+          mapper ->
+              mapper.updateProcess(
+                  getTableIdentifier().getId(),
+                  processId,
+                  "",
+                  status,
+                  status.name().toLowerCase(),
+                  0,
+                  now,
+                  reason,
+                  new HashMap<>(),
+                  summary));
+    } catch (Exception e) {
+      LOG.warn(
+          "Failed to finalize planning process for table {} and process id {}",
+          getTableIdentifier(),
+          processId,
+          e);
+    }
+
+    if (status == ProcessStatus.FAILED) {
+      appendDriverLogEntry(processId, "ERROR", describeThrowable(throwable, reason), throwable);
+    }
+  }
+
+  public void appendDriverLogEntry(
+      long processId, String level, String message, Throwable throwable) {
+    String envLogDir = System.getenv("LOG_DIR");
+    String logBaseDir =
+        (envLogDir != null && !envLogDir.isEmpty()) ? envLogDir : "/mnt/amoro-logs/compaction";
+    Path driverLogPath = Paths.get(logBaseDir, String.valueOf(processId), "driver.log");
+    try {
+      Files.createDirectories(driverLogPath.getParent());
+      Map<String, String> logEntry = new LinkedHashMap<>();
+      logEntry.put("level", level);
+      logEntry.put("time", DRIVER_LOG_TIME_FORMATTER.format(Instant.now()));
+      logEntry.put("processId", String.valueOf(processId));
+      logEntry.put("taskId", "");
+      logEntry.put("logger", "");
+      logEntry.put("message", message);
+      logEntry.put(
+          "stackTrace",
+          throwable == null ? "" : ExceptionUtil.getErrorMessage(throwable, Integer.MAX_VALUE));
+      String logLine = new ObjectMapper().writeValueAsString(logEntry) + System.lineSeparator();
+      Files.writeString(
+          driverLogPath, logLine, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+    } catch (Exception e) {
+      LOG.warn("Failed to append {} entry to driver log for process {}", level, processId, e);
+    }
+  }
+
+  private static String describeThrowable(Throwable throwable, String fallback) {
+    if (throwable == null) {
+      return fallback;
+    }
+    String message = throwable.getMessage();
+    return message == null
+        ? throwable.getClass().getName()
+        : throwable.getClass().getName() + ": " + message;
   }
 
   public void optimizingNotNecessary() {
@@ -509,6 +639,27 @@ public class DefaultTableRuntime extends AbstractTableRuntime
    */
   public void markAsPending(OptimizingType cronType) {
     this.pendingCronType = cronType;
+    long processId = ID_GENERATOR.generateId();
+    long now = System.currentTimeMillis();
+    String optimizingTypeName = cronType.name();
+    Map<String, String> summary = new HashMap<>();
+    summary.put("optimizingType", optimizingTypeName);
+    doAs(
+        TableProcessMapper.class,
+        mapper ->
+            mapper.insertProcess(
+                getTableIdentifier().getId(),
+                processId,
+                "",
+                ProcessStatus.PENDING,
+                optimizingTypeName.toUpperCase(),
+                ProcessStatus.PENDING.name().toLowerCase(),
+                "AMORO",
+                0,
+                now,
+                new HashMap<>(),
+                summary));
+
     store()
         .begin()
         .updateStatusCode(
@@ -522,6 +673,7 @@ public class DefaultTableRuntime extends AbstractTableRuntime
               }
               return code;
             })
+        .updateState(PROCESS_ID_KEY, any -> processId)
         .commit();
   }
 
