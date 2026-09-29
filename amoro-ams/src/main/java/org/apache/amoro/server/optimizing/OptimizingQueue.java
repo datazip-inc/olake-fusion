@@ -57,7 +57,6 @@ import org.apache.amoro.shade.guava32.com.google.common.annotations.VisibleForTe
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Lists;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Maps;
-import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.amoro.table.MixedTable;
 import org.apache.amoro.table.TableIdentifier;
 import org.apache.amoro.utils.CompatiblePropertyUtil;
@@ -70,16 +69,8 @@ import org.apache.iceberg.util.StructLikeMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
-import java.time.Instant;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -102,6 +93,13 @@ import java.util.stream.Collectors;
 public class OptimizingQueue extends PersistentBase {
 
   private static final Logger LOG = LoggerFactory.getLogger(OptimizingQueue.class);
+
+  // why: we insert task runtimes (subtask entries) into db (postgres),
+  // it hits the maximum limit of tuples at 65535.
+  // so, we run the INSERT query in batches (but in a single transaction, rollback on fail)
+  //
+  // case: more than 4681 subtasks created, pg limit : 14 * 4681 almost 65535
+  private static final int TASK_RUNTIME_INSERT_BATCH_SIZE = 4000;
 
   private final QuotaProvider quotaProvider;
   private final Queue<TableOptimizingProcess> tableQueue = new LinkedTransferQueue<>();
@@ -140,12 +138,13 @@ public class OptimizingQueue extends PersistentBase {
   }
 
   private void initTableRuntime(DefaultTableRuntime tableRuntime) {
-    // Recover tables stranded in PLANNING to PENDING
+    // Recover tables stranded in PLANNING: mark process FAILED then IDLE for re-scheduling
     if (tableRuntime.getOptimizingStatus() == OptimizingStatus.PLANNING) {
       LOG.warn(
-          "Found orphaned PLANNING status for table {} on startup; resetting to PENDING status for re-scheduling.",
+          "Found orphaned PLANNING status for table {} on startup; marking process failed for re-scheduling.",
           tableRuntime.getTableIdentifier());
-      tableRuntime.planFailed();
+      tableRuntime.planFailed(
+          "orphaned PLANNING on AMS startup; process marked failed for re-schedule", null);
     }
 
     TableOptimizingProcess process = null;
@@ -348,14 +347,14 @@ public class OptimizingQueue extends PersistentBase {
     tableRuntime.beginPlanning();
     try {
       ServerTableIdentifier identifier = tableRuntime.getTableIdentifier();
-      // mostly here corrupted metadata reacts:
       AmoroTable<?> table = catalogManager.loadTable(identifier.getIdentifier());
       AbstractOptimizingPlanner planner =
           IcebergTableUtil.createOptimizingPlanner(
               tableRuntime.refresh(table),
               (MixedTable) table.originalTable(),
               getAvailableCore(),
-              maxInputSizePerThread());
+              maxInputSizePerThread(),
+              tableRuntime.getProcessId());
       if (planner.isNecessary()) {
         return new TableOptimizingProcess(planner, tableRuntime);
       } else {
@@ -363,7 +362,7 @@ public class OptimizingQueue extends PersistentBase {
         return null;
       }
     } catch (Throwable throwable) {
-      tableRuntime.planFailed();
+      tableRuntime.planFailed(ExceptionUtil.getErrorMessage(throwable, 4000), throwable);
       LOG.error("Planning table {} failed", tableRuntime.getTableIdentifier(), throwable);
       throw throwable;
     }
@@ -854,18 +853,25 @@ public class OptimizingQueue extends PersistentBase {
               doAs(
                   TableProcessMapper.class,
                   mapper ->
-                      mapper.insertProcess(
+                      mapper.updateProcess(
                           tableRuntime.getTableIdentifier().getId(),
                           processId,
                           "",
                           status,
-                          optimizingType.name().toUpperCase(),
                           tableRuntime.getOptimizingStatus().name().toLowerCase(),
-                          "AMORO",
                           0,
-                          planTime,
+                          0L,
+                          "",
                           new HashMap<>(),
                           getSummary().summaryAsMap(false))),
+          () ->
+              doAs(
+                  TableProcessMapper.class,
+                  mapper ->
+                      mapper.updateProcessType(
+                          tableRuntime.getTableIdentifier().getId(),
+                          processId,
+                          optimizingType.name().toUpperCase())),
           () ->
               doAs(
                   OptimizingProcessMapper.class,
@@ -878,9 +884,12 @@ public class OptimizingQueue extends PersistentBase {
                           fromSequence,
                           toSequence)),
           () ->
-              doAs(
-                  OptimizingProcessMapper.class,
-                  mapper -> mapper.insertTaskRuntimes(Lists.newArrayList(taskMap.values()))),
+              Lists.partition(Lists.newArrayList(taskMap.values()), TASK_RUNTIME_INSERT_BATCH_SIZE)
+                  .forEach(
+                      taskRuntimes ->
+                          doAs(
+                              OptimizingProcessMapper.class,
+                              mapper -> mapper.insertTaskRuntimes(taskRuntimes))),
           () -> TaskFilesPersistence.persistTaskInputs(processId, taskMap.values()),
           () -> tableRuntime.beginProcess(this));
     }
@@ -910,7 +919,7 @@ public class OptimizingQueue extends PersistentBase {
           () -> tableRuntime.completeProcess(success),
           () -> clearProcess(this));
       if (!success && failedReason != null) {
-        appendFailReasonToDriverLogs(failedReason, processId);
+        tableRuntime.appendDriverLogEntry(processId, "ERROR", failedReason, null);
       }
     }
 
@@ -962,33 +971,6 @@ public class OptimizingQueue extends PersistentBase {
         taskRuntime.getCompletedFuture().whenCompleted(() -> acceptResult(taskRuntime));
         taskMap.put(taskRuntime.getTaskId(), taskRuntime);
         taskQueue.offer(taskRuntime);
-      }
-    }
-
-    private void appendFailReasonToDriverLogs(String failedReason, long processId) {
-      String envLogDir = System.getenv("LOG_DIR");
-      String logBaseDir =
-          (envLogDir != null && !envLogDir.isEmpty()) ? envLogDir : "/mnt/amoro-logs/compaction";
-      Path driverLogPath = Paths.get(logBaseDir, String.valueOf(processId), "driver.log");
-      String time =
-          DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS")
-              .withZone(ZoneOffset.UTC)
-              .format(Instant.now());
-      try {
-        Files.createDirectories(driverLogPath.getParent());
-        Map<String, String> logEntry = new LinkedHashMap<>();
-        logEntry.put("level", "ERROR");
-        logEntry.put("time", time);
-        logEntry.put("processId", String.valueOf(processId));
-        logEntry.put("taskId", "");
-        logEntry.put("logger", "");
-        logEntry.put("message", failedReason);
-        logEntry.put("stackTrace", "");
-        String logLine = new ObjectMapper().writeValueAsString(logEntry) + System.lineSeparator();
-        Files.writeString(
-            driverLogPath, logLine, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
-      } catch (Exception e) {
-        LOG.warn("Failed to append fail reason to driver log for process {}", processId, e);
       }
     }
   }
