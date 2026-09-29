@@ -644,7 +644,7 @@
             <plugin>
                 <groupId>com.diffplug.spotless</groupId>
                 <artifactId>spotless-maven-plugin</artifactId>
-                <version>${maven-spotless-plugin.version}</version>
+                <version>2.27.2</version>
                 <configuration>
                     <skip>true</skip>
                     <java>
@@ -702,7 +702,7 @@
                     <plugin>
                         <groupId>com.diffplug.spotless</groupId>
                         <artifactId>spotless-maven-plugin</artifactId>
-                        <version>${maven-spotless-plugin.version}</version>
+                        <version>2.27.2</version>
                         <configuration>
                             <skip>false</skip>
                             <java>
