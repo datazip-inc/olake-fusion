@@ -130,6 +130,7 @@
         <mockito.version>4.11.0</mockito.version>
         <parquet.version>1.15.2</parquet.version>
         <mysql-jdbc.version>8.4.0</mysql-jdbc.version>
+        <lz4-java.version>1.10.3</lz4-java.version>
         <orc-core.version>1.9.7</orc-core.version>
         <awssdk.version>2.24.12</awssdk.version>
         <aliyun-sdk-oss.version>3.10.2</aliyun-sdk-oss.version>
@@ -860,6 +861,13 @@
                         <artifactId>protobuf-java</artifactId>
                     </exclusion>
                 </exclusions>
+            </dependency>
+
+            <!-- Maintained fork of org.lz4:lz4-java (archived upstream); same net.jpountz classes, fixes CVE-2025-12183 -->
+            <dependency>
+                <groupId>at.yawk.lz4</groupId>
+                <artifactId>lz4-java</artifactId>
+                <version>${lz4-java.version}</version>
             </dependency>
 
             <dependency>

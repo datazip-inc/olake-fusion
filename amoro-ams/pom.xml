@@ -389,6 +389,13 @@
             </exclusions>
         </dependency>
 
+        <!-- LZ4 for Spark/Paimon codecs, declared directly so it does not depend on flink-runtime pulling it in -->
+        <dependency>
+            <groupId>at.yawk.lz4</groupId>
+            <artifactId>lz4-java</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
         <dependency>
             <groupId>org.apache.amoro</groupId>
             <artifactId>amoro-optimizer-standalone</artifactId>
