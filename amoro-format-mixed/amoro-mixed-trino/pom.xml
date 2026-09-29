@@ -40,13 +40,13 @@
         <airlift.version>214</airlift.version>
         <airlift-units.version>1.6</airlift-units.version>
         <airlift-slice.version>0.44</airlift-slice.version>
-        <jackson.version>2.18.9</jackson.version>
+        <jackson.version>2.18.10</jackson.version>
         <guice.version>5.1.0</guice.version>
         <inject.version>1</inject.version>
         <servlet-api.version>4.0.1</servlet-api.version>
         <commons-collections.version>3.2.2</commons-collections.version>
         <!--
-  Stay on 1.11.5 (not 1.12.x): this module pins jackson.version=2.18.9.
+  Stay on 1.11.5 (not 1.12.x): this module pins jackson.version=2.18.10.
   Avro 1.12.0/1.12.1/1.12.2 raise the Jackson floor to 2.17.2 / 2.20.0 / 2.22.1.
   1.11.5 closes CVE-2024-47561 and CVE-2025-33042 and keeps Jackson at 2.14.3.
   The AMS dist still runs Iceberg 1.7.2 on Avro 1.12.0.
