@@ -1689,7 +1689,6 @@
                             <exclude>**/src/main/resources/static/**</exclude>
                             <exclude>**/amoro_krb_conf/**</exclude>
                             <exclude>**/metastore_db/**</exclude>
-                            <exclude>amoro-web/patches/**</exclude>
                             <exclude>**/unit_test_base_tmp/**</exclude>
                             <exclude>**/pnpm-lock.yaml</exclude>
                             <exclude>**/components.d.ts</exclude>
