@@ -82,6 +82,10 @@ public class TestDefaultOptimizingService extends AMSTableTestBase {
 
   @Before
   public void prepare() {
+    // AMS only accepts optimizers it started, which have a resource record
+    optimizerManager()
+        .createResource(
+            new OptimizerInstance(buildRegisterInfo(), defaultResourceGroup().getContainer()));
     toucher = new Toucher();
     createDatabase();
     createTable();
@@ -104,6 +108,7 @@ public class TestDefaultOptimizingService extends AMSTableTestBase {
               optimizer ->
                   optimizingService()
                       .deleteOptimizer(optimizer.getGroupName(), optimizer.getResourceId()));
+      optimizerManager().deleteResource(buildRegisterInfo().getResourceId());
       dropTable();
       dropDatabase();
     } catch (Exception e) {

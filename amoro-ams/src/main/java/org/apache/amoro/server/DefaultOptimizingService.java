@@ -21,6 +21,7 @@
 package org.apache.amoro.server;
 
 import org.apache.amoro.AmoroTable;
+import org.apache.amoro.Constants;
 import org.apache.amoro.OptimizerProperties;
 import org.apache.amoro.TableRuntime;
 import org.apache.amoro.api.OptimizerRegisterInfo;
@@ -264,6 +265,13 @@ public class DefaultOptimizingService extends StatedPersistentBase
             });
 
     OptimizingQueue queue = getQueueByGroup(registerInfo.getGroupName());
+    // Reject every optimizer pod which is not created by this AMS.
+    // The optimizer auto-kills when its registration is rejected.
+    if (!Constants.EXTERNAL_RESOURCE_CONTAINER.equals(queue.getContainerName())
+        && optimizerManager.getResource(registerInfo.getResourceId()) == null) {
+      throw new ForbiddenException(
+          String.format("Optimizer %s was not created by this AMS", registerInfo.getResourceId()));
+    }
     OptimizerInstance optimizer = new OptimizerInstance(registerInfo, queue.getContainerName());
     registerOptimizer(optimizer, true);
     return optimizer.getToken();
