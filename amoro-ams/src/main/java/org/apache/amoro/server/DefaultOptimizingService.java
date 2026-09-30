@@ -21,6 +21,7 @@
 package org.apache.amoro.server;
 
 import org.apache.amoro.AmoroTable;
+import org.apache.amoro.Constants;
 import org.apache.amoro.OptimizerProperties;
 import org.apache.amoro.TableRuntime;
 import org.apache.amoro.api.OptimizerRegisterInfo;
@@ -264,6 +265,13 @@ public class DefaultOptimizingService extends StatedPersistentBase
             });
 
     OptimizingQueue queue = getQueueByGroup(registerInfo.getGroupName());
+    // Reject every optimizer pod which is not created by this AMS.
+    // The optimizer auto-kills when its registration is rejected.
+    if (!Constants.EXTERNAL_RESOURCE_CONTAINER.equals(queue.getContainerName())
+        && optimizerManager.getResource(registerInfo.getResourceId()) == null) {
+      throw new ForbiddenException(
+          String.format("Optimizer %s was not created by this AMS", registerInfo.getResourceId()));
+    }
     OptimizerInstance optimizer = new OptimizerInstance(registerInfo, queue.getContainerName());
     registerOptimizer(optimizer, true);
     return optimizer.getToken();
@@ -497,12 +505,6 @@ public class DefaultOptimizingService extends StatedPersistentBase
           OptimizerKeepingTask keepingTask = suspendingQueue.take();
           String token = keepingTask.getToken();
           boolean isExpired = !keepingTask.tryKeeping();
-          Optional.ofNullable(keepingTask.getQueue())
-              .ifPresent(
-                  queue ->
-                      queue
-                          .collectTasks(buildSuspendingPredication(authOptimizers.keySet()))
-                          .forEach(task -> retryTask(task, queue)));
           if (isExpired) {
             LOG.info("Optimizer {} has been expired, unregister it", keepingTask.getOptimizer());
             unregisterOptimizer(token);
@@ -510,6 +512,13 @@ public class DefaultOptimizingService extends StatedPersistentBase
             LOG.debug("Optimizer {} is being touched, keep it", keepingTask.getOptimizer());
             keepInTouch(keepingTask.getOptimizer());
           }
+          // Runs after the unregister above, so an expired optimizer's tasks are failed this round.
+          Optional.ofNullable(keepingTask.getQueue())
+              .ifPresent(
+                  queue ->
+                      queue
+                          .collectTasks(buildSuspendingPredication(authOptimizers.keySet()))
+                          .forEach(task -> retryTask(task, queue)));
         } catch (InterruptedException ignored) {
         } catch (Throwable t) {
           LOG.error("OptimizerKeeper has encountered a problem.", t);
@@ -518,6 +527,20 @@ public class DefaultOptimizingService extends StatedPersistentBase
     }
 
     private void retryTask(TaskRuntime<?> task, OptimizingQueue queue) {
+      // canceled because an earlier task of the same process already failed it.
+      if (task.finished()) {
+        return;
+      }
+      // The optimizer died while holding the task. Fail the process.
+      if (StringUtils.isNotBlank(task.getToken()) && !authOptimizers.containsKey(task.getToken())) {
+        String reason =
+            String.format(
+                "Optimizer %s died while running task %s (e.g., due to an OOM kill, or Fusion Pod restart)",
+                task.getResourceDesc(), task.getTaskId());
+        LOG.warn(reason);
+        queue.failProcess(task, reason);
+        return;
+      }
       if (isTaskExecTimeout(task)) {
         LOG.warn(
             "Task {} has been suspended in ACK state for {} (start time: {}), put it to retry queue, optimizer {}. (Note: The task may have finished executing, but ams did not receive the COMPLETE message from the optimizer.)",
@@ -527,7 +550,7 @@ public class DefaultOptimizingService extends StatedPersistentBase
             task.getResourceDesc());
       } else {
         LOG.info(
-            "Task {} is suspending, since it's optimizer is expired, put it to retry queue, optimizer {}",
+            "Task {} was not acknowledged in time, put it to retry queue, optimizer {}",
             task.getTaskId(),
             task.getResourceDesc());
       }

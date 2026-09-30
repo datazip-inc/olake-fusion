@@ -517,6 +517,15 @@ public class AmoroManagementConf {
           .defaultValue(Duration.ofSeconds(3))
           .withDescription("Optimizer polling task timeout.");
 
+  public static final ConfigOption<String> OPTIMIZER_BOOTSTRAP_GROUP_NAME =
+      ConfigOptions.key("optimizer.bootstrap.group-name").stringType().noDefaultValue();
+
+  public static final ConfigOption<String> OPTIMIZER_BOOTSTRAP_CONTAINER =
+      ConfigOptions.key("optimizer.bootstrap.container").stringType().noDefaultValue();
+
+  public static final ConfigOption<Integer> OPTIMIZER_BOOTSTRAP_PARALLELISM =
+      ConfigOptions.key("optimizer.bootstrap.parallelism").intType().noDefaultValue();
+
   public static final ConfigOption<Duration> OPTIMIZING_REFRESH_GROUP_INTERVAL =
       ConfigOptions.key("self-optimizing.refresh-group-interval")
           .durationType()
