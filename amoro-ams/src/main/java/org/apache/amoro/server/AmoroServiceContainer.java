@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server;
@@ -103,6 +105,8 @@ public class AmoroServiceContainer {
 
   public static final String SERVER_CONFIG_FILENAME = "config.yaml";
   private static boolean IS_MASTER_SLAVE_MODE = false;
+  private static volatile Map<String, Object> SPARK_CONFIG = Map.of();
+  private static final String NOT_AVAILABLE = "NA";
 
   private final HighAvailabilityContainer haContainer;
   private DataSource dataSource;
@@ -331,6 +335,28 @@ public class AmoroServiceContainer {
     return serviceConfig;
   }
 
+  public static Map<String, Object> getSparkConfig() {
+    return SPARK_CONFIG;
+  }
+
+  private static Map<String, Object> resolveSparkConfig(
+      Map<String, String> sparkContainerProperties) {
+    Map<String, Object> sparkConfigMap = new HashMap<>();
+    if (sparkContainerProperties == null || sparkContainerProperties.isEmpty()) {
+      return sparkConfigMap;
+    }
+    sparkConfigMap.put(
+        "spark_driver_memory",
+        sparkContainerProperties.getOrDefault("spark-conf.spark.driver.memory", NOT_AVAILABLE));
+    sparkConfigMap.put(
+        "spark_executor_memory",
+        sparkContainerProperties.getOrDefault("spark-conf.spark.executor.memory", NOT_AVAILABLE));
+    sparkConfigMap.put(
+        "spark_executor_cores",
+        sparkContainerProperties.getOrDefault("spark-conf.spark.executor.cores", NOT_AVAILABLE));
+    return sparkConfigMap;
+  }
+
   private void startThriftService() {
     startThriftServer(tableManagementServer, "thrift-table-management-server-thread");
     startThriftServer(optimizingServiceServer, "thrift-optimizing-server-thread");
@@ -524,6 +550,7 @@ public class AmoroServiceContainer {
   private class ConfigurationHelper {
 
     private JsonNode yamlConfig;
+    private Map<String, String> sparkContainerProperties;
 
     public void init() throws Exception {
       Map<String, Object> envConfig = initEnvConfig();
@@ -611,7 +638,14 @@ public class AmoroServiceContainer {
           // put addition system properties
           container.setProperties(containerProperties);
           containerList.add(container);
+          if ("org.apache.amoro.server.manager.SparkOptimizerContainer"
+              .equals(container.getImplClass())) {
+            sparkContainerProperties = containerProperties;
+          }
         }
+      }
+      if (sparkContainerProperties != null) {
+        AmoroServiceContainer.SPARK_CONFIG = resolveSparkConfig(sparkContainerProperties);
       }
       Containers.init(containerList);
     }

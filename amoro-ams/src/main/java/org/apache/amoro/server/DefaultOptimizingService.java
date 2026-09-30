@@ -52,6 +52,7 @@ import org.apache.amoro.server.resource.QuotaProvider;
 import org.apache.amoro.server.table.DefaultTableRuntime;
 import org.apache.amoro.server.table.RuntimeHandlerChain;
 import org.apache.amoro.server.table.TableService;
+import org.apache.amoro.server.utils.Telemetry;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Sets;
 import org.apache.amoro.shade.guava32.com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -180,6 +181,19 @@ public class DefaultOptimizingService extends StatedPersistentBase
     authOptimizers.put(optimizer.getToken(), optimizer);
     optimizingQueueByToken.put(optimizer.getToken(), optimizingQueue);
     optimizerKeeper.keepInTouch(optimizer);
+    trackInstalledFusion();
+  }
+
+  private void trackInstalledFusion() {
+    try {
+      int parallelism =
+          getAs(OptimizerMapper.class, OptimizerMapper::selectAll).stream()
+              .mapToInt(OptimizerInstance::getThreadCount)
+              .sum();
+      Telemetry.getInstance().trackInstalledFusion(parallelism);
+    } catch (Throwable t) {
+      LOG.error("Failed to track installed fusion telemetry", t);
+    }
   }
 
   private void unregisterOptimizer(String token) {
