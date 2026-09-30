@@ -114,7 +114,9 @@ public class OptimizerBootstrap {
     for (ResourceGroup existingOptimizerGroup : optimizerManager.listResourceGroups()) {
       String name = existingOptimizerGroup.getName();
       try {
+        // remove every optimizer altogether
         optimizerManager.listResourcesByGroup(name).forEach(this::releaseOptimizer);
+        optimizerManager.listOptimizers(name).forEach(this::releaseOptimizer);
         optimizerManager.deleteResourceGroup(name);
         optimizingService.deleteResourceGroup(name);
         LOG.info("Deleted optimizer group {}", name);
@@ -138,18 +140,27 @@ public class OptimizerBootstrap {
               .map(OptimizerInstance::getResourceId)
               .collect(Collectors.toSet());
       // Optimizers are listed newest first: keep the newest alive one and release the rest.
-      Resource aliveOptimizer = null;
+      String aliveOptimizerId = null;
       for (Resource optimizer : optimizerManager.listResourcesByGroup(optimizerGroup.getName())) {
-        if (aliveOptimizer == null
+        if (aliveOptimizerId == null
             && heartbeatingOptimizerIds.contains(optimizer.getResourceId())) {
-          aliveOptimizer = optimizer;
+          aliveOptimizerId = optimizer.getResourceId();
         } else {
           LOG.warn("Releasing optimizer {}", optimizer.getResourceId());
           releaseOptimizer(optimizer);
         }
       }
 
-      if (aliveOptimizer == null) {
+      // optimizers from any previous ams will not have a resource record
+      for (OptimizerInstance optimizer :
+          optimizerManager.listOptimizers(optimizerGroup.getName())) {
+        if (!StringUtils.equals(optimizer.getResourceId(), aliveOptimizerId)) {
+          LOG.warn("Releasing optimizer {} that has no resource record", optimizer.getResourceId());
+          releaseOptimizer(optimizer);
+        }
+      }
+
+      if (aliveOptimizerId == null) {
         createOptimizer();
       }
     } catch (Exception e) {

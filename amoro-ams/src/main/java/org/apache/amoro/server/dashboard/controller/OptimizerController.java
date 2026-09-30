@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.dashboard.controller;
@@ -62,7 +64,12 @@ public class OptimizerController {
         String.format(
             "The resource ID %s has not been indexed" + " to any optimizer.", resourceId));
     Resource resource = optimizerManager.getResource(resourceId);
-    resource.getProperties().putAll(optimizerInstances.get(0).getProperties());
+    if (resource == null) {
+      // an optimizer that was not started by this ams should be released
+      resource = optimizerInstances.get(0);
+    } else {
+      resource.getProperties().putAll(optimizerInstances.get(0).getProperties());
+    }
     ResourceContainer rc = Containers.get(resource.getContainerName());
     Preconditions.checkState(
         rc instanceof AbstractOptimizerContainer,

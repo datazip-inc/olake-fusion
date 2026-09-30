@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.manager;
@@ -119,12 +121,8 @@ public class SparkOptimizerContainer extends AbstractOptimizerContainer {
             SparkOptimizerContainer.SparkConf.buildFor(loadSparkConfig(), getContainerProperties())
                 .withGroupProperties(resource.getProperties())
                 .build();
-        String namespace =
-            StringUtils.defaultIfEmpty(
-                sparkConf.configValue(SparkConfKeys.KUBERNETES_NAMESPACE), "default");
         startUpStatesMap.put(
-            KUBERNETES_SUBMISSION_ID_PROPERTY,
-            String.format("%s:%s", namespace, kubernetesDriverName(resource)));
+            KUBERNETES_SUBMISSION_ID_PROPERTY, kubernetesSubmissionId(sparkConf, resource));
       } else {
         String applicationId = fetchCommandOutput(exec, yarnApplicationIdReader);
         if (applicationId != null) {
@@ -280,16 +278,16 @@ public class SparkOptimizerContainer extends AbstractOptimizerContainer {
 
   private String buildReleaseKubernetesCommand(Resource resource) {
     Map<String, String> sparkConfig = loadSparkConfig();
-    Preconditions.checkArgument(
-        resource.getProperties().containsKey(KUBERNETES_SUBMISSION_ID_PROPERTY),
-        "Cannot find {} from optimizer start up stats.",
-        KUBERNETES_SUBMISSION_ID_PROPERTY);
     SparkOptimizerContainer.SparkConf resourceSparkConf =
         SparkOptimizerContainer.SparkConf.buildFor(sparkConfig, getContainerProperties())
             .withGroupProperties(resource.getProperties())
             .build();
     String sparkOptions = resourceSparkConf.toConfOptions();
     String submissionId = resource.getProperties().get(KUBERNETES_SUBMISSION_ID_PROPERTY);
+    if (submissionId == null) {
+      // an optimizer without a resource record has no submission id, derive it from its pod name
+      submissionId = kubernetesSubmissionId(resourceSparkConf, resource);
+    }
     return String.format(
         "%s/bin/spark-submit --kill %s --master %s %s",
         sparkHome, submissionId, sparkMaster, sparkOptions);
@@ -304,6 +302,14 @@ public class SparkOptimizerContainer extends AbstractOptimizerContainer {
 
   private String kubernetesDriverName(Resource resource) {
     return "amoro-optimizer-" + resource.getResourceId();
+  }
+
+  private String kubernetesSubmissionId(
+      SparkOptimizerContainer.SparkConf sparkConf, Resource resource) {
+    String namespace =
+        StringUtils.defaultIfEmpty(
+            sparkConf.configValue(SparkConfKeys.KUBERNETES_NAMESPACE), "default");
+    return String.format("%s:%s", namespace, kubernetesDriverName(resource));
   }
 
   private enum DeployMode {
