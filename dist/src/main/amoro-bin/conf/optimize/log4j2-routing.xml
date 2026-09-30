@@ -33,12 +33,19 @@
             <ThresholdFilter level="${CONSOLE_LEVEL}" onMatch="ACCEPT" onMismatch="DENY"/>
         </Console>
 
+        <Null name="Discard"/>
+
         <Routing name="RoutingAppender">
-            <Routes pattern="$${ctx:logFilePath}">
-                <!-- When logFilePath MDC is NOT set, the pattern evaluates to the raw
-                     literal "${ctx:logFilePath}" which matches this explicit key.
+            <Routes pattern="$${ctx:logChannel}">
+                <!-- Spark optimizer task logs (logChannel=driver|executor) are shipped to AMS by the
+                     RPC appender installed in code; AMS writes the dashboard files. Loggers already
+                     print them to Console directly, so the route discards them to avoid duplicates. -->
+                <Route key="executor" ref="Discard"/>
+                <Route key="driver" ref="Discard"/>
+                <!-- When logChannel MDC is NOT set, the pattern evaluates to the raw
+                     literal "${ctx:logChannel}" which matches this explicit key.
                      Route to the generic optimizer log (no per-task file). -->
-                <Route key="$${ctx:logFilePath}">
+                <Route key="$${ctx:logChannel}">
                     <RollingFile name="DefaultOptimizer"
                                  fileName="${LOG_DIR}/optimizer-default.log"
                                  filePattern="${LOG_DIR}/history/optimizer-default-%d{yyyy-MM-dd}-%i.log.gz">
@@ -48,28 +55,6 @@
                             <SizeBasedTriggeringPolicy size="100MB"/>
                         </Policies>
                         <DefaultRolloverStrategy max="20"/>
-                    </RollingFile>
-                </Route>
-
-                <!-- Default route (no key): matches when logFilePath IS set.
-                     Writes per-process/task log files directly under LOG_DIR so
-                     the path matches what LogController reads:
-                     LOG_DIR/<processId>/driver.log  or  LOG_DIR/<processId>/<taskId>.log -->
-                <Route>
-                    <RollingFile name="CompactionTask-${ctx:processId}-${ctx:taskId}"
-                                 fileName="${LOG_DIR}/${ctx:logFilePath}.log"
-                                 filePattern="${LOG_DIR}/${ctx:logFilePath}-%d{yyyy-MM-dd-HH}-%i.log.gz">
-                        <PatternLayout pattern="${JSON_LOG_PATTERN}"/>
-                        <Policies>
-                            <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
-                            <SizeBasedTriggeringPolicy size="100MB"/>
-                        </Policies>
-                        <DefaultRolloverStrategy max="10">
-                            <Delete basePath="${LOG_DIR}" maxDepth="3">
-                                <IfFileName glob="*/*.log.gz"/>
-                                <IfLastModified age="7d"/>
-                            </Delete>
-                        </DefaultRolloverStrategy>
                     </RollingFile>
                 </Route>
             </Routes>

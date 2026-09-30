@@ -23,6 +23,7 @@ package org.apache.amoro.server.dashboard.controller;
 import io.javalin.http.Context;
 import io.javalin.http.HttpCode;
 import org.apache.amoro.server.dashboard.response.OkResponse;
+import org.apache.amoro.server.optimizing.OptimizingLogStore;
 import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.databind.JsonNode;
 import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
@@ -45,15 +46,8 @@ import java.util.Map;
 
 public class LogController {
   private static final Logger LOG = LoggerFactory.getLogger(LogController.class);
-  private static final String LOG_BASE_DIR;
-
-  static {
-    String envLogDir = System.getenv("LOG_DIR");
-    LOG_BASE_DIR =
-        (envLogDir != null && !envLogDir.isEmpty()) ? envLogDir : "/mnt/amoro-logs/compaction";
-  }
-
-  private static final String DRIVER_LOG_FILE = "driver.log";
+  private static final String LOG_BASE_DIR = OptimizingLogStore.getLogBaseDir();
+  private static final String DRIVER_LOG_FILE = OptimizingLogStore.DRIVER_LOG_FILE;
   private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
   /**

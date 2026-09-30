@@ -28,7 +28,11 @@ public class OptimizingTaskLogContext {
 
   public static final String PROCESS_ID_KEY = "processId";
   public static final String TASK_ID_KEY = "taskId";
-  public static final String LOG_FILE_PATH_KEY = "logFilePath";
+  // Set by the Spark optimizer only: marks an event for shipping to AMS and says which side of the
+  // job produced it. Values match OptimizingLogEvent.SOURCE_*. Callers that put it also remove it.
+  public static final String LOG_CHANNEL_KEY = "logChannel";
+  public static final String LOG_CHANNEL_DRIVER = OptimizingLogEvent.SOURCE_DRIVER;
+  public static final String LOG_CHANNEL_EXECUTOR = OptimizingLogEvent.SOURCE_EXECUTOR;
 
   // per-thread flag indicating whether a caller has already set up logging context.
   private static final ThreadLocal<Boolean> CONTEXT_SET = ThreadLocal.withInitial(() -> false);
@@ -43,7 +47,6 @@ public class OptimizingTaskLogContext {
     CONTEXT_SET.remove();
     ThreadContext.remove(PROCESS_ID_KEY);
     ThreadContext.remove(TASK_ID_KEY);
-    ThreadContext.remove(LOG_FILE_PATH_KEY);
   }
 
   public static boolean isContextSet() {
