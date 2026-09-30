@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.catalog;
@@ -89,11 +91,13 @@ public class ExternalCatalog extends ServerCatalog {
     return doAs(
         () ->
             unifiedCatalog.listDatabases().stream()
-                .filter(
-                    database ->
-                        databaseFilterPattern == null
-                            || databaseFilterPattern.matcher(database).matches())
+                .filter(this::isDatabaseIncluded)
                 .collect(Collectors.toList()));
+  }
+
+  /** Whether the catalog's database filter lets AMS manage the database. */
+  public boolean isDatabaseIncluded(String database) {
+    return databaseFilterPattern == null || databaseFilterPattern.matcher(database).matches();
   }
 
   @Override

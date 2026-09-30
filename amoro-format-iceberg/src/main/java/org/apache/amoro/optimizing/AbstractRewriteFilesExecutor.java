@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.optimizing;
@@ -193,8 +195,8 @@ public abstract class AbstractRewriteFilesExecutor
 
   protected long targetSize() {
     return PropertyUtil.propertyAsLong(
-        table.properties(),
-        TableProperties.SELF_OPTIMIZING_TARGET_SIZE,
+        properties,
+        TaskProperties.TARGET_SIZE,
         TableProperties.SELF_OPTIMIZING_TARGET_SIZE_DEFAULT);
   }
 

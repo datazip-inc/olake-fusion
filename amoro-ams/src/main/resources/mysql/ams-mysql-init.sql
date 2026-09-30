@@ -12,6 +12,8 @@
 -- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
+--
+-- Modified by Datazip Inc. in 2026
 
 CREATE TABLE `catalog_metadata`
 (
@@ -281,3 +283,5 @@ CREATE TABLE IF NOT EXISTS ha_lease (
   KEY `idx_ha_lease_expire` (lease_expire_ts) COMMENT 'Index for querying expired leases',
   KEY `idx_ha_lease_node` (node_id) COMMENT 'Index for querying leases by node ID'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='HA lease table for leader election and heartbeat renewal';
+
+-- TODO: `table_configurations`, right now, is not created for MySQL db, need to add it for any user using mysql as AMS db 
