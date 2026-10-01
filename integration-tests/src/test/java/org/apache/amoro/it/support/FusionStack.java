@@ -77,7 +77,7 @@ public final class FusionStack {
 
   /**
    * Waits until the Spark optimizer group has a live optimizer. If the group has no optimizer at
-   * all (for example after {@code OptimizerFailureIT}), scales one out first.
+   * all, scales one out first.
    */
   public static synchronized void ensureOptimizerRunning() {
     if (client().optimizers(StackEnv.OPTIMIZER_GROUP).isEmpty() && KubeOps.driverPods().isEmpty()) {

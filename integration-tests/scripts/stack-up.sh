@@ -56,6 +56,14 @@ for _ in $(seq 1 180); do
       exit 1
       ;;
   esac
+  # fusion-init only waits for Fusion to start, so a crashed AMS would otherwise cost
+  # fusion-init's whole 5-minute wait before anything fails.
+  ams="$(docker inspect -f '{{.State.Status}}' fusion-it-ams 2>/dev/null || echo missing)"
+  if [[ "$ams" == "exited" || "$ams" == "dead" ]]; then
+    compose logs fusion || true
+    echo "Fusion AMS container stopped: $ams" >&2
+    exit 1
+  fi
   sleep 5
 done
 

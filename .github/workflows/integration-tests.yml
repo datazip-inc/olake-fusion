@@ -16,9 +16,10 @@
 #
 # Modified by Datazip Inc. in 2026
 
-# End-to-end tests for merges to master: builds the Fusion and Spark optimizer
-# images from this commit, starts integration-tests/docker (Fusion, Postgres,
-# MinIO, Spark on Kind), and runs integration-tests/ with Maven failsafe.
+# End-to-end happy-path tests for Fusion as a service. The build job compiles the
+# Fusion distribution, the Spark optimizer job and the test sources once; the test
+# job builds the images from those artifacts, starts integration-tests/docker
+# (Fusion, Postgres, MinIO, Spark on Kind) and runs integration-tests/ with failsafe.
 
 name: Integration Tests
 
@@ -26,23 +27,47 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# Trigger policy is still open. Current default: every PR into master, plus manual runs.
 on:
+  push:
+    branches:
+      - master
+      - staging
   pull_request:
     branches:
       - master
+      - staging
+    paths:
+      - '**/*.java'
+      - '**/*.scala'
+      - '**/pom.xml'
+      - '**/src/main/resources/**'
+      - 'dist/**'
+      - 'docker/amoro/**'
+      - 'docker/optimizer-spark/**'
+      - 'integration-tests/**'
+      - '.github/workflows/integration-tests.yml'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+env:
+  SPARK_VERSION: 3.5.8
+  SCALA_VERSION: 2.13.18
+  MAVEN_ARGS: -B -ntp
+
 jobs:
-  integration-tests:
+  # Everything Maven produces, in one place: a compile error in the tests fails here,
+  # minutes before the stack would have been started.
+  build:
+    name: Build Fusion and optimizer
     runs-on: ubuntu-latest
-    timeout-minutes: 120
-    env:
-      SPARK_VERSION: 3.5.8
-      SCALA_VERSION: 2.13.18
-      IT_LOG_DIR: /tmp/fusion-it-logs
+    timeout-minutes: 45
+    outputs:
+      optimizer-jar: ${{ steps.versions.outputs.OPTIMIZER_JAR }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -54,35 +79,81 @@ jobs:
       - name: Resolve versions
         id: versions
         run: |
+          set -euo pipefail
           AMORO_VERSION=$(./mvnw -q help:evaluate -Dexpression=project.version -DforceStdout | tail -1 | tr -d '\r')
-          echo "AMORO_VERSION=$AMORO_VERSION" >> "$GITHUB_OUTPUT"
-          echo "SPARK_MAJOR=$(echo "$SPARK_VERSION" | cut -d. -f1-2)" >> "$GITHUB_OUTPUT"
-          echo "SCALA_BINARY=$(echo "$SCALA_VERSION" | cut -d. -f1-2)" >> "$GITHUB_OUTPUT"
+          SPARK_MAJOR=$(echo "$SPARK_VERSION" | cut -d. -f1-2)
+          SCALA_BINARY=$(echo "$SCALA_VERSION" | cut -d. -f1-2)
+          echo "SCALA_BINARY=$SCALA_BINARY" >> "$GITHUB_OUTPUT"
+          echo "OPTIMIZER_JAR=amoro-optimizer-spark-${SPARK_MAJOR}_${SCALA_BINARY}-${AMORO_VERSION}-jar-with-dependencies.jar" >> "$GITHUB_OUTPUT"
 
       - name: Build Fusion distribution
-        run: ./mvnw clean package -pl dist -am -DskipTests -B -ntp -Psupport-all-formats -Pno-extended-disk-storage -Pno-plugin-bin
+        run: ./mvnw clean package -pl dist -am -DskipTests -Psupport-all-formats -Pno-extended-disk-storage -Pno-plugin-bin
 
       - name: Build Spark optimizer job
         run: >-
-          ./mvnw package -pl amoro-optimizer/amoro-optimizer-spark -am -DskipTests -B -ntp
+          ./mvnw package -pl amoro-optimizer/amoro-optimizer-spark -am -DskipTests
           -Dspark.version=${SPARK_VERSION}
           -Dscala.version=${SCALA_VERSION}
           -Dscala.binary.version=${{ steps.versions.outputs.SCALA_BINARY }}
 
+      - name: Compile integration tests
+        run: ./mvnw test-compile -Pintegration-tests -pl integration-tests
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: fusion-build
+          path: |
+            dist/target/*-bin.tar.gz
+            amoro-optimizer/amoro-optimizer-spark/target/${{ steps.versions.outputs.OPTIMIZER_JAR }}
+          retention-days: 1
+          if-no-files-found: error
+
+  integration-tests:
+    name: Run integration tests
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      IT_LOG_DIR: /tmp/fusion-it-logs
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      # Restores dist/target and amoro-optimizer/.../target, where the Dockerfiles expect them.
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: fusion-build
+
       - name: Build images
+        timeout-minutes: 20
+        env:
+          OPTIMIZER_JAR: amoro-optimizer/amoro-optimizer-spark/target/${{ needs.build.outputs.optimizer-jar }}
         run: |
+          set -euo pipefail
           docker build -f docker/amoro/Dockerfile -t fusion:it .
           docker build -f docker/optimizer-spark/Dockerfile -t fusion-spark:it \
             --build-arg SPARK_VERSION=${SPARK_VERSION} \
             --build-arg SPARK_JAVA_TAG=${SPARK_VERSION}-java17 \
-            --build-arg OPTIMIZER_JOB=amoro-optimizer/amoro-optimizer-spark/target/amoro-optimizer-spark-${{ steps.versions.outputs.SPARK_MAJOR }}_${{ steps.versions.outputs.SCALA_BINARY }}-${{ steps.versions.outputs.AMORO_VERSION }}-jar-with-dependencies.jar \
+            --build-arg OPTIMIZER_JOB=${OPTIMIZER_JAR} \
             .
 
+      # Bounded so a wedged pull or a stuck Kind cluster is a killed step, not the job's budget.
       - name: Start stack
+        timeout-minutes: 20
         run: integration-tests/scripts/stack-up.sh
 
       - name: Run integration tests
-        run: ./mvnw verify -Pintegration-tests -pl integration-tests -B -ntp
+        timeout-minutes: 45
+        run: ./mvnw verify -Pintegration-tests -pl integration-tests
 
       - name: Collect logs
         if: always()
