@@ -53,11 +53,13 @@ import org.apache.iceberg.encryption.EncryptedOutputFile;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.DataWriter;
 import org.apache.iceberg.io.OutputFileFactory;
+import org.apache.iceberg.io.PositionOutputStream;
 import org.apache.iceberg.jdbc.JdbcCatalog;
 import org.apache.iceberg.types.Types;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -100,7 +102,7 @@ public class IcebergFixture implements AutoCloseable {
   public static final String[] REGIONS = {"ap", "eu", "us"};
 
   /**
-   * Optimization tests run with a 256 KB target size so real segment files stay small. With the
+   * Compaction tests run with a 256 KB target size so real segment files stay small. With the
    * default ratios this gives: fragment files up to 32 KB, undersized segment files 32–192 KB, and
    * target-size-reached files above 192 KB.
    */
@@ -156,10 +158,7 @@ public class IcebergFixture implements AutoCloseable {
     return (prefix + "_" + UUID.randomUUID().toString().substring(0, 8)).toLowerCase();
   }
 
-  // ---------------------------------------------------------------------------------------------
   // Tables
-  // ---------------------------------------------------------------------------------------------
-
   /**
    * Creates a format v2 table in {@link StackEnv#TEST_DB}. Self-optimizing crons are unset and
    * dangling-delete cleaning is off, so Fusion leaves the table alone until the test sets the
@@ -186,6 +185,18 @@ public class IcebergFixture implements AutoCloseable {
     return catalog.loadTable(identifier(name));
   }
 
+  public Table load(TableIdentifier identifier) {
+    return catalog.loadTable(identifier);
+  }
+
+  public List<TableIdentifier> listTables(String namespace) {
+    return catalog.listTables(Namespace.of(namespace));
+  }
+
+  public List<Namespace> listNamespaces() {
+    return catalog.listNamespaces();
+  }
+
   public static TableIdentifier identifier(String name) {
     return TableIdentifier.of(StackEnv.TEST_DB, name);
   }
@@ -196,10 +207,7 @@ public class IcebergFixture implements AutoCloseable {
     update.commit();
   }
 
-  // ---------------------------------------------------------------------------------------------
   // Rows
-  // ---------------------------------------------------------------------------------------------
-
   /**
    * Builds {@code count} rows with ids {@code firstId..firstId+count-1}. Regions rotate across
    * {@link #REGIONS}. The payload is random text of {@code payloadChars} characters, so file size
@@ -227,10 +235,7 @@ public class IcebergFixture implements AutoCloseable {
     return rows(firstId, count, 100, OffsetDateTime.now());
   }
 
-  // ---------------------------------------------------------------------------------------------
   // Writers. Every writer produces one file per partition touched by the given rows.
-  // ---------------------------------------------------------------------------------------------
-
   /** A written data file and the rows in it, in file order (row position = list index). */
   public static class WrittenDataFile {
     private final DataFile file;
@@ -348,9 +353,20 @@ public class IcebergFixture implements AutoCloseable {
     return positions;
   }
 
-  // ---------------------------------------------------------------------------------------------
-  // Inspection
-  // ---------------------------------------------------------------------------------------------
+  /** Puts an object that no snapshot references, under the table's data directory. */
+  public static String writeOrphanFile(Table table) {
+    String location = table.location() + "/data/orphan-" + UUID.randomUUID() + ".parquet";
+    try (PositionOutputStream out = table.io().newOutputFile(location).create()) {
+      out.write("not referenced by any snapshot".getBytes(StandardCharsets.UTF_8));
+    } catch (IOException e) {
+      throw new UncheckedIOException(e);
+    }
+    return location;
+  }
+
+  public static boolean fileExists(Table table, String location) {
+    return table.io().newInputFile(location).exists();
+  }
 
   /** Live data and delete files of the current snapshot, read from manifests. */
   public static TableLayout layout(Table table) {
@@ -418,6 +434,47 @@ public class IcebergFixture implements AutoCloseable {
     return collect(IcebergGenerics.read(table).build());
   }
 
+  /**
+   * Order-independent digest ({@code count/sum-of-hashes}) of the row set at a snapshot, for tables
+   * too large to compare row by row in memory.
+   */
+  public static String rowDigestAt(Table table, long snapshotId) {
+    table.refresh();
+    long count = 0;
+    long sum = 0;
+    try (CloseableIterable<Record> records =
+        IcebergGenerics.read(table).useSnapshot(snapshotId).build()) {
+      for (Record record : records) {
+        count++;
+        sum += render(record).hashCode();
+      }
+    } catch (IOException e) {
+      throw new UncheckedIOException(e);
+    }
+    return count + "/" + sum;
+  }
+
+  /** Live row count with deletes applied. Works for any schema, e.g. tables OLake wrote. */
+  public static long countRows(Table table) {
+    table.refresh();
+    long count = 0;
+    try (CloseableIterable<Record> records = IcebergGenerics.read(table).build()) {
+      for (Record record : records) {
+        if (record != null) {
+          count++;
+        }
+      }
+    } catch (IOException e) {
+      throw new UncheckedIOException(e);
+    }
+    return count;
+  }
+
+  public static List<String> readRowsAt(Table table, long snapshotId) {
+    table.refresh();
+    return collect(IcebergGenerics.read(table).useSnapshot(snapshotId).build());
+  }
+
   public static List<String> render(Collection<Record> records) {
     List<String> rendered = new ArrayList<>();
     for (Record record : records) {
@@ -445,10 +502,7 @@ public class IcebergFixture implements AutoCloseable {
     catalog.close();
   }
 
-  // ---------------------------------------------------------------------------------------------
   // Internals
-  // ---------------------------------------------------------------------------------------------
-
   private static List<String> collect(CloseableIterable<Record> records) {
     List<String> rows = new ArrayList<>();
     try (CloseableIterable<Record> closeable = records) {

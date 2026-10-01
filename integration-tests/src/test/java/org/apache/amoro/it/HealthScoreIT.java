@@ -37,6 +37,9 @@ import java.util.Arrays;
  * Health score: a fragmented table scores below 100, the score rises after a successful
  * optimization, and the table summary and the overview show the same score.
  */
+
+//note: right now as health score is not getting evaluated, this will fail with a timeout.
+// will be fixed when health score is implemented.
 class HealthScoreIT extends OptimizationTestBase {
 
   private static final Duration SCORE_UPDATE = Duration.ofMinutes(3);

@@ -64,10 +64,7 @@ public final class FusionStack {
     return FusionClient.shared();
   }
 
-  // ---------------------------------------------------------------------------------------------
   // Optimizer
-  // ---------------------------------------------------------------------------------------------
-
   public static List<JsonNode> liveOptimizers() {
     long now = System.currentTimeMillis();
     return client().optimizers(StackEnv.OPTIMIZER_GROUP).stream()
@@ -91,10 +88,7 @@ public final class FusionStack {
         optimizers -> !optimizers.isEmpty());
   }
 
-  // ---------------------------------------------------------------------------------------------
   // Tables
-  // ---------------------------------------------------------------------------------------------
-
   public static void awaitTableListed(String db, String table) {
     Await.until(
         "Fusion lists " + StackEnv.CATALOG + "." + db + "." + table,
@@ -110,10 +104,7 @@ public final class FusionStack {
         Map.of("self-optimizing." + optimizingType.toLowerCase() + ".trigger.cron", EVERY_MINUTE));
   }
 
-  // ---------------------------------------------------------------------------------------------
   // Optimizing processes
-  // ---------------------------------------------------------------------------------------------
-
   public static Set<String> processIds(String table) {
     return client().processes(StackEnv.CATALOG, StackEnv.TEST_DB, table).stream()
         .map(p -> p.path("processId").asText())
