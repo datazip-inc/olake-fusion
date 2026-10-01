@@ -1954,5 +1954,11 @@
                 <module>amoro-openapi-sdk</module>
             </modules>
         </profile>
+        <profile>
+            <id>integration-tests</id>
+            <modules>
+                <module>integration-tests</module>
+            </modules>
+        </profile>
     </profiles>
 </project>
