@@ -38,7 +38,7 @@ import java.util.Arrays;
  * optimization, and the table summary and the overview show the same score.
  */
 
-//note: right now as health score is not getting evaluated, this will fail with a timeout.
+// note: right now as health score is not getting evaluated, this will fail with a timeout.
 // will be fixed when health score is implemented.
 class HealthScoreIT extends OptimizationTestBase {
 
