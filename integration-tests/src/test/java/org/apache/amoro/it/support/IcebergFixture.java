@@ -61,6 +61,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -232,7 +233,8 @@ public class IcebergFixture implements AutoCloseable {
   }
 
   public static List<Record> rows(long firstId, int count) {
-    return rows(firstId, count, 100, OffsetDateTime.now());
+    // Iceberg timestamptz keeps microseconds; truncate so expected rows match what is read back.
+    return rows(firstId, count, 100, OffsetDateTime.now().truncatedTo(ChronoUnit.MICROS));
   }
 
   // Writers. Every writer produces one file per partition touched by the given rows.
