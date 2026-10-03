@@ -1,0 +1,278 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Modified by Datazip Inc. in 2026
+
+# Integration test stack. Same topology as local-test/docker-compose.yml
+# (Fusion + Postgres + MinIO + Spark optimizer on Kind), but isolated from a
+# developer's local stack: own container names, subnet, Kind cluster, volumes
+# and host ports, and no bind-mounted data directories.
+#
+# Images come from FUSION_IMAGE / FUSION_SPARK_IMAGE; stack-up.sh tags them as
+# fusion:it and fusion-spark:it, which is what this file and config.yaml use.
+
+name: fusion-it
+
+services:
+  fusion:
+    image: fusion:it
+    container_name: fusion-it-ams
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mc:
+        condition: service_completed_successfully
+      kind-setup:
+        condition: service_completed_successfully
+      spark-copy:
+        condition: service_completed_successfully
+    networks:
+      fusion-it-net:
+        ipv4_address: 10.210.40.10
+    ports:
+      - "${IT_FUSION_PORT:-11630}:1630"
+    environment:
+      JVM_XMS: "1024"
+      JVM_XMX: "2048"
+      KUBECONFIG: /root/.kube/config
+      AWS_ACCESS_KEY_ID: admin
+      AWS_SECRET_ACCESS_KEY: password
+      AWS_REGION: us-east-1
+      LOG_DIR: /mnt/amoro-logs/compaction
+    volumes:
+      - ./config.yaml:/usr/local/amoro/conf/config.yaml:ro
+      - kind-kubeconfig:/root/.kube:ro
+      - spark-home:/opt/spark:ro
+      - ${IT_LOG_DIR:-/tmp/fusion-it-logs}:/mnt/amoro-logs
+    command: ["/entrypoint.sh", "ams"]
+
+  fusion-init:
+    image: curlimages/curl:8.10.1
+    container_name: fusion-it-init
+    depends_on:
+      fusion:
+        condition: service_started
+      kind-load-image:
+        condition: service_completed_successfully
+    networks:
+      fusion-it-net:
+    environment:
+      OPTIMIZER_PARALLELISM: ${IT_OPTIMIZER_PARALLELISM:-2}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        API=http://fusion:1630/api/ams/v1
+        H='X-Request-Source: Web'
+
+        echo "Waiting for Fusion..."
+        i=0
+        until curl -sf $$API/versionInfo >/dev/null 2>&1; do
+          i=$$((i+1)); [ $$i -gt 150 ] && { echo "Fusion did not come up"; exit 1; }
+          sleep 2
+        done
+
+        curl -sf -c /tmp/c -X POST $$API/login -H "$$H" -H 'Content-Type: application/json' \
+          -d '{"user":"admin","password":"password"}'
+        echo
+
+        if ! curl -sf -b /tmp/c -H "$$H" $$API/optimize/resourceGroups | grep -q '"name":"spark-container"'; then
+          echo "Creating optimizer group spark-container"
+          curl -sf -b /tmp/c -X POST $$API/optimize/resourceGroups -H "$$H" -H 'Content-Type: application/json' \
+            -d '{"name":"spark-container","container":"sparkContainer","properties":{}}'
+          echo
+        fi
+
+        if ! curl -sf -b /tmp/c -H "$$H" "$$API/optimize/optimizerGroups/spark-container/optimizers?page=1&pageSize=10" | grep -q '"jobStatus":"RUNNING"'; then
+          echo "Scaling out Spark optimizer, parallelism=$$OPTIMIZER_PARALLELISM"
+          curl -sf -b /tmp/c -X POST $$API/optimize/optimizerGroups/spark-container/optimizers -H "$$H" \
+            -H 'Content-Type: application/json' -d "{\"parallelism\":$$OPTIMIZER_PARALLELISM}"
+          echo
+        fi
+
+        if ! curl -sf -b /tmp/c -H "$$H" $$API/catalogs | grep -q '"catalogName":"olake_iceberg"'; then
+          echo "Creating catalog olake_iceberg"
+          curl -sf -b /tmp/c -X POST $$API/catalogs -H "$$H" -H 'Content-Type: application/json' -d '{
+              "name":"olake_iceberg",
+              "type":"custom",
+              "optimizerGroup":"spark-container",
+              "tableFormatList":["ICEBERG"],
+              "storageConfig":{
+                "storage.type":"S3",
+                "storage.s3.endpoint":"http://10.210.40.5:9000",
+                "storage.s3.region":"us-east-1"
+              },
+              "authConfig":{
+                "auth.type":"AKSK",
+                "auth.aksk.access-key":"admin",
+                "auth.aksk.secret-key":"password"
+              },
+              "properties":{
+                "catalog-impl":"org.apache.iceberg.jdbc.JdbcCatalog",
+                "uri":"jdbc:postgresql://postgres:5432/iceberg",
+                "jdbc.user":"iceberg",
+                "jdbc.password":"password",
+                "jdbc.driver":"org.postgresql.Driver",
+                "jdbc.schema-version":"V1",
+                "warehouse":"s3://warehouse/olake_iceberg/",
+                "s3.path-style-access":"true",
+                "io-impl":"org.apache.iceberg.aws.s3.S3FileIO",
+                "endpoint":"http://10.210.40.5:9000",
+                "access-key-id":"admin",
+                "secret-access-key":"password"
+              },
+              "tableProperties":{}
+            }'
+          echo
+        fi
+        echo "Fusion IT stack initialised."
+
+  postgres:
+    image: postgres:15
+    container_name: fusion-it-postgres
+    networks:
+      fusion-it-net:
+        ipv4_address: 10.210.40.20
+    ports:
+      - "${IT_POSTGRES_PORT:-15432}:5432"
+    environment:
+      POSTGRES_USER: iceberg
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: iceberg
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "iceberg", "-d", "iceberg"]
+      interval: 3s
+      timeout: 10s
+      retries: 20
+    command: postgres -c max_connections=300
+
+  minio:
+    image: olakego/minio:RELEASE.2025-04-03T14-56-28Z
+    container_name: fusion-it-minio
+    networks:
+      fusion-it-net:
+        ipv4_address: 10.210.40.5
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: password
+      MINIO_DOMAIN: minio
+    ports:
+      - "${IT_MINIO_PORT:-19000}:9000"
+    command: ["server", "/data"]
+
+  mc:
+    image: olakego/mc:RELEASE.2025-04-03T17-07-56Z
+    container_name: fusion-it-mc
+    depends_on:
+      - minio
+    networks:
+      fusion-it-net:
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        until /usr/bin/mc alias set minio http://minio:9000 admin password; do sleep 1; done
+        /usr/bin/mc mb minio/warehouse --ignore-existing
+        echo "MinIO bucket 'warehouse' is ready."
+
+  kind-setup:
+    image: docker:27-cli
+    container_name: fusion-it-kind-setup
+    networks:
+      fusion-it-net:
+    environment:
+      IT_LOG_DIR: ${IT_LOG_DIR:-/tmp/fusion-it-logs}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - kind-kubeconfig:/output
+      - ./kind-config.yaml:/kind-config.yaml:ro
+      - ./spark-rbac.yaml:/spark-rbac.yaml:ro
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        sed "s|AMORO_LOG_PLACEHOLDER|$$IT_LOG_DIR|g" /kind-config.yaml > /tmp/kind-config.yaml
+
+        case "$$(uname -m)" in
+          x86_64) ARCH=amd64 ;;
+          aarch64|arm64) ARCH=arm64 ;;
+          *) echo "unsupported arch $$(uname -m)"; exit 1 ;;
+        esac
+        apk add --no-cache curl >/dev/null 2>&1
+        curl -sLo /usr/local/bin/kind https://kind.sigs.k8s.io/dl/v0.23.0/kind-linux-$$ARCH
+        chmod +x /usr/local/bin/kind
+
+        if kind get clusters 2>/dev/null | grep -q '^fusion-it-cluster$$'; then
+          echo "Kind cluster fusion-it-cluster exists, reusing it."
+        else
+          kind create cluster --config /tmp/kind-config.yaml --wait 180s
+        fi
+
+        for n in $$(docker ps --filter "label=io.x-k8s.kind.cluster=fusion-it-cluster" --format "{{.Names}}"); do
+          docker network connect fusion-it-net "$$n" 2>/dev/null || true
+        done
+
+        docker exec -i fusion-it-cluster-control-plane \
+          kubectl --kubeconfig /etc/kubernetes/admin.conf apply -f - < /spark-rbac.yaml
+
+        kind get kubeconfig --name fusion-it-cluster \
+          | sed 's|server: .*|server: https://fusion-it-cluster-control-plane:6443|' > /output/config
+        chmod 644 /output/config
+        echo "Kind setup complete."
+
+  kind-load-image:
+    image: docker:27-cli
+    container_name: fusion-it-kind-load-image
+    depends_on:
+      kind-setup:
+        condition: service_completed_successfully
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    tmpfs:
+      - /tmp:size=4G
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        docker save fusion-spark:it -o /tmp/optimizer.tar
+        for n in $$(docker ps --filter "label=io.x-k8s.kind.cluster=fusion-it-cluster" --format "{{.Names}}"); do
+          echo "Importing fusion-spark:it into $$n"
+          docker exec -i "$$n" ctr --namespace=k8s.io images import - < /tmp/optimizer.tar
+        done
+        rm -f /tmp/optimizer.tar
+
+  spark-copy:
+    image: fusion-spark:it
+    container_name: fusion-it-spark-copy
+    user: root
+    entrypoint: ["/bin/sh", "-c", "cp -a /opt/spark/. /spark-vol/ && echo 'Spark copied.'"]
+    volumes:
+      - spark-home:/spark-vol
+
+networks:
+  fusion-it-net:
+    driver: bridge
+    name: fusion-it-net
+    ipam:
+      config:
+        - subnet: 10.210.40.0/24
+
+volumes:
+  kind-kubeconfig:
+  spark-home:
