@@ -104,20 +104,13 @@ public class SchemaMigrator {
     try {
       applied = prepareHistory(ds);
     } catch (Exception e) {
-      // Deliberately fails open: the only migration so far (V1, platform_property) backs telemetry,
-      // and telemetry must never stop AMS from starting.
-      //
-      // before adding a migration that core AMS depends on. Skipping that migration would let AMS
-      // boot on a
-      // schema it does not match and fail
-      // later at query time. Rethrow here instead (as apply() does), or mark each migration as
-      // required or optional and fail only when a required one cannot run.
-      LOG.warn(
-          "Cannot read or create {}, skipping schema migrations. Apply them manually if the server "
-              + "reports missing tables.",
-          HISTORY_TABLE,
+      // Fails closed, like apply(): skipping the migrations would let AMS boot on a schema it does
+      // not match and fail later at query time.
+      throw new IllegalStateException(
+          "Cannot read or create "
+              + HISTORY_TABLE
+              + ", refusing to start without schema migrations",
           e);
-      return;
     }
 
     for (Map.Entry<Integer, String> entry : declared.entrySet()) {
@@ -178,8 +171,8 @@ public class SchemaMigrator {
       } catch (Exception e) {
         // Two instances running CREATE TABLE IF NOT EXISTS at the same moment make postgres raise a
         // unique violation on its own catalog. Reading the table settles who was right: if it is
-        // there now the other instance created it, and if it is not the read fails and the caller
-        // skips the migrations.
+        // there now the other instance created it, and if it is not the read fails and AMS refuses
+        // to start.
         connection.rollback();
         LOG.debug("Could not create {}, checking whether it exists already", HISTORY_TABLE, e);
       }
