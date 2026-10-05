@@ -20,7 +20,6 @@
 
 package org.apache.amoro.server.persistence.mapper;
 
-import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -41,7 +40,4 @@ public interface PlatformPropertyMapper {
 
   @Update("UPDATE " + TABLE_NAME + " SET property_value = #{value} WHERE property_key = #{key}")
   int updateProperty(@Param("key") String key, @Param("value") String value);
-
-  @Delete("DELETE FROM " + TABLE_NAME + " WHERE property_key = #{key}")
-  void deleteProperty(@Param("key") String key);
 }

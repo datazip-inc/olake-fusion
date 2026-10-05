@@ -84,7 +84,6 @@ public class Telemetry {
 
   private static final String DEFAULT_TELEMETRY_DIR = "/tmp/olake-config/telemetry";
   private static final String USER_ID_FILE_NAME = "user_id";
-  private static final int MAX_INSTALL_ID_LENGTH = 128;
   /** How long to wait before looking the install id up again while it is not stored yet. */
   private static final long INSTALL_ID_RETRY_INTERVAL_MS = 60_000L;
 
@@ -177,21 +176,18 @@ public class Telemetry {
    * context lookups below are blocking calls.
    */
   private static Executor newTelemetryExecutor() {
-    ThreadPoolExecutor pool =
-        new ThreadPoolExecutor(
-            1,
-            1,
-            0L,
-            TimeUnit.MILLISECONDS,
-            new ArrayBlockingQueue<>(MAX_PENDING_EVENTS),
-            runnable -> {
-              Thread thread = new Thread(runnable, "olake-telemetry");
-              thread.setDaemon(true);
-              return thread;
-            },
-            new ThreadPoolExecutor.DiscardPolicy());
-    pool.allowCoreThreadTimeOut(false);
-    return pool;
+    return new ThreadPoolExecutor(
+        1,
+        1,
+        0L,
+        TimeUnit.MILLISECONDS,
+        new ArrayBlockingQueue<>(MAX_PENDING_EVENTS),
+        runnable -> {
+          Thread thread = new Thread(runnable, "olake-telemetry");
+          thread.setDaemon(true);
+          return thread;
+        },
+        new ThreadPoolExecutor.DiscardPolicy());
   }
 
   private static LocationInfo unknownLocation() {
@@ -350,31 +346,15 @@ public class Telemetry {
   }
 
   /**
-   * Applies the install id pushed by the OLake UI. The UI owns this id, so it overwrites whatever
-   * AMS resolved on its own.
+   * Reports under an install id the caller has already validated and stored in {@code
+   * platform_property}. The OLake UI owns this id, so it replaces whatever AMS resolved on its own.
    */
-  public String applyInstallId(String id) {
-    String normalized = normalizeInstallId(id);
-    propertyStore.put(PlatformPropertyStore.TELEMETRY_INSTALL_ID, normalized);
-    this.userID = normalized;
+  public void useInstallId(String id) {
+    if (id == null || id.isEmpty()) {
+      return;
+    }
+    this.userID = id;
     this.userIDDurable = true;
-    return normalized;
-  }
-
-  private static String normalizeInstallId(String id) {
-    String normalized = id == null ? "" : id.trim();
-    if (normalized.isEmpty()) {
-      throw new IllegalArgumentException("Install id is empty");
-    }
-    if (normalized.length() > MAX_INSTALL_ID_LENGTH) {
-      throw new IllegalArgumentException(
-          "Install id is longer than " + MAX_INSTALL_ID_LENGTH + " characters");
-    }
-    if (!normalized.matches("[A-Za-z0-9_-]+")) {
-      throw new IllegalArgumentException(
-          "Install id may only contain letters, digits, '-' and '_'");
-    }
-    return normalized;
   }
 
   private String readSharedUserID() {

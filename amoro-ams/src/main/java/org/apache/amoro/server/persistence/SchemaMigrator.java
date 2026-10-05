@@ -104,8 +104,14 @@ public class SchemaMigrator {
     try {
       applied = prepareHistory(ds);
     } catch (Exception e) {
-      // A role that may not create tables manages its schema by hand; that is a supported setup and
-      // must not stop the server from starting.
+      // Deliberately fails open: the only migration so far (V1, platform_property) backs telemetry,
+      // and telemetry must never stop AMS from starting.
+      //
+      // before adding a migration that core AMS depends on. Skipping that migration would let AMS
+      // boot on a
+      // schema it does not match and fail
+      // later at query time. Rethrow here instead (as apply() does), or mark each migration as
+      // required or optional and fail only when a required one cannot run.
       LOG.warn(
           "Cannot read or create {}, skipping schema migrations. Apply them manually if the server "
               + "reports missing tables.",

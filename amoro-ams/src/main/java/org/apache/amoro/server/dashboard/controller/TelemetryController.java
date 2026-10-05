@@ -22,6 +22,7 @@ package org.apache.amoro.server.dashboard.controller;
 
 import io.javalin.http.Context;
 import org.apache.amoro.server.dashboard.response.OkResponse;
+import org.apache.amoro.server.persistence.PlatformPropertyStore;
 import org.apache.amoro.server.utils.Telemetry;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
 
@@ -30,10 +31,16 @@ import java.util.Map;
 /**
  * Receives the anonymous OLake install id from the OLake UI, which owns it. AMS keeps it in {@code
  * platform_property} so that every AMS restart and replica reports telemetry under the same id.
+ *
+ * <p>Validation and storage live here rather than in {@link Telemetry}, whose methods never throw:
+ * a bad id or a failed write must reach the caller as an error response.
  */
 public class TelemetryController {
 
   private static final String INSTALL_ID_FIELD = "install_id";
+  private static final int MAX_INSTALL_ID_LENGTH = 128;
+
+  private final PlatformPropertyStore propertyStore = new PlatformPropertyStore();
 
   @SuppressWarnings("unchecked")
   public void setInstallId(Context ctx) {
@@ -41,7 +48,22 @@ public class TelemetryController {
     Object installId = body == null ? null : body.get(INSTALL_ID_FIELD);
     Preconditions.checkArgument(
         installId instanceof String, "install_id is required and must be a string");
-    String effective = Telemetry.getInstance().applyInstallId((String) installId);
-    ctx.json(OkResponse.of(Map.of(INSTALL_ID_FIELD, effective)));
+    String normalized = normalizeInstallId((String) installId);
+    propertyStore.put(PlatformPropertyStore.TELEMETRY_INSTALL_ID, normalized);
+    Telemetry.getInstance().useInstallId(normalized);
+    ctx.json(OkResponse.of(Map.of(INSTALL_ID_FIELD, normalized)));
+  }
+
+  private static String normalizeInstallId(String id) {
+    String normalized = id.trim();
+    Preconditions.checkArgument(!normalized.isEmpty(), "Install id is empty");
+    Preconditions.checkArgument(
+        normalized.length() <= MAX_INSTALL_ID_LENGTH,
+        "Install id is longer than %s characters",
+        MAX_INSTALL_ID_LENGTH);
+    Preconditions.checkArgument(
+        normalized.matches("[A-Za-z0-9_-]+"),
+        "Install id may only contain letters, digits, '-' and '_'");
+    return normalized;
   }
 }
