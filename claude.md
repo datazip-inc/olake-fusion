@@ -22,19 +22,30 @@
 
 ## 1. What this repo is
 
-OLake-Fusion is a fork of Apache Amoro and the Iceberg compaction and table-maintenance engine
-behind OLake. Inside the code, Amoro and Fusion are the same thing: packages, classes, scripts and
-docs still say `amoro` and `AMS` (Amoro Management Service, the server).
+OLake-Fusion is a fork of Apache Amoro (Iceberg compaction and table-maintenance engine written in Java). After fork project got renamed to Fusion. At some places in code it still mentions Amoro.
 
 ## 2. Scope
+
+Fusion is a scoped-down fork: it does not need the full Amoro project. Fusion is compaction for
+Iceberg tables.
+
+Fusion has exactly **one optimizer group and one optimizer**. There is no multi-optimizer concept:
+do not add code, config or tests for several groups or several optimizers. In deployments the group
+is `spark-container` (OLake-UI's `OPTIMIZATION_GROUP`); for local debugging it is the `local` group
+from section 8.
 
 **In scope:** Iceberg tables in Iceberg-only catalogs, meaning catalogs whose `tableFormatList` is
 only `ICEBERG` (for example the `custom` JdbcCatalog in `local-test/`).
 
-**Out of scope unless asked:** mixed-format tables (mixed-iceberg, mixed-hive), Hive, Paimon and
-Hudi tables, and the modules that exist only for them (`amoro-format-mixed/*`, `amoro-format-hudi`,
-`amoro-format-paimon`). Do not read, fix or refactor them. If a change to shared code also affects
-them, mention it in one line and move on.
+**Out of scope unless asked.** Do not read, fix or refactor these. If a change to shared code also
+affects them, mention it in one line and move on.
+
+- Mixed-format tables (mixed-iceberg, mixed-hive), Hive, Paimon and Hudi tables, and the modules
+  that exist only for them: `amoro-format-mixed/*`, `amoro-format-hudi`, `amoro-format-paimon`.
+- The Flink optimizer, `amoro-optimizer/amoro-optimizer-flink`. Fusion does not use it. Never use
+  it to run or test compaction, and do not suggest it.
+- Amoro's own web UI, `amoro-web` (served by Fusion on port 1630). It is not the product UI;
+  OLake-UI is. Ask before changing anything there.
 
 **Modules that usually matter:**
 
@@ -43,24 +54,49 @@ them, mention it in one line and move on.
 | `amoro-ams` | Server | Scheduling, commit, table runtime, REST API, keeper |
 | `amoro-format-iceberg` | Server and optimizer | Evaluators and planners (server), rewrite executors (optimizer) |
 | `amoro-common` | Both | Shared types and config |
-| `amoro-optimizer/*` | Optimizer | `-common`, `-standalone` (local), `-spark` (production) |
+| `amoro-optimizer/amoro-optimizer-common`, `-standalone`, `-spark` | Optimizer | Shared optimizer code, the local optimizer, the production optimizer |
 
 **Compaction runs on the Spark optimizer** (`amoro-optimizer-spark`, image `olakego/fusion-spark`)
-on Kubernetes. The local standalone optimizer is only for local debugging. The Flink optimizer is
-not used.
+on Kubernetes. The local standalone optimizer is only for local debugging.
 
-## 3. Naming
+## 3. Deployment and orchestration
 
-OLake's product and UI use different names for optimizing types than the Amoro code:
+Fusion is deployed together with OLake-UI, in one of two modes:
 
-| Amoro code and docs | OLake product |
+- **Docker:** OLake-UI's `docker-compose-v1.yml`. The Fusion services are under the `fusion`
+  profile and need `ENABLE_OPTIMIZATION=true`. Fusion runs as a container, and the Spark optimizer
+  runs on a local Kind cluster that the stack creates.
+- **Kubernetes:** OLake-Helm's chart (`helm/olake`). Fusion's resources are in
+  `templates/fusion/` and are switched on with `fusion.enabled` (default `false`).
+
+`local-test/` in this repo is only for manual testing (section 8), not a product deployment.
+
+**OLake-UI orchestrates compaction with crons.** In OLake-UI's Maintenance pages, users enable
+optimization per table and set a cron for each compaction type. Fusion then compacts a table only
+when one of its crons fires: `TableRuntimeRefreshExecutor` marks the table pending for that
+optimizing type. A table with optimization enabled but no cron firing is never compacted. Keep this
+in mind when testing: nothing happens until a cron fires.
+
+## 4. Terminology
+
+OLake-UI and the Fusion code use different names for the same things:
+
+| OLake-UI | Fusion code and API |
 | --- | --- |
-| minor | Lite |
-| major | Medium |
+| Lite | Minor (`MINOR`) |
+| Medium | Major (`MAJOR`) |
+| Full | Full (`FULL`) |
+| Run, run history | Optimizing process (`.../optimizing-processes`) |
+| Lite schedule (request field `minor_cron`) | `self-optimizing.minor.trigger.cron` |
+| Medium schedule (request field `major_cron`) | `self-optimizing.major.trigger.cron` |
+| Full schedule (request field `full_cron`) | `self-optimizing.full.trigger.cron` |
+| Enabled for optimization (`enabled_for_optimization`) | `self-optimizing.enabled` |
+| Target file size, in MB (`target_file_size`) | `self-optimizing.target-size`, in bytes, default from OLake-UI: 512 MB |
+| Catalog, created from an OLake Iceberg destination | Catalog. OLake catalog type `jdbc` becomes Fusion type `custom`; `glue`, `rest` and `hive` keep their names. |
 
-When the user says Lite or Medium, map it to minor or major in the code.
+When the user uses an OLake-UI term, map it to the Fusion term in the code.
 
-## 4. Related repos
+## 5. Related repos
 
 | Repo | Local path | Role |
 | --- | --- | --- |
@@ -81,10 +117,9 @@ When the user says Lite or Medium, map it to minor or major in the code.
   `git -C <iceberg path> show apache-iceberg-1.7.2:<file>` (or `apache-iceberg-1.10.2` for OLake).
   Do not rely on APIs that do not exist in the pinned version.
 
-**Amoro's own web UI** (`amoro-web`, served by Fusion on port 1630) is not the product UI. Ask
-before changing anything there.
+Note: OLake-UI uses a custom spec (similar to OLake) and mapping logic to create catalog in Fusion.
 
-## 5. Repo rules
+## 6. Repo rules
 
 - Every file you modify that carries the Apache license header must also contain
   `Modified by Datazip Inc. in <year>` within its first 40 lines. The CI check
@@ -96,7 +131,7 @@ before changing anything there.
 - PRs target `staging`. Only `staging` merges into `master`.
 - Do not commit, push, rebase or squash. Leave changes in the working tree.
 
-## 6. Working style
+## 7. Working style
 
 - **Ask before guessing.** If a request has more than one reading, or touches behaviour you are
   unsure of, say what is unclear and ask before writing code. State the assumptions you do make.
@@ -106,10 +141,10 @@ before changing anything there.
   surrounding style. Mention unrelated dead code or bugs instead of fixing them. Remove imports or
   helpers that your own change made unused.
 - **Define "done" before starting.** For any non-trivial task, write down how you will verify it
-  (see section 7), then verify it before reporting success. Say plainly what was and was not
+  (see section 8), then verify it before reporting success. Say plainly what was and was not
   tested.
 
-## 7. Testing
+## 8. Testing
 
 ### Tests in the diff
 
@@ -218,8 +253,8 @@ java \
 The local optimizer is a separate process, started by the server through `bin/optimizer.sh` with the
 `localContainer` from `local-test/config.yaml`. It loads **jars** from
 `dist/src/main/amoro-bin/lib/`, not the compiled classes, so it keeps running old code until those
-jars are replaced. This covers the rewrite executors in `amoro-format-iceberg` and everything in
-`amoro-optimizer/*`.
+jars are replaced. This covers the rewrite executors in `amoro-format-iceberg` and the
+`amoro-optimizer-common` and `amoro-optimizer-standalone` modules.
 
 After changing optimizer-side code:
 
