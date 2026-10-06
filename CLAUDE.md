@@ -22,7 +22,7 @@
 
 ## 1. What this repo is
 
-OLake-Fusion is a fork of Apache Amoro (Iceberg compaction and table-maintenance engine written in Java). After fork project got renamed to Fusion. At some places in code it still mentions Amoro.
+OLake-Fusion is a fork of Apache Amoro (Iceberg compaction engine written in Java). After fork project got renamed to Fusion. At some places in code it still mentions Amoro.
 
 ## 2. Scope
 
@@ -51,7 +51,7 @@ affects them, mention it in one line and move on.
 
 | Module | Runs in | Contains |
 | --- | --- | --- |
-| `amoro-ams` | Server | Scheduling, commit, table runtime, REST API, keeper |
+| `amoro-ams` | Server | Scheduling, commit, table runtime, REST API, etc. |
 | `amoro-format-iceberg` | Server and optimizer | Evaluators and planners (server), rewrite executors (optimizer) |
 | `amoro-common` | Both | Shared types and config |
 | `amoro-optimizer/amoro-optimizer-common`, `-standalone`, `-spark` | Optimizer | Shared optimizer code, the local optimizer, the production optimizer |
@@ -324,7 +324,11 @@ When done testing:
 
    To verify, log in to OLake-UI with `POST http://localhost:8000/login` (body
    `{"username":"admin","password":"password"}`, keep the cookie jar). Then call Fusion through the
-   BFF: OLake-UI forwards `/api/opt/v1/<path>` to Fusion's `/api/ams/v1/<path>`, so
+   BFF. OLake-UI forwards `/api/opt/v1/<path>` to Fusion's `/api/ams/v1/<path>` only when it has no
+   route of its own for that path. It handles these itself (`server/routes/router.go`), mapping
+   them through `server/internal/services/optimization/mapper.go` instead of forwarding them:
+   `GET /api/opt/v1/catalog/resources/spec` and `POST`, `GET`, `PUT`, `DELETE` on
+   `/api/opt/v1/catalog[/:catalog]`. Forwarded paths work as-is:
    `GET http://localhost:8000/api/opt/v1/versionInfo` should return Fusion's response wrapped in
    `{"success":true,"message":"request forwarded successfully",...}`. The stack starts in about a
    minute when the olake-ui image build is cached. A `signup-init` 409 ("user already exists") is
@@ -355,10 +359,17 @@ When done testing:
 
    Before starting, check every image tag the `fusion` profile uses (`fusion`, `spark-copy`,
    `kind-load-image`). A tag that exists neither locally nor on Docker Hub stops the whole stack
-   with `not found`. For optimizer-side changes, also build the Spark image locally
+   with `not found`.
+
+   For optimizer-side changes, also build the Spark image locally
    (`docker/optimizer-spark/Dockerfile`; see the Spark job in
-   `.github/workflows/docker-images.yml` for the Maven command). `kind-load-image` loads that image
-   into Kind if it exists locally, and skips it otherwise.
+   `.github/workflows/docker-images.yml` for the Maven command). Unlike the Fusion image, it must be
+   tagged `olakego/fusion-spark:latest`. That tag is hard-coded in `spark-copy`, in
+   `kind-load-image`, and in the `config.yaml` that `fusion-db-init` downloads from GitHub
+   (`spark.kubernetes.container.image`, with pull policy `IfNotPresent`). That file cannot be
+   changed without also changing `fusion-db-init`. `kind-load-image` loads the local image into Kind if it exists, and
+   skips it otherwise. Because this local `latest` hides the published Spark image, remove it in
+   teardown.
 
    Needs about 10 GB of free disk: the Fusion image (about 2.2 GB) and its build cache, the Spark
    image (about 1.3 GB compressed), and the Kind node image. The full stack (Kind cluster with
@@ -378,6 +389,7 @@ When done testing:
    docker compose --profile fusion -f docker-compose-v1.yml down   # no -v
    kind delete cluster --name fusion-cluster
    docker rmi olakego/fusion:local-test
+   docker rmi olakego/fusion-spark:latest   # only if you built it locally
    ```
 
    Then revert the compose change and your code change, and rerun the Maven command above, so
