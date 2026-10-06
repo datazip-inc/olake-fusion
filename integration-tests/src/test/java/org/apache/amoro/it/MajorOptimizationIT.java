@@ -104,4 +104,37 @@ class MajorOptimizationIT extends OptimizationTestBase {
     assertSamePartitions(before, after);
     assertEquals(expected, IcebergFixture.readRows(table), "row set after optimization");
   }
+
+  /**
+   * MAJOR with no delete files, so the major interval check is decided by the dataFileCount > 1
+   * branch rather than by anyDeleteExist. Layout per partition: 4 undersized segment files.
+   */
+  @ParameterizedTest
+  @EnumSource(Layout.class)
+  void majorMergesSegmentsWithoutDeletes(Layout layout) {
+    String name = IcebergFixture.uniqueName("it_major_nodel_" + layout.name().toLowerCase());
+    Table table = iceberg.createTable(name, layout, optimizationProperties());
+
+    List<WrittenDataFile> segments = new ArrayList<>();
+    for (int i = 0; i < SEGMENTS; i++) {
+      segments.addAll(appendFiles(table, layout, UNDERSIZED_SEGMENT_ROWS));
+    }
+    assertSizeBetween(segments, IcebergFixture.FRAGMENT_MAX_SIZE, IcebergFixture.MIN_TARGET_SIZE);
+
+    List<String> expected = IcebergFixture.render(written);
+    assertEquals(expected, IcebergFixture.readRows(table), "row set before optimization");
+    TableLayout before = IcebergFixture.layout(table);
+    assertTrue(before.deleteFiles().isEmpty(), "setup wrote no delete files: " + before);
+
+    JsonNode process = runOptimization(table, name, "MAJOR");
+    assertSucceededAs(process, "MAJOR");
+
+    TableLayout after = IcebergFixture.layout(table);
+    assertTrue(after.deleteFiles().isEmpty(), "no delete files: " + after);
+    assertTrue(
+        after.dataFiles().size() < before.dataFiles().size(),
+        "segments merged; before=" + before + " after=" + after);
+    assertSamePartitions(before, after);
+    assertEquals(expected, IcebergFixture.readRows(table), "row set after optimization");
+  }
 }

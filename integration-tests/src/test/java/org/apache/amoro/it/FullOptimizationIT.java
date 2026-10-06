@@ -91,4 +91,40 @@ class FullOptimizationIT extends OptimizationTestBase {
     assertSamePartitions(before, after);
     assertEquals(expected, IcebergFixture.readRows(table), "row set after optimization");
   }
+
+  /**
+   * FULL with no delete files, so isFullNecessary is decided by the fragmentFileCount >= 2 branch
+   * rather than by anyDeleteExist. Layout per partition: 3 fragment files and nothing else.
+   */
+  @ParameterizedTest
+  @EnumSource(Layout.class)
+  void fullMergesFragmentsWithoutDeletes(Layout layout) {
+    String name = IcebergFixture.uniqueName("it_full_nodel_" + layout.name().toLowerCase());
+    Table table = iceberg.createTable(name, layout, optimizationProperties());
+
+    List<WrittenDataFile> fragments = new ArrayList<>();
+    for (int i = 0; i < 3; i++) {
+      fragments.addAll(appendFiles(table, layout, FRAGMENT_ROWS));
+    }
+    assertSizeBetween(fragments, 0, IcebergFixture.FRAGMENT_MAX_SIZE);
+
+    List<String> expected = IcebergFixture.render(written);
+    assertEquals(expected, IcebergFixture.readRows(table), "row set before optimization");
+    TableLayout before = IcebergFixture.layout(table);
+    assertTrue(before.deleteFiles().isEmpty(), "setup wrote no delete files: " + before);
+
+    JsonNode process = runOptimization(table, name, "FULL");
+    assertSucceededAs(process, "FULL");
+
+    TableLayout after = IcebergFixture.layout(table);
+    assertTrue(after.deleteFiles().isEmpty(), "no delete files: " + after);
+    for (Map.Entry<String, int[]> partition : after.filesPerPartition().entrySet()) {
+      int filesBefore = before.filesPerPartition().get(partition.getKey())[0];
+      assertTrue(
+          partition.getValue()[0] < filesBefore,
+          "fragments merged in " + partition.getKey() + "; before=" + before + " after=" + after);
+    }
+    assertSamePartitions(before, after);
+    assertEquals(expected, IcebergFixture.readRows(table), "row set after optimization");
+  }
 }
