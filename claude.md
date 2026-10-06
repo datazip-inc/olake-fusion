@@ -64,10 +64,10 @@ When the user says Lite or Medium, map it to minor or major in the code.
 
 | Repo | Local path | Role |
 | --- | --- | --- |
-| OLake-UI | `/Users/thecloudonfire/dev/iceberg-go/testing/olake-ui` | Product UI and BFF for Fusion. Its Go server proxies Fusion's REST API (`/api/ams/v1/...`) through `OPTIMIZATION_BASE_URL`. Its `docker-compose-v1.yml` is also the Docker deployment of Fusion. |
-| OLake-Helm | `/Users/thecloudonfire/dev/iceberg-go/testing/olake-helm` | Helm deployment of Fusion |
-| OLake | `/Users/thecloudonfire/dev/iceberg-go/testing/olake` | Ingestion; writes the Iceberg tables Fusion maintains |
-| Iceberg | `/Users/thecloudonfire/dev/iceberg-go/testing/iceberg` | Apache Iceberg Java source |
+| OLake-UI | `<path>` | Product UI and BFF for Fusion. Its Go server proxies Fusion's REST API (`/api/ams/v1/...`) through `OPTIMIZATION_BASE_URL`. Its `docker-compose-v1.yml` is also the Docker deployment of Fusion. |
+| OLake-Helm | `<path>` | Helm deployment of Fusion |
+| OLake | `<path>` | Ingestion; writes the Iceberg tables Fusion maintains |
+| Iceberg | `<path>` | Apache Iceberg Java source |
 
 - If you change a Fusion REST endpoint's path, request or response, grep OLake-UI for its callers
   and report what would break.
