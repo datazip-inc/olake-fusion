@@ -27,7 +27,6 @@ import org.slf4j.LoggerFactory;
 
 import javax.sql.DataSource;
 
-import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -37,6 +36,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -73,7 +73,9 @@ import java.util.TreeMap;
  * Each script is applied in one transaction together with the row that records it. Postgres has
  * transactional DDL, so a failing migration leaves neither a half applied schema nor a history row,
  * and two AMS replicas starting at once cannot apply the same migration twice: the loser blocks on
- * the primary key, then finds the migration already recorded.
+ * the history row's primary key, then finds the migration already recorded. Any other failure
+ * propagates and AMS refuses to start, because booting on a schema this build does not match only
+ * moves the failure to query time.
  */
 public class SchemaMigrator {
   private static final Logger LOG = LoggerFactory.getLogger(SchemaMigrator.class);
@@ -99,30 +101,23 @@ public class SchemaMigrator {
     }
 
     Map<Integer, String> declared = declaredMigrations();
-
-    Map<Integer, AppliedMigration> applied;
-    try {
-      applied = prepareHistory(ds);
-    } catch (Exception e) {
-      // Fails closed, like apply(): skipping the migrations would let AMS boot on a schema it does
-      // not match and fail later at query time.
-      throw new IllegalStateException(
-          "Cannot read or create "
-              + HISTORY_TABLE
-              + ", refusing to start without schema migrations",
-          e);
-    }
-
-    for (Map.Entry<Integer, String> entry : declared.entrySet()) {
-      int version = entry.getKey();
-      String script = entry.getValue();
-      String checksum = checksumOf(MIGRATION_DIR + script);
-      AppliedMigration previous = applied.get(version);
-      if (previous == null) {
-        apply(ds, version, script, checksum);
-      } else {
-        verifyUnchanged(version, script, checksum, previous);
+    try (Connection connection = ds.getConnection()) {
+      Map<Integer, AppliedMigration> applied = readHistory(connection);
+      for (Map.Entry<Integer, String> entry : declared.entrySet()) {
+        int version = entry.getKey();
+        String script = entry.getValue();
+        String checksum = checksumOf(MIGRATION_DIR + script);
+        AppliedMigration previous = applied.get(version);
+        if (previous == null) {
+          apply(connection, version, script, checksum);
+        } else {
+          verifyUnchanged(version, script, checksum, previous);
+        }
       }
+    } catch (IllegalStateException e) {
+      throw e;
+    } catch (Exception e) {
+      throw new IllegalStateException("Refusing to start, schema migrations failed", e);
     }
   }
 
@@ -148,13 +143,13 @@ public class SchemaMigrator {
    */
   private static void verifyUnchanged(
       int version, String script, String checksum, AppliedMigration previous) {
-    if (!script.equals(previous.scriptName)) {
+    if (!script.equals(previous.scriptName())) {
       throw new IllegalStateException(
           String.format(
               "Migration version %d was applied as %s but is now declared as %s",
-              version, previous.scriptName, script));
+              version, previous.scriptName(), script));
     }
-    if (previous.checksum != null && !previous.checksum.equals(checksum)) {
+    if (previous.checksum() != null && !previous.checksum().equals(checksum)) {
       throw new IllegalStateException(
           String.format(
               "Migration %s changed after it was applied. Add a new version instead of editing it.",
@@ -163,65 +158,60 @@ public class SchemaMigrator {
   }
 
   /** Creates the history table when missing and returns the migrations already applied. */
-  private static Map<Integer, AppliedMigration> prepareHistory(DataSource ds) throws SQLException {
-    try (Connection connection = ds.getConnection()) {
-      try {
-        execute(connection, readScript(HISTORY_SCRIPT));
-        connection.commit();
-      } catch (Exception e) {
-        // Two instances running CREATE TABLE IF NOT EXISTS at the same moment make postgres raise a
-        // unique violation on its own catalog. Reading the table settles who was right: if it is
-        // there now the other instance created it, and if it is not the read fails and AMS refuses
-        // to start.
-        connection.rollback();
-        LOG.debug("Could not create {}, checking whether it exists already", HISTORY_TABLE, e);
-      }
-
-      Map<Integer, AppliedMigration> applied = new HashMap<>();
-      try (Statement statement = connection.createStatement();
-          ResultSet rs =
-              statement.executeQuery(
-                  "SELECT version, script_name, checksum FROM " + HISTORY_TABLE)) {
-        while (rs.next()) {
-          applied.put(rs.getInt(1), new AppliedMigration(rs.getString(2), rs.getString(3)));
-        }
-      }
+  private static Map<Integer, AppliedMigration> readHistory(Connection connection)
+      throws SQLException {
+    try {
+      execute(connection, readScript(HISTORY_SCRIPT));
+      connection.commit();
+    } catch (SQLException e) {
+      // Two instances running CREATE TABLE IF NOT EXISTS at the same moment make postgres raise a
+      // unique violation on its own catalog. Reading the table settles who was right: if it is
+      // there now the other instance created it, and if it is not the read below fails and AMS
+      // refuses to start.
       connection.rollback();
-      return applied;
+      LOG.debug("Could not create {}, checking whether it exists already", HISTORY_TABLE, e);
     }
+
+    Map<Integer, AppliedMigration> applied = new HashMap<>();
+    try (Statement statement = connection.createStatement();
+        ResultSet rs =
+            statement.executeQuery("SELECT version, script_name, checksum FROM " + HISTORY_TABLE)) {
+      while (rs.next()) {
+        applied.put(rs.getInt(1), new AppliedMigration(rs.getString(2), rs.getString(3)));
+      }
+    }
+    connection.commit();
+    return applied;
   }
 
-  private static void apply(DataSource ds, int version, String script, String checksum) {
+  private static void apply(Connection connection, int version, String script, String checksum)
+      throws SQLException {
     LOG.info("Applying schema migration {}", script);
-    String sql = readScript(MIGRATION_DIR + script);
-    try (Connection connection = ds.getConnection()) {
-      try {
-        try (PreparedStatement insert =
-            connection.prepareStatement(
-                "INSERT INTO "
-                    + HISTORY_TABLE
-                    + "(version, script_name, checksum) VALUES(?, ?, ?)")) {
-          insert.setInt(1, version);
-          insert.setString(2, script);
-          insert.setString(3, checksum);
-          insert.executeUpdate();
-        }
-        execute(connection, sql);
-        connection.commit();
-        LOG.info("Applied schema migration {}", script);
-      } catch (Exception e) {
-        connection.rollback();
-        // Reuse this connection rather than borrowing a second one: a pool sized at one would
-        // otherwise stall here until it times out.
-        if (isAlreadyApplied(connection, version)) {
-          LOG.info("Schema migration {} was applied by another AMS instance", script);
-          return;
-        }
-        throw e;
+    try {
+      try (PreparedStatement insert =
+          connection.prepareStatement(
+              "INSERT INTO "
+                  + HISTORY_TABLE
+                  + "(version, script_name, checksum) VALUES(?, ?, ?)")) {
+        insert.setInt(1, version);
+        insert.setString(2, script);
+        insert.setString(3, checksum);
+        insert.executeUpdate();
       }
-    } catch (Exception e) {
+      execute(connection, readScript(MIGRATION_DIR + script));
+      connection.commit();
+    } catch (SQLException | RuntimeException e) {
+      connection.rollback();
+      // Another replica committed this migration while this one was applying it; its insert lost
+      // the race on the primary key. Reuse this connection rather than borrowing a second one: a
+      // pool sized at one would otherwise stall here until it times out.
+      if (isAlreadyApplied(connection, version)) {
+        LOG.info("Schema migration {} was applied by another AMS instance", script);
+        return;
+      }
       throw new IllegalStateException("Failed to apply schema migration " + script, e);
     }
+    LOG.info("Applied schema migration {}", script);
   }
 
   private static boolean isAlreadyApplied(Connection connection, int version) {
@@ -251,13 +241,7 @@ public class SchemaMigrator {
       if (stream == null) {
         throw new IllegalStateException("Cannot find migration script: " + resource);
       }
-      ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-      byte[] chunk = new byte[8192];
-      int read;
-      while ((read = stream.read(chunk)) != -1) {
-        buffer.write(chunk, 0, read);
-      }
-      return new String(buffer.toByteArray(), StandardCharsets.UTF_8);
+      return new String(stream.readAllBytes(), StandardCharsets.UTF_8);
     } catch (IllegalStateException e) {
       throw e;
     } catch (Exception e) {
@@ -271,25 +255,13 @@ public class SchemaMigrator {
     try {
       byte[] hash =
           MessageDigest.getInstance("SHA-256").digest(normalized.getBytes(StandardCharsets.UTF_8));
-      StringBuilder hex = new StringBuilder(hash.length * 2);
-      for (byte b : hash) {
-        hex.append(String.format("%02x", b));
-      }
-      return hex.toString();
+      return HexFormat.of().formatHex(hash);
     } catch (Exception e) {
       throw new IllegalStateException("Failed to checksum migration script: " + resource, e);
     }
   }
 
-  private static final class AppliedMigration {
-    private final String scriptName;
-    private final String checksum;
-
-    private AppliedMigration(String scriptName, String checksum) {
-      this.scriptName = scriptName;
-      this.checksum = checksum;
-    }
-  }
+  private record AppliedMigration(String scriptName, String checksum) {}
 
   /** {@code V12__something.sql} carries version 12. */
   private static int versionOf(String script) {
@@ -297,6 +269,10 @@ public class SchemaMigrator {
     if (!script.startsWith("V") || end < 2) {
       throw new IllegalStateException("Malformed migration script name: " + script);
     }
-    return Integer.parseInt(script.substring(1, end));
+    try {
+      return Integer.parseInt(script.substring(1, end));
+    } catch (NumberFormatException e) {
+      throw new IllegalStateException("Malformed migration script name: " + script, e);
+    }
   }
 }

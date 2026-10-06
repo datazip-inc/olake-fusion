@@ -36,35 +36,18 @@ public class PlatformPropertyStore extends PersistentBase {
     return getAs(PlatformPropertyMapper.class, mapper -> mapper.getProperty(key));
   }
 
-  /**
-   * Stores a value, overwriting whatever is there. Replicas race only on first boot, where the
-   * loser's insert fails on the primary key and is retried as an update.
-   */
+  /** Stores a value, overwriting whatever is there. */
   public void put(String key, String value) {
-    if (get(key) != null) {
-      doAs(PlatformPropertyMapper.class, mapper -> mapper.updateProperty(key, value));
+    long updated =
+        updateAs(PlatformPropertyMapper.class, mapper -> mapper.updateProperty(key, value));
+    if (updated > 0) {
       return;
     }
     try {
       doAs(PlatformPropertyMapper.class, mapper -> mapper.insertProperty(key, value));
     } catch (PersistenceException e) {
-      // Another AMS replica inserted the same key between the read and the insert.
-      doAs(PlatformPropertyMapper.class, mapper -> mapper.updateProperty(key, value));
-    }
-  }
-
-  /** Stores the value only when the key is still unset, and returns the effective value. */
-  public String putIfAbsent(String key, String value) {
-    String existing = get(key);
-    if (existing != null && !existing.isEmpty()) {
-      return existing;
-    }
-    try {
-      doAs(PlatformPropertyMapper.class, mapper -> mapper.insertProperty(key, value));
-      return value;
-    } catch (PersistenceException e) {
-      String stored = get(key);
-      return stored != null && !stored.isEmpty() ? stored : value;
+      // Another AMS replica inserted the same key first; its row is the one to overwrite.
+      updateAs(PlatformPropertyMapper.class, mapper -> mapper.updateProperty(key, value));
     }
   }
 }

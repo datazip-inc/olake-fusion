@@ -32,14 +32,9 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
@@ -59,20 +54,17 @@ import java.util.function.Supplier;
  * {@code telemetry.disabled: true} AMS configuration option.
  *
  * <p>The install id identifies one OLake deployment across all of its products. The OLake UI owns
- * it and pushes it to AMS, which keeps it in {@code platform_property}; see {@link #resolveUserID}
- * for the full resolution order.
+ * it, pushes it to AMS, and AMS keeps it in {@code platform_property}; telemetry reads it from
+ * there and reports nothing under any other id.
  */
 public class Telemetry {
   private static final Logger LOG = LoggerFactory.getLogger(Telemetry.class);
 
   private static final String TRACK_URL = "https://analytics.olake.io/mp/track";
-  private static final String IPINFO_URL = "https://ipinfo.io/";
-  private static final String IPIFY_URL = "https://api.ipify.org?format=text";
+  private static final String IPINFO_URL = "https://ipinfo.io/json";
   private static final String NOT_FOUND_PLACEHOLDER = "NA";
 
   private static final String TELEMETRY_DISABLED_ENV = "TELEMETRY_DISABLED";
-  /** How long to wait before looking the install id up again while it is not stored yet. */
-  private static final long INSTALL_ID_RETRY_INTERVAL_MS = 60_000L;
 
   private static final long TIMEOUT_SECONDS = 10L;
   /** Bounded so that a slow or unreachable collector can never accumulate work. */
@@ -87,22 +79,20 @@ public class Telemetry {
   private final CompletableFuture<Void> initFuture;
 
   private volatile String ipAddress = NOT_FOUND_PLACEHOLDER;
-  private volatile PlatformInfo platform;
-  private volatile LocationInfo locationInfo;
+  private final PlatformInfo platform = gatherPlatformInfo();
+  private volatile LocationInfo locationInfo = unknownLocation();
+  /** The install id, read from {@code platform_property} or pushed by the OLake UI. */
   private volatile String userID;
-  /**
-   * False while {@link #userID} is a throwaway id, so later events keep looking for the real one.
-   */
-  private volatile boolean userIDDurable;
 
   private final PlatformPropertyStore propertyStore = new PlatformPropertyStore();
 
-  private volatile long nextInstallIdLookupAt;
-
   public record PlatformInfo(String os, String arch, String deviceCpu) {}
 
-  @JsonIgnoreProperties(ignoreUnknown = true)
   public record LocationInfo(String country, String region, String city) {}
+
+  /** The ipinfo.io response: the outbound IP and the location it maps to, in one call. */
+  @JsonIgnoreProperties(ignoreUnknown = true)
+  record IpInfo(String ip, String country, String region, String city) {}
 
   // Thread-safe Singleton Setup
   private static final class InstanceHolder {
@@ -137,8 +127,6 @@ public class Telemetry {
       client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(TIMEOUT_SECONDS)).build();
       mapper = new ObjectMapper();
       telemetryExecutor = newTelemetryExecutor();
-      this.platform = gatherPlatformInfo();
-      this.locationInfo = unknownLocation();
     } catch (Throwable t) {
       LOG.debug("Failed to set up telemetry, no events will be reported: {}", t.getMessage());
     }
@@ -177,16 +165,17 @@ public class Telemetry {
         new ThreadPoolExecutor.DiscardPolicy());
   }
 
+  private static String orPlaceholder(String value) {
+    return value == null || value.isEmpty() ? NOT_FOUND_PLACEHOLDER : value;
+  }
+
   private static LocationInfo unknownLocation() {
     return new LocationInfo(NOT_FOUND_PLACEHOLDER, NOT_FOUND_PLACEHOLDER, NOT_FOUND_PLACEHOLDER);
   }
 
   public boolean isTelemetryDisabled() {
-    String disabledEnv = System.getenv(TELEMETRY_DISABLED_ENV);
-    if (disabledEnv != null && Boolean.parseBoolean(disabledEnv)) {
-      return true;
-    }
-    return Boolean.TRUE.equals(configuredDisabled);
+    return Boolean.parseBoolean(System.getenv(TELEMETRY_DISABLED_ENV))
+        || Boolean.TRUE.equals(configuredDisabled);
   }
 
   private CompletableFuture<Void> initAsync() {
@@ -196,8 +185,7 @@ public class Telemetry {
                 if (isTelemetryDisabled()) {
                   return;
                 }
-                this.ipAddress = fetchOutboundIP();
-                this.locationInfo = fetchLocationFromIP(this.ipAddress);
+                fetchIpContext();
               } catch (Throwable t) {
                 LOG.debug("Failed to initialize telemetry context: {}", t.getMessage());
               }
@@ -206,48 +194,35 @@ public class Telemetry {
         .completeOnTimeout(null, 2 * TIMEOUT_SECONDS, TimeUnit.SECONDS);
   }
 
-  private String fetchOutboundIP() {
+  /** Fills in {@link #ipAddress} and {@link #locationInfo}; leaves both unknown on any failure. */
+  private void fetchIpContext() {
     try {
       HttpRequest request =
           HttpRequest.newBuilder()
-              .uri(URI.create(IPIFY_URL))
+              .uri(URI.create(IPINFO_URL))
               .timeout(Duration.ofSeconds(TIMEOUT_SECONDS))
               .GET()
               .build();
       HttpResponse<String> response =
           httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-      if (response.statusCode() == 200) {
-        return response.body().trim();
+      if (response.statusCode() != 200) {
+        return;
       }
+      IpInfo info = objectMapper.readValue(response.body(), IpInfo.class);
+      if (info.ip() != null && !info.ip().isEmpty()) {
+        this.ipAddress = info.ip().trim();
+      }
+      this.locationInfo =
+          new LocationInfo(
+              orPlaceholder(info.country()),
+              orPlaceholder(info.region()),
+              orPlaceholder(info.city()));
     } catch (Exception e) {
-      LOG.debug("Failed to fetch outbound IP: {}", e.getMessage());
+      LOG.debug("Failed to fetch IP and location context: {}", e.getMessage());
     }
-    return NOT_FOUND_PLACEHOLDER;
   }
 
-  private LocationInfo fetchLocationFromIP(String ip) {
-    if (NOT_FOUND_PLACEHOLDER.equals(ip)) {
-      return unknownLocation();
-    }
-    try {
-      HttpRequest request =
-          HttpRequest.newBuilder()
-              .uri(URI.create(IPINFO_URL + ip + "/json"))
-              .timeout(Duration.ofSeconds(TIMEOUT_SECONDS))
-              .GET()
-              .build();
-      HttpResponse<String> response =
-          httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-      if (response.statusCode() == 200) {
-        return objectMapper.readValue(response.body(), LocationInfo.class);
-      }
-    } catch (Exception e) {
-      LOG.debug("Failed to fetch location context for IP {}: {}", ip, e.getMessage());
-    }
-    return unknownLocation();
-  }
-
-  private PlatformInfo gatherPlatformInfo() {
+  private static PlatformInfo gatherPlatformInfo() {
     String os = System.getProperty("os.name", "Unknown").toLowerCase();
     String arch = System.getProperty("os.arch", "Unknown");
     int cores = Runtime.getRuntime().availableProcessors();
@@ -256,93 +231,36 @@ public class Telemetry {
   }
 
   /**
-   * Resolves the install id, in order:
-   *
-   * <ol>
-   *   <li>{@code platform_property}, where the OLake UI pushes the id it owns;
-   *   <li>a generated id.
-   * </ol>
-   *
-   * <p>A generated id is written back to {@code platform_property} so it survives restarts even
-   * when the UI never pushes one, for instance because telemetry is off on the UI side. A push from
-   * the UI overwrites whatever is stored, so AMS choosing an id on its own cannot win permanently.
-   *
-   * <p>Until an id has been stored, every event retries the lookup, throttled to one attempt per
-   * {@link #INSTALL_ID_RETRY_INTERVAL_MS} so a degraded database is not queried per event.
+   * The install id, read from {@code platform_property} and cached for the life of the process.
+   * {@link #NOT_FOUND_PLACEHOLDER} while the OLake UI has not pushed one yet.
    */
   private String resolveUserID() {
     String cached = this.userID;
-    long now = System.currentTimeMillis();
-    if (cached != null && now < nextInstallIdLookupAt) {
+    if (cached != null) {
       return cached;
     }
-    nextInstallIdLookupAt = now + INSTALL_ID_RETRY_INTERVAL_MS;
-
-    String fromDb = readInstallIdFromDb();
-    if (fromDb != null) {
-      this.userID = fromDb;
-      this.userIDDurable = true;
-      return fromDb;
-    }
-
-    if (cached != null) {
-      // Keep reporting under the id this process already picked, and try to make it durable.
-      return adoptInstallId(cached);
-    }
-
-    LOG.debug("No OLake install id found, generated one for this deployment");
-    String effective = adoptInstallId(generateUserID());
-    this.userID = effective;
-    return effective;
-  }
-
-  private String readInstallIdFromDb() {
     try {
       String stored = propertyStore.get(PlatformPropertyStore.TELEMETRY_INSTALL_ID);
-      return stored == null || stored.isEmpty() ? null : stored;
+      if (stored != null && !stored.isEmpty()) {
+        this.userID = stored;
+        return stored;
+      }
+      LOG.debug("No OLake install id stored yet, reporting without one");
     } catch (Throwable t) {
-      // Missing table on a database whose migrations have not run, or no data source at all.
       LOG.debug("Failed to read telemetry install id from the database: {}", t.getMessage());
-      return null;
     }
-  }
-
-  /** Persists an id generated by AMS and returns the value that ended up stored. */
-  private String adoptInstallId(String id) {
-    try {
-      String effective = propertyStore.putIfAbsent(PlatformPropertyStore.TELEMETRY_INSTALL_ID, id);
-      this.userIDDurable = true;
-      return effective;
-    } catch (Throwable t) {
-      LOG.debug("Failed to persist telemetry install id: {}", t.getMessage());
-      return id;
-    }
+    return NOT_FOUND_PLACEHOLDER;
   }
 
   /**
    * Reports under an install id the caller has already validated and stored in {@code
-   * platform_property}. The OLake UI owns this id, so it replaces whatever AMS resolved on its own.
+   * platform_property}. The OLake UI owns this id.
    */
   public void useInstallId(String id) {
     if (id == null || id.isEmpty()) {
       return;
     }
     this.userID = id;
-    this.userIDDurable = true;
-  }
-
-  private String generateUserID() {
-    try {
-      MessageDigest digest = MessageDigest.getInstance("SHA-256");
-      byte[] hash = digest.digest(Instant.now().toString().getBytes(StandardCharsets.UTF_8));
-      StringBuilder sb = new StringBuilder(hash.length * 2);
-      for (byte b : hash) {
-        sb.append(String.format("%02x", b));
-      }
-      return sb.substring(0, 32);
-    } catch (NoSuchAlgorithmException e) {
-      return UUID.randomUUID().toString().replace("-", "").substring(0, 32);
-    }
   }
 
   /**
@@ -366,15 +284,13 @@ public class Telemetry {
       if (httpClient == null || objectMapper == null) {
         return;
       }
-      PlatformInfo p = platform != null ? platform : gatherPlatformInfo();
-      LocationInfo loc = locationInfo != null ? locationInfo : unknownLocation();
       Map<String, Object> enrichedProperties = new HashMap<>(props);
-      enrichedProperties.put("os", p.os());
-      enrichedProperties.put("arch", p.arch());
-      enrichedProperties.put("num_cpu", p.deviceCpu());
+      enrichedProperties.put("os", platform.os());
+      enrichedProperties.put("arch", platform.arch());
+      enrichedProperties.put("num_cpu", platform.deviceCpu());
       enrichedProperties.put("ip_address", ipAddress);
-      enrichedProperties.put("location", loc);
-      enrichedProperties.put("distinct_id", userIDDurable ? userID : resolveUserID());
+      enrichedProperties.put("location", locationInfo);
+      enrichedProperties.put("distinct_id", resolveUserID());
       enrichedProperties.put("time", System.currentTimeMillis() / 1000L);
       enrichedProperties.put("event_original_name", eventName);
 
