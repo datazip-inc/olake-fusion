@@ -1560,7 +1560,8 @@
                     <configuration>
                         <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
                         <environmentVariables>
-                            <TELEMETRY_DISABLED>false</TELEMETRY_DISABLED>
+                            <!-- Test runs must never report usage telemetry. -->
+                            <TELEMETRY_DISABLED>true</TELEMETRY_DISABLED>
                         </environmentVariables>
                     </configuration>
                 </plugin>
