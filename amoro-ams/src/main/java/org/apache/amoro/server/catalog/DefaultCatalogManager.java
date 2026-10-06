@@ -179,6 +179,9 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
 
   @Override
   public void createCatalog(CatalogMeta catalogMeta) {
+    // Telemetry is reported in a finally block so that it observes the outcome without taking part
+    // in the control flow: every failure keeps propagating to the caller unchanged.
+    boolean created = false;
     try {
       if (catalogExist(catalogMeta.getCatalogName())) {
         throw new AlreadyExistsException("Catalog " + catalogMeta.getCatalogName());
@@ -192,12 +195,10 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
       serverCatalogMap.put(catalogMeta.getCatalogName(), catalog);
       LOG.info(
           "Create catalog {}, type:{}", catalogMeta.getCatalogName(), catalogMeta.getCatalogType());
+      created = true;
+    } finally {
       Telemetry.getInstance()
-          .trackCatalogCreated(catalogMeta.getCatalogType(), isOlakeCreated(catalogMeta), true);
-    } catch (Exception e) {
-      Telemetry.getInstance()
-          .trackCatalogCreated(catalogMeta.getCatalogType(), isOlakeCreated(catalogMeta), false);
-      throw e instanceof RuntimeException ? (RuntimeException) e : new RuntimeException(e);
+          .trackCatalogCreated(catalogMeta.getCatalogType(), isOlakeCreated(catalogMeta), created);
     }
   }
 
@@ -243,21 +244,21 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
 
   @Override
   public void updateCatalog(CatalogMeta catalogMeta) {
+    boolean updated = false;
     try {
       ServerCatalog catalog = getServerCatalog(catalogMeta.getCatalogName());
       validateCatalogUpdate(catalog.getMetadata(), catalogMeta);
       CatalogMeta copy = catalogMeta.deepCopy();
       fillCatalogProperties(copy);
       validateCatalogConnection(copy);
+
       catalog.updateMetadata(catalogMeta);
       metaCache.invalidate(catalogMeta.getCatalogName());
       LOG.info("Update catalog metadata: {}", catalogMeta.getCatalogName());
+      updated = true;
+    } finally {
       Telemetry.getInstance()
-          .trackCatalogUpdated(catalogMeta.getCatalogType(), isOlakeCreated(catalogMeta), true);
-    } catch (Exception e) {
-      Telemetry.getInstance()
-          .trackCatalogUpdated(catalogMeta.getCatalogType(), isOlakeCreated(catalogMeta), false);
-      LOG.error("Failed to update catalog {}", catalogMeta.getCatalogName(), e);
+          .trackCatalogUpdated(catalogMeta.getCatalogType(), isOlakeCreated(catalogMeta), updated);
     }
   }
 

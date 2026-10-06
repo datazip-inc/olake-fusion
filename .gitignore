@@ -79,8 +79,15 @@ amoro-web/node/
 public
 resources
 !javadoc/resources
+# ... but src/main/resources is source, not Hugo output. Without this a new file there (a schema
+# migration, say) is silently ignored and ships as a jar that cannot start.
+!**/src/main/resources/
 
 /dist/src/main/amoro-bin/*
 !/dist/src/main/amoro-bin/bin/
 !/dist/src/main/amoro-bin/conf/
 /local-test/data
+CLAUDE.local.md
+
+# CocoIndex Code (ccc)
+/.cocoindex_code/

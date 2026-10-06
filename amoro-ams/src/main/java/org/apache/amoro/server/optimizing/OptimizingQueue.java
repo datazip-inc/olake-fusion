@@ -456,6 +456,9 @@ public class OptimizingQueue extends PersistentBase {
     private volatile ProcessStatus status = ProcessStatus.RUNNING;
     private volatile String failedReason;
     private long endTime = AmoroServiceConstants.INVALID_TIME;
+    /** Lazily computed telemetry input size; negative means "not computed yet". */
+    private volatile long inputTableSize = -1;
+
     private Map<String, Long> fromSequence = Maps.newHashMap();
     private Map<String, Long> toSequence = Maps.newHashMap();
     private boolean hasCommitted = false;
@@ -924,16 +927,26 @@ public class OptimizingQueue extends PersistentBase {
       }
     }
 
+    /**
+     * Input file statistics are fixed once the process is planned, so the value is computed at most
+     * once per process instead of rebuilding the whole {@link MetricsSummary} on every event.
+     */
     private long inputTableSize() {
+      long cached = inputTableSize;
+      if (cached >= 0) {
+        return cached;
+      }
+      long size = 0;
       try {
         MetricsSummary summary = getSummary();
         if (summary != null && summary.getInputFilesStatistics() != null) {
-          return summary.getInputFilesStatistics().getTotalSize();
+          size = summary.getInputFilesStatistics().getTotalSize();
         }
       } catch (Throwable t) {
         LOG.debug("Failed to compute input table size for telemetry, process {}", processId, t);
       }
-      return 0;
+      inputTableSize = size;
+      return size;
     }
 
     private void persistAndSetCompleted(boolean success) {
