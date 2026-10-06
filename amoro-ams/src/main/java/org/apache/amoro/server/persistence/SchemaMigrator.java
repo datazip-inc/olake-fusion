@@ -202,9 +202,9 @@ public class SchemaMigrator {
       connection.commit();
     } catch (SQLException | RuntimeException e) {
       connection.rollback();
-      // Another replica committed this migration while this one was applying it; its insert lost
-      // the race on the primary key. Reuse this connection rather than borrowing a second one: a
-      // pool sized at one would otherwise stall here until it times out.
+      // Under ha.enabled every AMS instance migrates at startup, before any leader is elected.
+      // When two of them apply the same version, the second blocks on the history row's primary
+      // key and then fails on it; the row it collided with is the proof the work is already done.
       if (isAlreadyApplied(connection, version)) {
         LOG.info("Schema migration {} was applied by another AMS instance", script);
         return;
