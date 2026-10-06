@@ -48,7 +48,6 @@ services:
       - kind-kubeconfig:/root/.kube:ro
       - spark-home:/opt/spark:ro
       - ${AMORO_LOG_DIR:-/opt/amoro-logs}:/mnt/amoro-logs
-      - ./data/olake-config/telemetry:/tmp/olake-config/telemetry
     command: ["/entrypoint.sh", "ams"]
     tty: true
     stdin_open: true
