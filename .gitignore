@@ -38,8 +38,7 @@ spark/tmp/
 spark/spark-warehouse/
 
 # vscode/eclipse files
-.vscode/
-.vscode/
+.vscode
 .classpath
 .project
 bin/

@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.table;
@@ -303,6 +305,7 @@ public class DefaultTableService extends PersistentBase implements TableService 
 
   @VisibleForTesting
   public void exploreExternalCatalog(ExternalCatalog externalCatalog) {
+    final Set<String> failedDatabases = ConcurrentHashMap.newKeySet();
     final List<CompletableFuture<Set<TableIdentity>>> tableIdentifiersFutures =
         Lists.newArrayList();
     externalCatalog
@@ -320,8 +323,11 @@ public class DefaultTableService extends PersistentBase implements TableService 
                         .exceptionally(
                             ex -> {
                               LOG.error(
-                                  "TableExplorer list tables in database {} error", database, ex);
-                              throw new RuntimeException(ex);
+                                  "TableExplorer list tables in database {} error, skipping it in this sync cycle",
+                                  database,
+                                  ex);
+                              failedDatabases.add(database);
+                              return Sets.newHashSet();
                             }));
               } catch (RejectedExecutionException e) {
                 LOG.error(
@@ -372,7 +378,8 @@ public class DefaultTableService extends PersistentBase implements TableService 
                     "The queue of table explorer is full, please increase the queue size or thread count.");
               }
             });
-    Sets.difference(serverTableIdentifiers.keySet(), tableIdentifiers)
+    Sets.difference(serverTableIdentifiers.keySet(), tableIdentifiers).stream()
+        .filter(tableIdentity -> !failedDatabases.contains(tableIdentity.getDatabase()))
         .forEach(
             tableIdentity -> {
               try {

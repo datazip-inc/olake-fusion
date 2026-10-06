@@ -23,6 +23,7 @@ package org.apache.amoro.process;
 /** Status of any {@link AmoroProcess}. */
 public enum ProcessStatus {
   UNKNOWN,
+  PLANNING,
   PENDING,
   SUBMITTED,
   RUNNING,

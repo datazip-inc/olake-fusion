@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+# Modified by Datazip Inc. in 2026
 
 ## @param kubeVersion Force target Kubernetes version (using Helm capabilities if not set)
 ##
@@ -150,12 +151,15 @@ amoroConf:
     identifier: ~
     sensitiveKeywords: ~
 
-  ## AMS database properties, default value is derby. For production environment, suggest to use mysql
+  ## AMS database properties. Configure a PostgreSQL or MySQL database.
   ##
   database:
-    type: derby
-    driver: org.apache.derby.jdbc.EmbeddedDriver
-    url: jdbc:derby:/tmp/amoro/derby;create=true
+    type: postgres
+    driver: org.postgresql.Driver
+    url: jdbc:postgresql://127.0.0.1:5432/amoro
+    ## Required: set the database credentials (e.g. --set amoroConf.database.username=...)
+    username: ""
+    password: ""
 
   ## e.g:
   ##    type: mysql

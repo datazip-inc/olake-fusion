@@ -165,7 +165,7 @@ public class TableProperties {
   /** table clean related properties */
   public static final String ENABLE_TABLE_EXPIRE = "table-expire.enabled";
 
-  public static final boolean ENABLE_TABLE_EXPIRE_DEFAULT = true;
+  public static final boolean ENABLE_TABLE_EXPIRE_DEFAULT = false;
 
   public static final String CHANGE_DATA_TTL = "change.data.ttl.minutes";
   public static final long CHANGE_DATA_TTL_DEFAULT = 10080; // 7 Days
