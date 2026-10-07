@@ -324,9 +324,9 @@ public class Telemetry {
     }
   }
 
-  /** Converts a byte count to gibibytes (1024^3). */
+  /** Converts a byte count to gibibytes (1024^3), rounded to 3 decimal places. */
   private static double bytesToGb(long bytes) {
-    return bytes / BYTES_PER_GB;
+    return Math.round(bytes / BYTES_PER_GB * 1000d) / 1000d;
   }
 
   private String optimizationTypeHelper(OptimizingType optimizationType) {
