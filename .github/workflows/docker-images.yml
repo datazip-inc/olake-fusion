@@ -26,6 +26,14 @@
 name: Publish Docker Image
 
 on:
+  # Manual "Run workflow" button (Actions tab). Only visible when this file
+  # exists on the default branch.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Version tag for the image (e.g. v1.0.0).'
+        type: string
+        required: true
   workflow_call:
     inputs:
       tag:
