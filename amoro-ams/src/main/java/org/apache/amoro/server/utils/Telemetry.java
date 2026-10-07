@@ -280,8 +280,9 @@ public class Telemetry {
   }
 
   private void dispatchEvent(String eventName, Map<String, Object> props) {
+    String distinctId = resolveUserID();
     try {
-      if (httpClient == null || objectMapper == null) {
+      if (httpClient == null || objectMapper == null || distinctId == NOT_FOUND_PLACEHOLDER) {
         return;
       }
       Map<String, Object> enrichedProperties = new HashMap<>(props);
@@ -290,7 +291,7 @@ public class Telemetry {
       enrichedProperties.put("num_cpu", platform.deviceCpu());
       enrichedProperties.put("ip_address", ipAddress);
       enrichedProperties.put("location", locationInfo);
-      enrichedProperties.put("distinct_id", resolveUserID());
+      enrichedProperties.put("distinct_id", distinctId);
       enrichedProperties.put("time", System.currentTimeMillis() / 1000L);
       enrichedProperties.put("event_original_name", eventName);
 
