@@ -70,6 +70,8 @@ public class Telemetry {
   /** Bounded so that a slow or unreachable collector can never accumulate work. */
   private static final int MAX_PENDING_EVENTS = 256;
 
+  private static final double BYTES_PER_GB = 1024d * 1024d * 1024d;
+
   /** Set from the AMS configuration; {@code null} means "not configured, fall back to the env". */
   private static volatile Boolean configuredDisabled;
 
@@ -322,6 +324,11 @@ public class Telemetry {
     }
   }
 
+  /** Converts a byte count to gibibytes (1024^3). */
+  private static double bytesToGb(long bytes) {
+    return bytes / BYTES_PER_GB;
+  }
+
   private String optimizationTypeHelper(OptimizingType optimizationType) {
     if (optimizationType == null) {
       return NOT_FOUND_PLACEHOLDER;
@@ -342,7 +349,7 @@ public class Telemetry {
         () -> {
           Map<String, Object> props = new HashMap<>(AmoroServiceContainer.getSparkConfig());
           props.put("optimization_type", optimizationTypeHelper(optimizationType));
-          props.put("table_size", tableSize);
+          props.put("table_size (GB)", bytesToGb(tableSize));
           return props;
         });
   }
@@ -358,7 +365,7 @@ public class Telemetry {
         () -> {
           Map<String, Object> props = new HashMap<>(AmoroServiceContainer.getSparkConfig());
           props.put("optimization_type", optimizationTypeHelper(optimizationType));
-          props.put("table_size", tableSize);
+          props.put("table_size (GB)", bytesToGb(tableSize));
           props.put("optimization_status", status);
           props.put("duration_ms", duration);
           props.put("optimizer_parallelism", optimizerParallelism);
