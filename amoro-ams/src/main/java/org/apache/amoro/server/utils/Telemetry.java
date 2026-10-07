@@ -284,7 +284,13 @@ public class Telemetry {
   private void dispatchEvent(String eventName, Map<String, Object> props) {
     String distinctId = resolveUserID();
     try {
-      if (httpClient == null || objectMapper == null || distinctId == NOT_FOUND_PLACEHOLDER) {
+      if (httpClient == null || objectMapper == null) {
+        LOG.debug(
+            "Telemetry dispatch skipped for {}: HTTP client or object mapper is not initialized",
+            eventName);
+        return;
+      } else if (distinctId == NOT_FOUND_PLACEHOLDER) {
+        LOG.debug("Telemetry dispatch skipped for {}: distinct_id not found", eventName);
         return;
       }
       Map<String, Object> enrichedProperties = new HashMap<>(props);
