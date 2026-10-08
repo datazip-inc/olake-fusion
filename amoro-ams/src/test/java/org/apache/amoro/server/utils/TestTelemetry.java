@@ -24,6 +24,10 @@ import org.apache.iceberg.exceptions.RESTException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import javax.net.ssl.SSLHandshakeException;
+
+import java.net.ConnectException;
+import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 import java.util.Map;
 
@@ -37,6 +41,10 @@ public class TestTelemetry {
         new RESTException(
             new UnknownHostException(HOST), "Error occurred while processing %s request", "GET");
     return new RuntimeException("Test Connection unsuccessful: " + HOST, rest);
+  }
+
+  private static Object categoryOf(Throwable error) {
+    return Telemetry.failureProps(Telemetry.Command.CREATE_CATALOG, "rest", error).get("category");
   }
 
   @Test
@@ -67,5 +75,13 @@ public class TestTelemetry {
     Assertions.assertNull(
         Telemetry.failureProps(
             Telemetry.Command.CREATE_CATALOG, "rest", new IllegalStateException(HOST)));
+  }
+
+  @Test
+  public void reachabilityFailuresAreClassified() {
+    Assertions.assertEquals(
+        "network_unreachable", categoryOf(new RuntimeException(new ConnectException(HOST))));
+    Assertions.assertEquals("timeout", categoryOf(new SocketTimeoutException(HOST)));
+    Assertions.assertEquals("tls_failed", categoryOf(new SSLHandshakeException(HOST)));
   }
 }

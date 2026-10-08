@@ -29,7 +29,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.URI;
-import java.net.UnknownHostException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -84,8 +83,39 @@ public class Telemetry {
     CREATE_CATALOG
   }
 
+  /**
+   * Each category lists the root-cause simple class names it covers, as olake
+   * destination/iceberg/errors.go. Names, not classes: most come from catalog clients that are not
+   * on the AMS classpath.
+   */
   enum Category {
-    DNS_RESOLUTION_FAILED
+    DNS_RESOLUTION_FAILED("UnknownHostException"),
+    NETWORK_UNREACHABLE(
+        "ConnectException",
+        "NoRouteToHostException",
+        "HttpHostConnectException",
+        "NoHttpResponseException",
+        "ConnectionClosedException",
+        "SocketException",
+        "TTransportException",
+        "MetaException",
+        "RuntimeMetaException",
+        "ServiceUnavailableException",
+        "InternalServiceException",
+        "SQLTransientConnectionException",
+        "SQLNonTransientConnectionException"),
+    TIMEOUT(
+        "SocketTimeoutException",
+        "ConnectTimeoutException",
+        "OperationTimeoutException",
+        "SQLTimeoutException"),
+    TLS_FAILED("SSLHandshakeException", "CertificateException", "SSLPeerUnverifiedException");
+
+    private final String[] exceptions;
+
+    Category(String... exceptions) {
+      this.exceptions = exceptions;
+    }
   }
 
   enum FailureField {
@@ -95,9 +125,16 @@ public class Telemetry {
     CODE
   }
 
-  /** Root cause's simple class name to category, as olake destination/iceberg/errors.go. */
-  private static final Map<String, Category> FAILURE_CATEGORIES =
-      Map.of(UnknownHostException.class.getSimpleName(), Category.DNS_RESOLUTION_FAILED);
+  /** Root cause's simple class name to category. */
+  private static final Map<String, Category> FAILURE_CATEGORIES = new HashMap<>();
+
+  static {
+    for (Category category : Category.values()) {
+      for (String exception : category.exceptions) {
+        FAILURE_CATEGORIES.put(exception, category);
+      }
+    }
+  }
 
   /** Set from the AMS configuration; {@code null} means "not configured, fall back to the env". */
   private static volatile Boolean configuredDisabled;
