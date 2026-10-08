@@ -109,7 +109,20 @@ public class Telemetry {
         "ConnectTimeoutException",
         "OperationTimeoutException",
         "SQLTimeoutException"),
-    TLS_FAILED("SSLHandshakeException", "CertificateException", "SSLPeerUnverifiedException");
+    TLS_FAILED("SSLHandshakeException", "CertificateException", "SSLPeerUnverifiedException"),
+    AUTH_FAILED(
+        "NotAuthorizedException",
+        "SaslException",
+        "LoginException",
+        "GSSException",
+        "GoogleAuthException",
+        "TokenResponseException",
+        "SQLInvalidAuthorizationSpecException"),
+    PERMISSION_DENIED(
+        "ForbiddenException",
+        "AccessDeniedException",
+        "AccessControlException",
+        "GlueEncryptionException");
 
     private final String[] exceptions;
 

@@ -20,6 +20,8 @@
 
 package org.apache.amoro.server.utils;
 
+import org.apache.iceberg.exceptions.ForbiddenException;
+import org.apache.iceberg.exceptions.NotAuthorizedException;
 import org.apache.iceberg.exceptions.RESTException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -83,5 +85,11 @@ public class TestTelemetry {
         "network_unreachable", categoryOf(new RuntimeException(new ConnectException(HOST))));
     Assertions.assertEquals("timeout", categoryOf(new SocketTimeoutException(HOST)));
     Assertions.assertEquals("tls_failed", categoryOf(new SSLHandshakeException(HOST)));
+  }
+
+  @Test
+  public void authFailuresAreClassified() {
+    Assertions.assertEquals("auth_failed", categoryOf(new NotAuthorizedException(HOST)));
+    Assertions.assertEquals("permission_denied", categoryOf(new ForbiddenException(HOST)));
   }
 }
