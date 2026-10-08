@@ -29,6 +29,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -99,9 +100,19 @@ public final class FusionStack {
 
   /** Sets the trigger cron of one optimizing type (MINOR, MAJOR or FULL) to every minute. */
   public static void enableCron(Table table, String optimizingType) {
-    IcebergFixture.setProperties(
-        table,
-        Map.of("self-optimizing." + optimizingType.toLowerCase() + ".trigger.cron", EVERY_MINUTE));
+    enableCrons(table, optimizingType);
+  }
+
+  /**
+   * Sets the trigger crons of several optimizing types to every minute in one commit, so no refresh
+   * tick can see only part of them.
+   */
+  public static void enableCrons(Table table, String... optimizingTypes) {
+    Map<String, String> properties = new HashMap<>();
+    for (String type : optimizingTypes) {
+      properties.put("self-optimizing." + type.toLowerCase() + ".trigger.cron", EVERY_MINUTE);
+    }
+    IcebergFixture.setProperties(table, properties);
   }
 
   // Optimizing processes

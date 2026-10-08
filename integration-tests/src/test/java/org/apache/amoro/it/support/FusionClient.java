@@ -149,6 +149,26 @@ public class FusionClient {
                 + "/tasks?page=1&pageSize=200"));
   }
 
+  /**
+   * Optimizing status ({@code idle}, {@code pending}, {@code planning}, ...) of a table as the
+   * optimizer group's table list reports it, or an empty string when the table is not listed.
+   */
+  public String optimizingStatus(String group, String table) {
+    for (JsonNode item :
+        list(
+            get(
+                "/optimize/optimizerGroups/"
+                    + group
+                    + "/tables?tableSearchInput="
+                    + table
+                    + "&page=1&pageSize=50"))) {
+      if (item.path("tableName").asText().endsWith(table)) {
+        return item.path("optimizeStatus").asText();
+      }
+    }
+    return "";
+  }
+
   /** All tables known to the overview cache, as {@code OverviewTopTableItem}. */
   public List<JsonNode> overviewTables() {
     List<JsonNode> items = new ArrayList<>();

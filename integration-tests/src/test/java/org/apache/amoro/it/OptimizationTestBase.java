@@ -89,12 +89,58 @@ abstract class OptimizationTestBase {
     return iceberg.append(table, rows);
   }
 
+  /**
+   * Appends {@code rows} rows to the {@code region} partition only, in one commit, and returns the
+   * single file written. Region skew lets partitions qualify for different optimizing types.
+   */
+  List<WrittenDataFile> appendToRegion(Table table, String region, int rows) {
+    int span = rows * IcebergFixture.REGIONS.length;
+    List<Record> regionRows = new ArrayList<>(rows);
+    for (Record record : IcebergFixture.rows(nextId, span)) {
+      if (region.equals(record.getField("region"))) {
+        regionRows.add(record);
+      }
+    }
+    nextId += span;
+    written.addAll(regionRows);
+    return iceberg.append(table, regionRows);
+  }
+
   /** Enables the cron for {@code optimizingType} and waits for the process it triggers. */
   static JsonNode runOptimization(Table table, String name, String optimizingType) {
+    return runOptimizationWithCrons(table, name, optimizingType);
+  }
+
+  /**
+   * Enables the crons of all {@code optimizingTypes} in one commit and waits for the first process
+   * that is not SKIPPED, asserting nothing else ran before it.
+   */
+  static JsonNode runOptimizationWithCrons(Table table, String name, String... optimizingTypes) {
     FusionStack.awaitTableListed(StackEnv.TEST_DB, name);
     Set<String> known = FusionStack.processIds(name);
-    FusionStack.enableCron(table, optimizingType);
-    return FusionStack.awaitFinishedOptimization(name, known);
+    FusionStack.enableCrons(table, optimizingTypes);
+    JsonNode process = FusionStack.awaitFinishedOptimization(name, known);
+    assertNothingRanBefore(name, known, process);
+    return process;
+  }
+
+  /** Every new process that started before {@code process} must be a SKIPPED record. */
+  static void assertNothingRanBefore(String name, Set<String> known, JsonNode process) {
+    long start = process.path("startTime").asLong();
+    for (JsonNode other : FusionStack.newProcesses(name, known)) {
+      if (other.path("startTime").asLong() < start) {
+        assertEquals(
+            "SKIPPED",
+            FusionStack.status(other),
+            "ran before " + FusionStack.describe(process) + ": " + FusionStack.describe(other));
+      }
+    }
+  }
+
+  /** Data files in the {@code region} partition of a partitioned table, 0 when it has none. */
+  static int dataFilesIn(TableLayout layout, String region) {
+    int[] counts = layout.filesPerPartition().get("region=" + region);
+    return counts == null ? 0 : counts[0];
   }
 
   static void assertSucceededAs(JsonNode process, String optimizingType) {
