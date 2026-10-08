@@ -21,6 +21,7 @@
 package org.apache.amoro.server.utils;
 
 import org.apache.iceberg.exceptions.ForbiddenException;
+import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.exceptions.NotAuthorizedException;
 import org.apache.iceberg.exceptions.RESTException;
 import org.junit.jupiter.api.Assertions;
@@ -91,5 +92,10 @@ public class TestTelemetry {
   public void authFailuresAreClassified() {
     Assertions.assertEquals("auth_failed", categoryOf(new NotAuthorizedException(HOST)));
     Assertions.assertEquals("permission_denied", categoryOf(new ForbiddenException(HOST)));
+  }
+
+  @Test
+  public void notFoundFailuresAreClassified() {
+    Assertions.assertEquals("object_not_found", categoryOf(new NoSuchNamespaceException(HOST)));
   }
 }
