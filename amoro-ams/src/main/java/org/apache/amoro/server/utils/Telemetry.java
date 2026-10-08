@@ -29,11 +29,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.URI;
+import java.net.UnknownHostException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
@@ -71,6 +73,31 @@ public class Telemetry {
   private static final int MAX_PENDING_EVENTS = 256;
 
   private static final double BYTES_PER_GB = 1024d * 1024d * 1024d;
+
+  // Failure telemetry, as the OLake connector's TrackFailure (olake utils/telemetry) and its
+  // categories (olake utils/errs). Enum names are sent lower-cased: CREATE_CATALOG ->
+  // create_catalog.
+  private static final String FAILURE_EVENT = "Catalog Creation Failed - Fusion";
+  private static final int MAX_CAUSE_DEPTH = 16;
+
+  public enum Command {
+    CREATE_CATALOG
+  }
+
+  enum Category {
+    DNS_RESOLUTION_FAILED
+  }
+
+  enum FailureField {
+    COMMAND,
+    ERROR_SOURCE,
+    CATEGORY,
+    CODE
+  }
+
+  /** Root cause's simple class name to category, as olake destination/iceberg/errors.go. */
+  private static final Map<String, Category> FAILURE_CATEGORIES =
+      Map.of(UnknownHostException.class.getSimpleName(), Category.DNS_RESOLUTION_FAILED);
 
   /** Set from the AMS configuration; {@code null} means "not configured, fall back to the env". */
   private static volatile Boolean configuredDisabled;
@@ -393,6 +420,51 @@ public class Telemetry {
     props.put("imported_from_destination", imported);
     props.put("success", success);
     return props;
+  }
+
+  /**
+   * Reports why an operation failed as a classification, never a message, like the connector's
+   * TrackFailure. Unmapped failures send nothing.
+   */
+  public void trackFailure(Command command, String errorSource, Throwable error) {
+    try {
+      Map<String, Object> props = failureProps(command, errorSource, error);
+      if (props != null) {
+        sendEvent(FAILURE_EVENT, () -> props);
+      }
+    } catch (Throwable t) {
+      LOG.debug("Failed to report failure for {}: {}", command, t.getMessage());
+    }
+  }
+
+  static Map<String, Object> failureProps(Command command, String errorSource, Throwable error) {
+    if (error == null) {
+      return null;
+    }
+    String exception = rootCause(error).getClass().getSimpleName();
+    Category category = FAILURE_CATEGORIES.get(exception);
+    if (category == null) {
+      return null;
+    }
+    Map<String, Object> props = new HashMap<>();
+    props.put(wire(FailureField.COMMAND), wire(command));
+    props.put(wire(FailureField.ERROR_SOURCE), errorSource);
+    props.put(wire(FailureField.CATEGORY), wire(category));
+    props.put(wire(FailureField.CODE), exception);
+    return props;
+  }
+
+  private static String wire(Enum<?> value) {
+    return value.name().toLowerCase(Locale.ROOT);
+  }
+
+  /** The innermost cause, as olake's OlakeFailures.rootCause. */
+  static Throwable rootCause(Throwable t) {
+    Throwable root = t;
+    for (int depth = 0; depth < MAX_CAUSE_DEPTH && root.getCause() != null; depth++) {
+      root = root.getCause();
+    }
+    return root;
   }
 
   public void trackInstalledFusion(int optimizerParallelism) {
