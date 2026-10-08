@@ -21,9 +21,7 @@
 
 <Configuration monitorInterval="30">
     <Properties>
-        <Property name="LOG_DIR">${env:LOG_DIR:-/mnt/amoro-logs/compaction}</Property>
         <Property name="CONSOLE_PATTERN">%d{yyyy-MM-dd HH:mm:ss.SSS'Z'}{UTC} %-5p [%t] [%c{1}] [P:%X{processId}|T:%X{taskId}] - %m%n</Property>
-        <Property name="JSON_LOG_PATTERN">{"level":"%p","time":"%d{yyyy-MM-dd'T'HH:mm:ss.SSS'Z'}{UTC}","processId":"%X{processId}","taskId":"%X{taskId}","logger":"%c{1}","message":"%enc{%m}{JSON}","stackTrace":"%enc{%throwable{full}}{JSON}"}%n</Property>
     </Properties>
 
     <Appenders>
@@ -32,7 +30,7 @@
         </Console>
 
         <!-- Routing appender: keyed by MDC logChannel. Neither driver nor executor writes
-             per-process/task files under LOG_DIR; AMS is the only disk writer.
+             per-process/task log files; AMS is the only disk writer.
              executor = Spark executor task logs, driver = Spark driver process logs; both are
              shipped to AMS by the RPC appender installed in code and printed here once.
              unset = console only.

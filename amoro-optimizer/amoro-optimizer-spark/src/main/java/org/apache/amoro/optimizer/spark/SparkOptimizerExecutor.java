@@ -33,7 +33,6 @@ import org.apache.amoro.utils.SerializationUtil;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.slf4j.MDC;
 
 import java.util.List;
 
@@ -61,8 +60,7 @@ public class SparkOptimizerExecutor extends OptimizerExecutor {
     long processId = task.getTaskId().getProcessId();
 
     // Ships this thread's logs to AMS as driver lines (AMS writes <processId>/driver.log).
-    MDC.put(OptimizingTaskLogContext.LOG_CHANNEL_KEY, OptimizingTaskLogContext.LOG_CHANNEL_DRIVER);
-    MDC.put(OptimizingTaskLogContext.PROCESS_ID_KEY, String.valueOf(processId));
+    OptimizingTaskLogContext.setDriverContext(processId);
 
     try {
       ImmutableList<OptimizingTask> of = ImmutableList.of(task);
@@ -88,8 +86,7 @@ public class SparkOptimizerExecutor extends OptimizerExecutor {
       result.setErrorMessage(ExceptionUtil.getErrorMessage(r, ERROR_MESSAGE_MAX_LENGTH));
       return result;
     } finally {
-      MDC.remove(OptimizingTaskLogContext.LOG_CHANNEL_KEY);
-      MDC.remove(OptimizingTaskLogContext.PROCESS_ID_KEY);
+      OptimizingTaskLogContext.clearContext();
     }
   }
 

@@ -50,7 +50,8 @@ public class OptimizingTaskRpcLogAppender extends AbstractAppender {
 
   private static final String ROUTING_APPENDER_NAME = "RoutingAppender";
 
-  // Same pattern as docker/optimizer-spark/log4j2.xml JSON_LOG_PATTERN.
+  // NDJSON line format AMS stores and LogController parses. Kept in code, not in log4j2.xml, since
+  // it is a wire contract with AMS.
   static final String JSON_LOG_PATTERN =
       "{\"level\":\"%p\",\"time\":\"%d{yyyy-MM-dd'T'HH:mm:ss.SSS'Z'}{UTC}\",\"processId\":\"%X{processId}\",\"taskId\":\"%X{taskId}\",\"logger\":\"%c{1}\",\"message\":\"%enc{%m}{JSON}\",\"stackTrace\":\"%enc{%throwable{full}}{JSON}\"}%n";
 
@@ -116,7 +117,7 @@ public class OptimizingTaskRpcLogAppender extends AbstractAppender {
     long processId =
         parseLong(event.getContextData().getValue(OptimizingTaskLogContext.PROCESS_ID_KEY));
     int taskId = parseInt(event.getContextData().getValue(OptimizingTaskLogContext.TASK_ID_KEY));
-    OptimizingLogEvent logEvent = new OptimizingLogEvent(processId, taskId, ndjson, source);
+    OptimizingLogEvent logEvent = new OptimizingLogEvent(processId, taskId, ndjson);
     OptimizingLogCollector collector = OptimizingLogCollector.getIfInitialized();
     if (collector != null) {
       collector.accept(logEvent);

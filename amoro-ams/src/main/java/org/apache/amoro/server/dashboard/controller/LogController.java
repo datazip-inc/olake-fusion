@@ -34,7 +34,10 @@ import org.slf4j.LoggerFactory;
 import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -49,6 +52,9 @@ public class LogController {
   private static final String LOG_BASE_DIR = OptimizingLogStore.getLogBaseDir();
   private static final String DRIVER_LOG_FILE = OptimizingLogStore.DRIVER_LOG_FILE;
   private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+  // The dashboard returns only the tail of each file, so a large log cannot exhaust AMS heap.
+  static final long MAX_READ_BYTES = 10L * 1024L * 1024L;
+  static final int MAX_READ_ENTRIES = 10_000;
 
   /**
    * Parses a log file into a list of JSON objects. The file is expected to be NDJSON
@@ -57,12 +63,33 @@ public class LogController {
    * pattern. Such raw lines are collected and attached as a {@code stackTrace} field on the
    * preceding log entry so the API can deliver them to the UI.
    *
+   * <p>Only the last {@link #MAX_READ_BYTES} of the file and the last {@link #MAX_READ_ENTRIES}
+   * entries are returned. {@code truncated} is set to true in {@code logInfo} when older lines were
+   * left out.
+   *
    * @param logPath Path to the log file
-   * @return List of parsed log entry objects (as Maps)
+   * @param logInfo receives the parsed entries as {@code content} and the {@code truncated} flag
    */
-  private List<Map<String, Object>> parseNDJSONLogFile(Path logPath) {
+  private void parseNDJSONLogFile(Path logPath, Map<String, Object> logInfo) {
     List<Map<String, Object>> logEntries = new ArrayList<>();
-    try (BufferedReader reader = Files.newBufferedReader(logPath)) {
+    boolean truncated = false;
+    try (InputStream in = Files.newInputStream(logPath);
+        BufferedReader reader =
+            new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
+      long skip = Files.size(logPath) - MAX_READ_BYTES;
+      if (skip > 0) {
+        truncated = true;
+        long skipped = 0;
+        while (skipped < skip) {
+          long n = in.skip(skip - skipped);
+          if (n <= 0) {
+            break;
+          }
+          skipped += n;
+        }
+        // Drop the partial line the skip landed in.
+        reader.readLine();
+      }
       String line;
       int lineNumber = 0;
       Map<String, Object> lastJsonEntry = null;
@@ -119,7 +146,14 @@ public class LogController {
     } catch (IOException e) {
       LOG.error("Failed to read log file: {}", logPath, e);
     }
-    return logEntries;
+    if (logEntries.size() > MAX_READ_ENTRIES) {
+      truncated = true;
+      logEntries =
+          new ArrayList<>(
+              logEntries.subList(logEntries.size() - MAX_READ_ENTRIES, logEntries.size()));
+    }
+    logInfo.put("content", logEntries);
+    logInfo.put("truncated", truncated);
   }
 
   public void getProcessLogs(Context ctx) {
@@ -146,7 +180,7 @@ public class LogController {
     if (Files.exists(driverLogPath)) {
       try {
         driverLog.put("exists", true);
-        driverLog.put("content", parseNDJSONLogFile(driverLogPath));
+        parseNDJSONLogFile(driverLogPath, driverLog);
       } catch (Exception e) {
         LOG.error("Failed to read driver log: {}", driverLogPath, e);
         driverLog.put("exists", true);
@@ -172,7 +206,7 @@ public class LogController {
 
         try {
           taskLog.put("exists", true);
-          taskLog.put("content", parseNDJSONLogFile(taskLogPath));
+          parseNDJSONLogFile(taskLogPath, taskLog);
           taskLogs.add(taskLog);
         } catch (Exception e) {
           LOG.error("Failed to read task log: {}", taskLogPath, e);

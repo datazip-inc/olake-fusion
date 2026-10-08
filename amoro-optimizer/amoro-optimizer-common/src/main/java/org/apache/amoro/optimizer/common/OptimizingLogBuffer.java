@@ -133,7 +133,7 @@ public class OptimizingLogBuffer {
     private final long count;
 
     DropNotice(long processId, long count, String origin) {
-      super(processId, 0, render(processId, count, origin), SOURCE_DRIVER);
+      super(processId, 0, render(processId, count, origin));
       this.count = count;
     }
 

@@ -21,6 +21,7 @@
 package org.apache.amoro.optimizer.spark;
 
 import org.apache.amoro.log.OptimizingLogEvent;
+import org.apache.amoro.log.OptimizingTaskLogContext;
 import org.apache.amoro.optimizer.common.OptimizingLogBuffer;
 import org.apache.logging.log4j.status.StatusLogger;
 import org.apache.spark.SparkEnv;
@@ -65,7 +66,7 @@ public class SparkOptimizingLogRpcClient {
   private static final SparkOptimizingLogRpcClient INSTANCE = new SparkOptimizingLogRpcClient();
 
   private final OptimizingLogBuffer buffer =
-      new OptimizingLogBuffer(MAX_BUFFER_BYTES, OptimizingLogEvent.SOURCE_EXECUTOR);
+      new OptimizingLogBuffer(MAX_BUFFER_BYTES, OptimizingTaskLogContext.LOG_CHANNEL_EXECUTOR);
   private final RpcTimeout askTimeout =
       new RpcTimeout(
           FiniteDuration.apply(ASK_TIMEOUT_MS, TimeUnit.MILLISECONDS),

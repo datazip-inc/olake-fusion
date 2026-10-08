@@ -28,37 +28,20 @@ import java.nio.charset.StandardCharsets;
  * (converted to the Thrift {@code org.apache.amoro.api.OptimizingLogLine}).
  *
  * <p>{@code ndjson} is the Log4j2 JSON line (level, time, processId, taskId, logger, message,
- * stackTrace). {@code source} tells AMS which file the line belongs to: {@link #SOURCE_DRIVER}
- * lines go to {@code driver.log}, {@link #SOURCE_EXECUTOR} lines go to {@code <taskId>.log}. {@code
- * sequence} is assigned on the optimizer driver by {@code OptimizingLogCollector}.
+ * stackTrace). AMS picks the target file from {@code taskId}: 0 goes to {@code driver.log}, any
+ * other value goes to {@code <taskId>.log}.
  */
 public class OptimizingLogEvent implements Serializable {
   private static final long serialVersionUID = 1L;
 
-  public static final String SOURCE_DRIVER = "driver";
-  public static final String SOURCE_EXECUTOR = "executor";
-
   private final long processId;
   private final int taskId;
   private final String ndjson;
-  private final String source;
-  private final long sequence;
 
-  public OptimizingLogEvent(long processId, int taskId, String ndjson, String source) {
-    this(processId, taskId, ndjson, source, 0L);
-  }
-
-  private OptimizingLogEvent(
-      long processId, int taskId, String ndjson, String source, long sequence) {
+  public OptimizingLogEvent(long processId, int taskId, String ndjson) {
     this.processId = processId;
     this.taskId = taskId;
     this.ndjson = ndjson;
-    this.source = source;
-    this.sequence = sequence;
-  }
-
-  public OptimizingLogEvent withSequence(long sequence) {
-    return new OptimizingLogEvent(processId, taskId, ndjson, source, sequence);
   }
 
   public long getProcessId() {
@@ -71,14 +54,6 @@ public class OptimizingLogEvent implements Serializable {
 
   public String getNdjson() {
     return ndjson;
-  }
-
-  public String getSource() {
-    return source;
-  }
-
-  public long getSequence() {
-    return sequence;
   }
 
   public boolean isEmpty() {

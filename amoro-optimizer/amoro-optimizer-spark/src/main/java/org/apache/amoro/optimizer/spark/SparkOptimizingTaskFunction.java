@@ -29,7 +29,6 @@ import org.apache.logging.log4j.status.StatusLogger;
 import org.apache.spark.api.java.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.slf4j.MDC;
 
 /**
  * The {@code SparkOptimizingTaskExecuteFunction} defines the whole processing logic that how to
@@ -58,13 +57,8 @@ public class SparkOptimizingTaskFunction implements Function<OptimizingTask, Opt
       STATUS.warn("Failed to bind optimizing log RPC client to driver", e);
     }
 
-    // Set OptimizingTaskLogContext FIRST so AbstractRewriteFilesExecutor.execute()
-    // sees isContextSet()==true and does NOT override our MDC with its own format.
-    OptimizingTaskLogContext.setContext(processId, taskId);
-    MDC.put(
-        OptimizingTaskLogContext.LOG_CHANNEL_KEY, OptimizingTaskLogContext.LOG_CHANNEL_EXECUTOR);
-    MDC.put(OptimizingTaskLogContext.PROCESS_ID_KEY, String.valueOf(processId));
-    MDC.put(OptimizingTaskLogContext.TASK_ID_KEY, String.valueOf(taskId));
+    // Ships this thread's logs to AMS as task lines (AMS writes <processId>/<taskId>.log).
+    OptimizingTaskLogContext.setExecutorContext(processId, taskId);
 
     try {
       OptimizingTaskResult result = OptimizerExecutor.executeTask(config, threadId, task, LOG);
@@ -78,9 +72,6 @@ public class SparkOptimizingTaskFunction implements Function<OptimizingTask, Opt
         STATUS.warn("Optimizing logs of task {} not yet delivered to driver", taskId);
       }
       OptimizingTaskLogContext.clearContext();
-      MDC.remove(OptimizingTaskLogContext.LOG_CHANNEL_KEY);
-      MDC.remove(OptimizingTaskLogContext.PROCESS_ID_KEY);
-      MDC.remove(OptimizingTaskLogContext.TASK_ID_KEY);
     }
   }
 }

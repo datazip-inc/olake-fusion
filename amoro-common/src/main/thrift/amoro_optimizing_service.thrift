@@ -53,8 +53,6 @@ struct OptimizerRegisterInfo {
 struct OptimizingLogLine {
     1: OptimizingTaskId taskId;
     2: string ndjson;
-    3: i64 sequence;
-    4: optional string source;
 }
 
 service OptimizingService {

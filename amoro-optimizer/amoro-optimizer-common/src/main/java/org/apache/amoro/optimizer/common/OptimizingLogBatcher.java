@@ -24,6 +24,7 @@ import org.apache.amoro.api.OptimizingLogLine;
 import org.apache.amoro.api.OptimizingTaskId;
 import org.apache.amoro.client.OptimizingClientPools;
 import org.apache.amoro.log.OptimizingLogEvent;
+import org.apache.amoro.log.OptimizingTaskLogContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -36,7 +37,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * Sends sequenced optimizer log events to AMS through {@code OptimizingService.appendLogs}.
+ * Sends optimizer log events to AMS through {@code OptimizingService.appendLogs}.
  *
  * <p>Events wait in a size-capped {@link OptimizingLogBuffer} and are flushed every {@link
  * #FLUSH_INTERVAL_MS}, or sooner when a full batch is buffered. Each flush makes one attempt per
@@ -59,7 +60,7 @@ public class OptimizingLogBatcher extends AbstractOptimizerOperator {
   private static volatile OptimizingLogBatcher instance;
 
   private final OptimizingLogBuffer buffer =
-      new OptimizingLogBuffer(MAX_BUFFER_BYTES, OptimizingLogEvent.SOURCE_DRIVER);
+      new OptimizingLogBuffer(MAX_BUFFER_BYTES, OptimizingTaskLogContext.LOG_CHANNEL_DRIVER);
   private final ScheduledExecutorService flushExecutor =
       Executors.newSingleThreadScheduledExecutor(
           runnable -> {
@@ -198,13 +199,9 @@ public class OptimizingLogBatcher extends AbstractOptimizerOperator {
   private static List<OptimizingLogLine> toThrift(List<OptimizingLogEvent> events) {
     List<OptimizingLogLine> lines = new ArrayList<>(events.size());
     for (OptimizingLogEvent event : events) {
-      OptimizingLogLine line =
+      lines.add(
           new OptimizingLogLine(
-              new OptimizingTaskId(event.getProcessId(), event.getTaskId()),
-              event.getNdjson(),
-              event.getSequence());
-      line.setSource(event.getSource());
-      lines.add(line);
+              new OptimizingTaskId(event.getProcessId(), event.getTaskId()), event.getNdjson()));
     }
     return lines;
   }

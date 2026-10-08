@@ -22,7 +22,6 @@ package org.apache.amoro.server.optimizing;
 
 import org.apache.amoro.api.OptimizingLogLine;
 import org.apache.amoro.api.OptimizingTaskId;
-import org.apache.amoro.log.OptimizingLogEvent;
 import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,7 +51,8 @@ import java.util.stream.Stream;
  * LogController} reads: {@code LOG_DIR/<processId>/driver.log} and {@code
  * LOG_DIR/<processId>/<taskId>.log}.
  *
- * <p>Lines are written in arrival order; the optimizer's {@code sequence} is not used yet.
+ * <p>Lines are written in arrival order. Task id 0 marks a process-level line (task ids start at 1,
+ * see {@code OptimizingQueue}), which goes to {@code driver.log}.
  *
  * <p>HA caveat: each AMS node writes to its own {@code LOG_DIR}. With more than one AMS node, the
  * dashboard only sees the logs the serving node received, unless {@code LOG_DIR} is shared or logs
@@ -131,11 +131,9 @@ public class OptimizingLogStore {
       logEntry.put("logger", "");
       logEntry.put("message", message);
       logEntry.put("stackTrace", stackTrace == null ? "" : stackTrace);
-      // Outside the optimizer's per-process sequence, so sequence is 0.
       OptimizingLogLine line =
           new OptimizingLogLine(
-              new OptimizingTaskId(processId, 0), OBJECT_MAPPER.writeValueAsString(logEntry), 0L);
-      line.setSource(OptimizingLogEvent.SOURCE_DRIVER);
+              new OptimizingTaskId(processId, 0), OBJECT_MAPPER.writeValueAsString(logEntry));
       append(Collections.singletonList(line));
     } catch (Exception e) {
       LOG.warn("Failed to append {} entry to driver log for process {}", level, processId, e);
@@ -209,9 +207,7 @@ public class OptimizingLogStore {
 
   // Task ids start at 1 (see OptimizingQueue), so taskId 0 always means a process-level line.
   private static boolean isDriverLine(OptimizingLogLine line) {
-    return OptimizingLogEvent.SOURCE_DRIVER.equals(line.getSource())
-        || line.getTaskId() == null
-        || line.getTaskId().getTaskId() == 0;
+    return line.getTaskId() == null || line.getTaskId().getTaskId() == 0;
   }
 
   private static long lastModified(Path dir) throws IOException {
