@@ -122,7 +122,19 @@ public class Telemetry {
         "ForbiddenException",
         "AccessDeniedException",
         "AccessControlException",
-        "GlueEncryptionException");
+        "GlueEncryptionException"),
+    OBJECT_NOT_FOUND(
+        "NoSuchTableException",
+        "NoSuchNamespaceException",
+        "NoSuchViewException",
+        "EntityNotFoundException",
+        "NoSuchKeyException",
+        "NoSuchWarehouseException",
+        "NoSuchObjectException",
+        "UnknownDBException",
+        "NotFoundException",
+        "NoSuchIcebergTableException",
+        "NoSuchIcebergViewException");
 
     private final String[] exceptions;
 
