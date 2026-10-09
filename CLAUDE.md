@@ -20,34 +20,18 @@
 
 # OLake-Fusion — Agent Instructions
 
-## 1. What this repo is
-
 OLake-Fusion is a fork of Apache Amoro (Iceberg compaction engine written in Java). After fork project got renamed to Fusion. At some places in code it still mentions Amoro.
 
-## 2. Scope
+## 1. Scope
 
-Fusion is a scoped-down fork: it does not need the full Amoro project. Fusion is compaction for
-Iceberg tables.
+Fusion is a scoped-down fork: it does not need the full Amoro project. Fusion is compaction for Iceberg tables.
 
-Fusion has exactly **one optimizer group and one optimizer**. There is no multi-optimizer concept:
-do not add code, config or tests for several groups or several optimizers. In deployments the group
-is `spark-container` (OLake-UI's `OPTIMIZATION_GROUP`); for local debugging it is the `local` group
+Fusion has exactly **one optimizer group and one optimizer**. There is no multi-optimizer concept: do not add code, config or tests for several optimizer groups or several optimizers. In helm deployments, the optimizer group name is `spark-container` (OLake-UI's `OPTIMIZATION_GROUP`); for local debugging, it is the `local` group
 from section 8.
 
-**In scope:** Iceberg tables in Iceberg-only catalogs, meaning catalogs whose `tableFormatList` is
-only `ICEBERG` (for example the `custom` JdbcCatalog in `local-test/`).
+**In scope:** Iceberg tables only, in catalogs set up for Iceberg tables alone. In Fusion's catalog config this means `tableFormatList` is `["ICEBERG"]`.
 
-**Out of scope unless asked.** Do not read, fix or refactor these. If a change to shared code also
-affects them, mention it in one line and move on.
-
-- Mixed-format tables (mixed-iceberg, mixed-hive), Hive, Paimon and Hudi tables, and the modules
-  that exist only for them: `amoro-format-mixed/*`, `amoro-format-hudi`, `amoro-format-paimon`.
-- The Flink optimizer, `amoro-optimizer/amoro-optimizer-flink`. Fusion does not use it. Never use
-  it to run or test compaction, and do not suggest it.
-- Amoro's own web UI, `amoro-web` (served by Fusion on port 1630). It is not the product UI;
-  OLake-UI is. Ask before changing anything there.
-
-**Modules that usually matter:**
+These are the modules that usually matter, but other sometimes other modules needs to be checked as well.
 
 | Module | Runs in | Contains |
 | --- | --- | --- |
@@ -59,7 +43,17 @@ affects them, mention it in one line and move on.
 **Compaction runs on the Spark optimizer** (`amoro-optimizer-spark`, image `olakego/fusion-spark`)
 on Kubernetes. The local standalone optimizer is only for local debugging.
 
-## 3. Deployment and orchestration
+**Out of scope unless asked.** Do not read, fix or refactor these. If a change to shared code also
+affects them, mention it in one line and move on.
+
+- Mixed-format tables (mixed-iceberg, mixed-hive), Hive, Paimon and Hudi tables, and the modules
+  that exist only for them: `amoro-format-mixed/*`, `amoro-format-hudi`, `amoro-format-paimon`.
+- The Flink optimizer, `amoro-optimizer/amoro-optimizer-flink`. Fusion does not use it. Never use
+  it to run or test compaction, and do not suggest it.
+- Amoro's own web UI, `amoro-web` (served by Fusion on port 1630). It is not the product UI;
+  OLake-UI is. Ask before changing anything there.
+
+## 2. Deployment
 
 Fusion is deployed together with OLake-UI, in one of two modes:
 
@@ -69,57 +63,116 @@ Fusion is deployed together with OLake-UI, in one of two modes:
 - **Kubernetes:** OLake-Helm's chart (`helm/olake`). Fusion's resources are in
   `templates/fusion/` and are switched on with `fusion.enabled` (default `false`).
 
-`local-test/` in this repo is only for manual testing (section 8), not a product deployment.
+`local-test/` in this repo is only for manual testing, not a product deployment.
 
-**OLake-UI orchestrates compaction with crons.** In OLake-UI's Maintenance pages, users enable
-optimization per table and set a cron for each compaction type. Fusion then compacts a table only
-when one of its crons fires: `TableRuntimeRefreshExecutor` marks the table pending for that
-optimizing type. A table with optimization enabled but no cron firing is never compacted. Keep this
-in mind when testing: nothing happens until a cron fires.
-
-## 4. Terminology
-
-OLake-UI and the Fusion code use different names for the same things:
-
-| OLake-UI | Fusion code and API |
-| --- | --- |
-| Lite | Minor (`MINOR`) |
-| Medium | Major (`MAJOR`) |
-| Full | Full (`FULL`) |
-| Run, run history | Optimizing process (`.../optimizing-processes`) |
-| Lite schedule (request field `minor_cron`) | `self-optimizing.minor.trigger.cron` |
-| Medium schedule (request field `major_cron`) | `self-optimizing.major.trigger.cron` |
-| Full schedule (request field `full_cron`) | `self-optimizing.full.trigger.cron` |
-| Enabled for optimization (`enabled_for_optimization`) | `self-optimizing.enabled` |
-| Target file size, in MB (`target_file_size`) | `self-optimizing.target-size`, in bytes, default from OLake-UI: 512 MB |
-| Catalog, created from an OLake Iceberg destination | Catalog. OLake catalog type `jdbc` becomes Fusion type `custom`; `glue`, `rest` and `hive` keep their names. |
-
-When the user uses an OLake-UI term, map it to the Fusion term in the code.
-
-## 5. Related repos
+## 3. Related repos
 
 | Repo | Local path | Role |
 | --- | --- | --- |
-| OLake-UI | `<path>` | Product UI and BFF for Fusion. Its Go server proxies Fusion's REST API (`/api/ams/v1/...`) through `OPTIMIZATION_BASE_URL`. Its `docker-compose-v1.yml` is also the Docker deployment of Fusion. |
+| OLake-UI | `<path>` | Product UI for Fusion. Its Go backend sits between the UI and Fusion: Its `docker-compose-v1.yml` is also the Docker deployment of Fusion. |
 | OLake-Helm | `<path>` | Helm deployment of Fusion |
-| OLake | `<path>` | Ingestion; writes the Iceberg tables Fusion maintains |
 | Iceberg | `<path>` | Apache Iceberg Java source |
+| OLake | `<path>` | Ingestion; writes the Iceberg tables Fusion maintains |
 
 - If you change a Fusion REST endpoint's path, request or response, grep OLake-UI for its callers
   and report what would break.
-- If you add or rename a config key, port or env var, check OLake-Helm and OLake-UI's
-  `docker-compose-v1.yml` for places that set it.
-- The two projects pin different Iceberg versions: Fusion uses `1.7.2` (`iceberg.version` in
-  `pom.xml`), OLake's Java writer uses `1.10.2` (`version.iceberg` in
-  `destination/iceberg/olake-iceberg-java-writer/pom.xml`). Always read Iceberg at the version the
-  project pins. The local checkout's working tree may be on a different version, so read the
-  matching tag instead, without changing the checkout:
-  `git -C <iceberg path> show apache-iceberg-1.7.2:<file>` (or `apache-iceberg-1.10.2` for OLake).
-  Do not rely on APIs that do not exist in the pinned version.
+- If you add or rename a config key, port or env var, check OLake-Helm and OLake-UI's `docker-compose-v1.yml` for places that set it.
+- The two projects pin different Iceberg versions: Fusion uses `1.7.2` (`iceberg.version` in `pom.xml`), OLake's Java writer uses `1.10.2` (`version.iceberg` in `destination/iceberg/olake-iceberg-java-writer/pom.xml`). 
+Always read Iceberg at the version the project pins. The local checkout's working tree may be on a different version, so read the matching tag instead, without changing the checkout: `git -C <iceberg path> show apache-iceberg-1.7.2:<file>` (or `apache-iceberg-1.10.2` for OLake). Do not rely on APIs that do not exist in the pinned version.
 
-Note: OLake-UI uses a custom spec (similar to OLake) and mapping logic to create catalog in Fusion.
+Note: ask the user to set the paths of the cloned codebases if not set.
 
-## 6. Repo rules
+## 4. OLake-UI and Fusion
+
+### Orchestration
+
+**OLake-UI orchestrates compaction with crons.** In OLake-UI's Maintenance pages, users enable
+optimization per table and set a cron for each compaction type. Fusion then compacts a table only
+when one of its crons fires. A table with optimization enabled but no cron firing is never
+compacted.
+
+### Terminology
+
+OLake-UI and the Fusion code use different names for the same things. When the user uses an
+OLake-UI term, map it to the Fusion term in the code.
+
+| OLake-UI | Fusion code and API |
+| --- | --- |
+| Lite | Minor |
+| Medium | Major |
+| Full | Full |
+| Run, run history | Optimizing process (`.../optimizing-processes`) |
+| JDBC Catalog | Custom Catalog |
+
+### Table settings and their defaults
+
+OLake-UI's backend writes these as Iceberg table properties (see "APIs" below). When a user enables
+optimization on a table that has none of the three cron properties yet, OLake-UI fills in the
+defaults.
+
+| OLake-UI setting (request field) | Table property | OLake-UI default |
+| --- | --- | --- |
+| Enabled for optimization (`enabled_for_optimization`) | `self-optimizing.enabled` | false (from the catalog default below) |
+| Lite schedule (`minor_cron`) | `self-optimizing.minor.trigger.cron` | `0 * * * *` (every hour) |
+| Medium schedule (`major_cron`) | `self-optimizing.major.trigger.cron` | `0 */8 * * *` (every 8 hours) |
+| Full schedule (`full_cron`) | `self-optimizing.full.trigger.cron` | Empty (Full never runs) |
+| Target file size, in MB (`target_file_size`) | `self-optimizing.target-size`, in bytes | 512 MB (Fusion's own default is 128 MB) |
+
+The schedule options in OLake-UI are Never (an empty cron), every 30 minutes, every hour, every 8
+hours, every 12 hours, every 24 hours (`0 0 * * *`), and a custom cron. OLake-UI gives the option of Bulk Edit as well. Also note that, from OLake-UI if the crons / target file size is configured for an iceberg table automatically the table is enabled for optimization. Also, if the table is enabled for optimization, the cron default values are set.
+
+**OLake-ingested tables.** OLake-UI marks a table as written by OLake (`olake_created: true` in its
+table list, shown under the "OLake Ingested" filter; other tables are "Imported Tables") when the
+table's properties, stored in its `metadata.json`, contain the key `olake_2pc`. OLake's writer keeps
+its two-phase-commit state in that property. Fusion does not set it.
+
+### Catalog settings and their defaults
+
+When OLake-UI creates a catalog in Fusion, it sets these catalog properties unless they are already
+given.
+
+| Catalog property | Value | Purpose |
+| --- | --- | --- |
+| `table.self-optimizing.enabled` | `false` | Tables start with optimization off |
+| `table.self-optimizing.quota` | `0.1` | Share of the optimizer each table may use |
+| `cache-enabled` | `false` | Catalog caching off |
+| `created-at` | Creation date | Shown in OLake-UI |
+| `olake_created` | `true`, only when the catalog was imported from an OLake destination | Marks the catalog as OLake's in OLake-UI's catalog list |
+| `olake-catalog-type` | The original OLake catalog type (for example `lakekeeper`, `unity`, etc.) | OLake-UI sends Fusion only `glue`, `rest`, `hive` or `custom`; other REST Catalog type cannot be mapped back. This keeps the original so OLake-UI can map it back. |
+| `olake-rest-auth-type` | The REST auth type the user picked (for example `Token`), only for REST-style catalogs | Fusion gets the converted Iceberg auth type (for example `oauth2`); this keeps the user's choice for display and edits |
+
+The mapping lives in `server/internal/services/optimization/mapper.go`.
+
+### APIs
+
+OLake-UI's frontend calls `/api/opt/v1/...` on OLake-UI's Go backend, which serves them in one of
+two ways:
+
+1. **Handled by OLake-UI itself** (`server/routes/router.go`), which then calls Fusion's upstream
+   Amoro APIs:
+   - **Catalogs:** `GET /api/opt/v1/catalog/resources/spec`, `POST /api/opt/v1/catalog`, and
+     `GET`, `PUT`, `DELETE /api/opt/v1/catalog/{catalog}`. The request is built from OLake-UI's own
+     catalog spec (`server/internal/services/optimization/resources/spec.json`, similar to OLake's)
+     and `mapper.go`.
+   - **Table settings:** `PUT /api/opt/v1/{catalog}/{database}/tables/config`. OLake-UI turns the
+     request fields into table properties and runs
+     `ALTER TABLE {database}.{table} SET TBLPROPERTIES (...)` through Fusion's terminal API
+     (`POST /api/ams/v1/terminal/catalogs/{catalog}/execute`), then polls
+     `/api/ams/v1/terminal/{sessionId}/logs` until it finishes (5-minute timeout). See
+     `server/internal/services/optimization/terminal.go`.
+   - **Table list:** `GET /api/opt/v1/{catalog}/{database}/tables`. For each table, OLake-UI calls
+     Fusion's table details (size, properties, health score) and the latest Minor, Major and Full
+     optimizing process, and builds one response. See `server/internal/services/optimization/table.go`.
+2. **Forwarded to Fusion unchanged.** Any other `/api/opt/v1/<path>` is proxied to Fusion's
+   `/api/ams/v1/<path>` (`server/internal/handlers/optimization/piggyBacking.go`), and the response
+   is wrapped in `{"success":true,"message":"request forwarded successfully","data":...}`.
+
+Changing any of these Fusion endpoints, the terminal API, or the table-details response changes
+what OLake-UI receives; see section 6.
+
+Note: the token authentication logic for Fusion used by OLake-UI can be found here: `server/internal/services/optimization/client.go`
+
+## 7. Repo rules
 
 - Every file you modify that carries the Apache license header must also contain
   `Modified by Datazip Inc. in <year>` within its first 40 lines. The CI check
@@ -128,21 +181,6 @@ Note: OLake-UI uses a custom spec (similar to OLake) and mapping logic to create
 - Java 17. Before handing over, format each module you changed with
   `./mvnw -o -q spotless:apply -pl <module>` (a few seconds, touches only that module).
   `make spotless-fix` formats the whole repo and can rewrite files you did not touch.
-- PRs target `staging`. Only `staging` merges into `master`.
-- Do not commit, push, rebase or squash. Leave changes in the working tree.
-
-## 7. Working style
-
-- **Ask before guessing.** If a request has more than one reading, or touches behaviour you are
-  unsure of, say what is unclear and ask before writing code. State the assumptions you do make.
-- **Smallest change that solves the problem.** No features, options or abstractions that were not
-  asked for, and no error handling for cases that cannot happen.
-- **Surgical diffs.** Do not reformat, rename or refactor code you did not need to touch. Match the
-  surrounding style. Mention unrelated dead code or bugs instead of fixing them. Remove imports or
-  helpers that your own change made unused.
-- **Define "done" before starting.** For any non-trivial task, write down how you will verify it
-  (see section 8), then verify it before reporting success. Say plainly what was and was not
-  tested.
 
 ## 8. Testing
 
@@ -151,19 +189,10 @@ Note: OLake-UI uses a custom spec (similar to OLake) and mapping logic to create
 Do not add unit or integration tests to the final change unless asked. You may write temporary
 tests to check your work; delete them before finishing and report what they showed.
 
-### Pick the cheapest check that proves the change
+### Pick the optimal check that proves the change
 
-1. **Compile** the touched modules (command below). Always do this.
-2. **A temporary unit test** in the touched module, when the logic can be isolated (about 15
-   seconds):
-
-   ```shell
-   ./mvnw -o test -pl <module> -am -Dtest=<Class> -Dsurefire.failIfNoSpecifiedTests=false \
-     -Pskip-dashboard-build -Dspotless.skip=true -Dcheckstyle.skip=true -Drat.skip=true
-   ```
-
-   Check the output for `Tests run: N` with N > 0. A misspelled class name still ends in
-   `BUILD SUCCESS`, with no tests run.
+1. **Compile** the touched modules (step 3 of "Run the server from source" below). Always do this.
+2. **A temporary unit test** in the touched module, when the logic can be isolated.
 3. **Run the server from source** (below) when the behaviour depends on the server: scheduling,
    commit, REST API, config.
 4. **Run a local optimizer** when the change is in code that runs in the optimizer.
@@ -171,61 +200,36 @@ tests to check your work; delete them before finishing and report what they show
 
 Never build a Docker image for levels 1 to 4.
 
-All Maven commands in this section run offline (`-o`). If one fails with "Cannot access ... in
-offline mode" for a plugin or third-party artifact, run it once without `-o` to download it, then
-go back to `-o`. Do not fix such an error with `make build`, `install` or a Docker build. Errors
-about sibling `org.apache.amoro` artifacts mean `-am` is missing.
-
 ### Run the server from source (no image)
 
 Prerequisites: Docker is running, and the repo has been fully built at least once
 (`dist/target/*.tar.gz` exists). `make build` is the full build and takes several minutes.
 
-```shell
-make start-deps   # Postgres (5432) and MinIO (9000, console 9001) only
-
-# Use a throwaway database. local-test/ may persist Postgres data between runs, and an existing
-# database can hold catalogs that point at real cloud storage (for example Glue + S3). The
-# server syncs those tables on startup, and its maintenance jobs (snapshot expiry, orphan-file
-# cleaning) would act on them.
-docker exec postgres createdb -U iceberg fusion_dev
-
-# Compile the server and every module it depends on, and write its runtime classpath.
-# About 30-45 seconds. Sibling modules resolve to their target/classes, so edits in
-# amoro-format-iceberg, amoro-common etc. are picked up without installing them.
-# - Keep -am: without it, sibling modules are looked up in ~/.m2 and fail offline.
-# - Keep test-compile (not compile): it also resolves sibling test jars from target/test-classes.
-# - Keep the output path absolute: a relative one is written once per module, under each
-#   module's own directory.
-./mvnw -o -q -pl amoro-ams -am test-compile dependency:build-classpath \
-  -Dmdep.outputFile="$PWD/amoro-ams/target/ams-cp.txt" \
-  -Pskip-dashboard-build -Dspotless.skip=true -Dcheckstyle.skip=true -Drat.skip=true
-
-# Start the server in the background, with output in a log file, and save its PID ($!).
-# Use a Java 17 binary: `java` if `java -version` says 17, on macOS
-# "$(/usr/libexec/java_home -v 17)/bin/java".
-# The AWS_* variables are the MinIO credentials that Iceberg's S3FileIO reads.
-AMORO_HOME="$PWD/dist/src/main/amoro-bin" \
-AMORO_CONF_DIR="$PWD/local-test" \
-AMS_SERVER__EXPOSE__HOST=127.0.0.1 \
-AMS_DATABASE_URL=jdbc:postgresql://localhost:5432/fusion_dev \
-AWS_ACCESS_KEY_ID=admin AWS_SECRET_ACCESS_KEY=password AWS_REGION=us-east-1 \
-CONSOLE_LOG_LEVEL=info \
-java \
-  -Dfile.encoding=UTF-8 -Darrow.memory.allocator=unsafe -XX:+UseZGC \
-  --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.invoke=ALL-UNNAMED \
-  --add-opens=java.base/java.lang.reflect=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED \
-  --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED \
-  --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.util.concurrent=ALL-UNNAMED \
-  --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED \
-  --add-opens=java.base/sun.nio.cs=ALL-UNNAMED --add-opens=java.base/sun.security.action=ALL-UNNAMED \
-  --add-opens=java.base/sun.util.calendar=ALL-UNNAMED \
-  -cp "amoro-ams/target/classes:$(cat amoro-ams/target/ams-cp.txt)" \
-  org.apache.amoro.server.AmoroServiceContainer
-```
+1. Start only Postgres (5432) and MinIO (9000, console 9001) with `make start-deps`.
+2. Create a throwaway database (for example `fusion_dev`) in the `postgres` container, user
+   `iceberg`. Never point the server at an existing database: `local-test/` persists Postgres data
+   between runs, and an existing database can hold catalogs that point at real cloud storage (for
+   example Glue + S3). The server syncs those tables on startup, and its maintenance jobs would act
+   on them.
+3. Compile `amoro-ams` and every module it depends on, and write its runtime classpath to a file,
+   with Maven's `test-compile` and `dependency:build-classpath` in one offline run (about 30–45
+   seconds). Sibling modules then resolve to their `target/classes`, so edits in
+   `amoro-format-iceberg`, `amoro-common` and so on are picked up without installing them.
+4. Start `org.apache.amoro.server.AmoroServiceContainer` with a Java 17 binary, in the background,
+   with output in a log file, and save its PID.
+   - Classpath: `amoro-ams/target/classes` followed by the contents of the classpath file.
+   - JVM flags: the `vmArgs` of the `AmoroServiceContainer` launch configuration in
+     `CONTRIBUTING.md` (the `--add-opens` flags are required on Java 17).
+   - Environment:
+     - `AMORO_HOME=$PWD/dist/src/main/amoro-bin`
+     - `AMORO_CONF_DIR=$PWD/local-test`
+     - `AMS_SERVER__EXPOSE__HOST=127.0.0.1`
+     - `AMS_DATABASE_URL=jdbc:postgresql://localhost:5432/<throwaway database>`
+     - `AWS_ACCESS_KEY_ID=admin`, `AWS_SECRET_ACCESS_KEY=password`, `AWS_REGION=us-east-1`: the
+       MinIO credentials that Iceberg's S3FileIO reads. Without them, registering a catalog fails.
+     - `CONSOLE_LOG_LEVEL=info`
 
 - The server is ready when `curl -sf http://localhost:1630/` succeeds, usually within 10 seconds.
-  A logged `relation "ams_schema_migration" does not exist` on a fresh database is harmless.
 - To drive it, log in with `POST /api/ams/v1/login` (headers `X-Request-Source: Web` and
   `Content-Type: application/json`, body `{"user":"admin","password":"password"}`) and keep the
   cookie jar. Log in again after every restart.
@@ -242,11 +246,8 @@ java \
   Registration runs a connection test that creates `test_olake.test_olake` in the catalog.
 - Verify through API responses, the server log, and table state (metadata in Postgres, files in
   MinIO).
-- After an edit: stop the server, rerun the compile command, start it again.
-- To stop the server, `kill <PID>`. Shutdown sometimes hangs; if the process is still alive after
-  30 seconds, `kill -9 <PID>`. Do not use `pkill -f` or `pgrep -f` with a pattern that also
-  appears in your own command line (for example a class name inside a file path you pass): it
-  matches and kills your own shell, which drops an SSH session.
+- After an edit: stop the server, redo step 3, start it again.
+- To stop the server, `kill <PID>`.
 
 ### Code that runs in the optimizer
 
@@ -258,16 +259,13 @@ jars are replaced. This covers the rewrite executors in `amoro-format-iceberg` a
 
 After changing optimizer-side code:
 
-```shell
-# Once, if dist/src/main/amoro-bin/lib/ is empty or missing (a few seconds):
-make sync-libs
-
-# Rebuild the changed module's jar (about 15 seconds) and swap it in.
-# Use package, not install: install needs the rat plugin and sibling jars in ~/.m2.
-./mvnw -o -q package -pl <module path> -am -DskipTests \
-  -Pskip-dashboard-build -Dspotless.skip=true -Dcheckstyle.skip=true -Drat.skip=true
-cp <module path>/target/<artifactId>-0.9-SNAPSHOT.jar dist/src/main/amoro-bin/lib/
-```
+1. If `dist/src/main/amoro-bin/lib/` is empty or missing, fill it once with `make sync-libs` (a few
+   seconds).
+2. Rebuild the changed module's jar with Maven `package`, offline, using `-pl <module path> -am`
+   and `-DskipTests` plus the same skip flags as the server compile (about 15 seconds). Use
+   `package`, not `install`: `install` needs the rat plugin and sibling jars in `~/.m2`.
+3. Copy `<module path>/target/<artifactId>-0.9-SNAPSHOT.jar` into `dist/src/main/amoro-bin/lib/`,
+   replacing the jar of the same name.
 
 - Start an optimizer with the server running:
   `POST /api/ams/v1/optimize/optimizerGroups/local/optimizers` with `{"parallelism":1}`.
@@ -281,7 +279,7 @@ cp <module path>/target/<artifactId>-0.9-SNAPSHOT.jar dist/src/main/amoro-bin/li
 
 When done testing:
 - Stop the optimizer and the server.
-- Revert temporary code changes and tests. Then rerun the compile command (and `package` for
+- Revert temporary code changes and tests. Then redo step 3 of "Run the server from source" (and `package` for
   optimizer modules), so `target/` no longer holds the test code.
 - If you swapped jars into `lib/`, run `make sync-libs` to restore the built ones.
 - Delete your optimizer log directories under `dist/src/main/amoro-bin/logs/`.
@@ -291,7 +289,7 @@ When done testing:
 
 ### End-to-end through OLake-UI (only when asked)
 
-1. In `olake-ui/docker-compose-v1.yml`, make the `olake-ui` service build from local source:
+1. In `olake-ui/docker-compose-v1.yml`, make the `olake-ui` service build from local source (It will include the changes, if made, in OLake-UI):
 
    ```yaml
    olake-ui:
@@ -311,20 +309,11 @@ When done testing:
    ENABLE_OPTIMIZATION=true docker compose -f docker-compose-v1.yml up -d --build
    ```
 
-   `OPTIMIZATION_BASE_URL` on the `olake-ui` service points at `http://fusion.olake.internal:1630`,
-   a name that only exists when the stack's own Fusion container runs. Point it at the host
-   instead:
-   - macOS (Docker Desktop): `http://host.docker.internal:1630`.
-   - Linux: `host.docker.internal` does not resolve by default. Use the host's own IP
-     (`ip -4 addr`, for example `http://172.31.32.4:1630`), or add
-     `extra_hosts: ["host.docker.internal:host-gateway"]` to the `olake-ui` service.
-
-   Fusion from source binds to `0.0.0.0`, so check it first from the host with
-   `curl -s -o /dev/null -w "%{http_code}" http://<host IP>:1630/` (expect `200`).
+   `OPTIMIZATION_BASE_URL` on the `olake-ui` service points at `http://fusion.olake.internal:1630`, a name that only exists when the stack's own Fusion container runs. Point it at the host/IP instead.
 
    To verify, log in to OLake-UI with `POST http://localhost:8000/login` (body
-   `{"username":"admin","password":"password"}`, keep the cookie jar). Then call Fusion through the
-   BFF. OLake-UI forwards `/api/opt/v1/<path>` to Fusion's `/api/ams/v1/<path>` only when it has no
+   `{"username":"admin","password":"password"}`, keep the cookie jar). Then call Fusion throughthecloud
+   OLake-UI's server. It forwards `/api/opt/v1/<path>` to Fusion's `/api/ams/v1/<path>` only when it has no
    route of its own for that path. It handles these itself (`server/routes/router.go`), mapping
    them through `server/internal/services/optimization/mapper.go` instead of forwarding them:
    `GET /api/opt/v1/catalog/resources/spec` and `POST`, `GET`, `PUT`, `DELETE` on
@@ -345,21 +334,11 @@ When done testing:
 
    By default this runs the published `olakego/fusion:latest`, with Fusion's `config.yaml`
    downloaded from OLake-UI's GitHub `master`, so local Fusion changes are not in it. To test local
-   changes, build the image first (about 3 minutes for each command):
-
-   ```shell
-   # in olake-fusion. `clean` wipes every target/ directory, including the dist tarball.
-   ./mvnw clean package -pl dist -am -DskipTests -Psupport-all-formats -Pno-extended-disk-storage -Pno-plugin-bin
-   docker build -f docker/amoro/Dockerfile -t olakego/fusion:local-test .
-   ```
+   changes, build the image first.
 
    Then set `image: olakego/fusion:local-test` on the `fusion` service in `docker-compose-v1.yml`.
-   Use a separate tag, not `latest`: a local `olakego/fusion:latest` would keep shadowing the
-   published image after the test.
-
-   Before starting, check every image tag the `fusion` profile uses (`fusion`, `spark-copy`,
-   `kind-load-image`). A tag that exists neither locally nor on Docker Hub stops the whole stack
-   with `not found`.
+   Use a separate tag, not `latest`: a local `olakego/fusion:latest` would keep shadowing the published image after the test. Before starting, check every image tag the `fusion` profile uses (`fusion`, `spark-copy`,
+   `kind-load-image`). A tag that exists neither locally nor on Docker Hub stops the whole stack with `not found`.
 
    For optimizer-side changes, also build the Spark image locally
    (`docker/optimizer-spark/Dockerfile`; see the Spark job in
@@ -370,10 +349,6 @@ When done testing:
    changed without also changing `fusion-db-init`. `kind-load-image` loads the local image into Kind if it exists, and
    skips it otherwise. Because this local `latest` hides the published Spark image, remove it in
    teardown.
-
-   Needs about 10 GB of free disk: the Fusion image (about 2.2 GB) and its build cache, the Spark
-   image (about 1.3 GB compressed), and the Kind node image. The full stack (Kind cluster with
-   three nodes, Fusion, OLake-UI) takes about 5 minutes to start.
 
    To verify:
    - `docker inspect olake-fusion --format '{{.Config.Image}}'` shows your tag.
@@ -395,8 +370,5 @@ When done testing:
    Then revert the compose change and your code change, and rerun the Maven command above, so
    `target/` and the dist tarball no longer contain the test code.
 
-3. Do not commit the `docker-compose-v1.yml` changes.
+3. Do not commit the changes used just for testing.
 
-### `local-test/`
-
-`local-test/` holds the deployment setup for manual testing.
