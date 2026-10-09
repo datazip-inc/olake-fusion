@@ -264,9 +264,28 @@ public class DefaultOptimizingService extends StatedPersistentBase
             });
 
     OptimizingQueue queue = getQueueByGroup(registerInfo.getGroupName());
+    // An optimizer that Kubernetes restarted registers again under the same resource id. Retire
+    // the registration of the process it replaces, so that one optimizer never holds two entries.
+    // NOTE: For multioptimizers we might need to remove it
+    retirePreviousRegistrations(registerInfo.getResourceId());
     OptimizerInstance optimizer = new OptimizerInstance(registerInfo, queue.getContainerName());
     registerOptimizer(optimizer, true);
     return optimizer.getToken();
+  }
+
+  private void retirePreviousRegistrations(String resourceId) {
+    if (StringUtils.isBlank(resourceId)) {
+      return;
+    }
+    getAs(OptimizerMapper.class, mapper -> mapper.selectByResourceId(resourceId))
+        .forEach(
+            previous -> {
+              LOG.info(
+                  "Retiring registration {} of optimizer {}, which has registered again",
+                  previous.getToken(),
+                  resourceId);
+              unregisterOptimizer(previous.getToken());
+            });
   }
 
   @Override
