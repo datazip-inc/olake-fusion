@@ -31,7 +31,7 @@ from section 8.
 
 **In scope:** Iceberg tables only, in catalogs set up for Iceberg tables alone. In Fusion's catalog config this means `tableFormatList` is `["ICEBERG"]`.
 
-These are the modules that usually matter, but other sometimes other modules needs to be checked as well.
+These are the modules that usually matter, but sometimes other modules need to be checked as well.
 
 | Module | Runs in | Contains |
 | --- | --- | --- |
