@@ -34,4 +34,5 @@ jobs:
     uses: ./.github/workflows/docker-images.yml
     with:
       tag: ${{ github.event.inputs.tag || github.event.release.tag_name }}
+      called_by_releaser: true
     secrets: inherit
