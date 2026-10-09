@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.table;
@@ -61,6 +63,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -134,6 +137,13 @@ public class DefaultTableManager extends PersistentBase implements TableManager 
   @Override
   public List<ServerTableIdentifier> listManagedTables() {
     return getAs(TableMetaMapper.class, TableMetaMapper::selectAllTableIdentifiers);
+  }
+
+  @Override
+  public List<ServerTableIdentifier> listIcebergTables(String catalogName, String databaseName) {
+    return getAs(
+        TableMetaMapper.class,
+        mapper -> mapper.selectTableIdentifiersByDb(catalogName, databaseName));
   }
 
   @Override
@@ -240,6 +250,15 @@ public class DefaultTableManager extends PersistentBase implements TableManager 
   @Override
   public TableProcessMeta getTableProcessMeta(long processId) {
     return getAs(TableProcessMapper.class, mapper -> mapper.getProcessMeta(processId));
+  }
+
+  @Override
+  public List<TableProcessMeta> listLatestProcessOfEachType(Collection<Long> tableIds) {
+    if (tableIds.isEmpty()) {
+      return Collections.emptyList();
+    }
+    return getAs(
+        TableProcessMapper.class, mapper -> mapper.selectLatestProcessOfEachType(tableIds));
   }
 
   @Override

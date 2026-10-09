@@ -57,6 +57,7 @@ import org.apache.amoro.server.scheduler.inline.InlineTableExecutors;
 import org.apache.amoro.server.table.DefaultTableManager;
 import org.apache.amoro.server.table.DefaultTableService;
 import org.apache.amoro.server.table.RuntimeHandlerChain;
+import org.apache.amoro.server.table.TableConfigurationsService;
 import org.apache.amoro.server.table.TableManager;
 import org.apache.amoro.server.table.TableRuntimeFactoryManager;
 import org.apache.amoro.server.table.TableService;
@@ -215,6 +216,8 @@ public class AmoroServiceContainer {
     optimizerManager = new DefaultOptimizerManager(serviceConfig, catalogManager);
     terminalManager = new TerminalManager(serviceConfig, catalogManager);
 
+    TableConfigurationsService.getInstance().adoptExistingTables(catalogManager);
+
     initHttpService();
     startHttpService();
     registerAmsServiceMetric();
@@ -248,6 +251,8 @@ public class AmoroServiceContainer {
 
     processService = new ProcessService(serviceConfig, tableService);
 
+    TableConfigurationsService.getInstance().setTableService(tableService);
+
     LOG.info("Setting up AMS table executors...");
     InlineTableExecutors.getInstance().setup(tableService, serviceConfig);
     addHandlerChain(optimizingService.getTableRuntimeHandler());
@@ -262,8 +267,10 @@ public class AmoroServiceContainer {
     addHandlerChain(InlineTableExecutors.getInstance().getHiveCommitSyncExecutor());
     addHandlerChain(InlineTableExecutors.getInstance().getTableRefreshingExecutor());
     addHandlerChain(InlineTableExecutors.getInstance().getTagsAutoCreatingExecutor());
+    addHandlerChain(InlineTableExecutors.getInstance().getTableHealthScoreExecutor());
     tableService.initialize();
     LOG.info("AMS table service have been initialized");
+
     tableManager.setTableService(tableService);
 
     initThriftService();
