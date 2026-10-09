@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.persistence;
@@ -30,6 +32,7 @@ import org.apache.amoro.server.persistence.mapper.HaLeaseMapper;
 import org.apache.amoro.server.persistence.mapper.OptimizerMapper;
 import org.apache.amoro.server.persistence.mapper.OptimizingProcessMapper;
 import org.apache.amoro.server.persistence.mapper.PlatformFileMapper;
+import org.apache.amoro.server.persistence.mapper.PlatformPropertyMapper;
 import org.apache.amoro.server.persistence.mapper.ResourceMapper;
 import org.apache.amoro.server.persistence.mapper.TableBlockerMapper;
 import org.apache.amoro.server.persistence.mapper.TableMetaMapper;
@@ -71,6 +74,7 @@ public class SqlSessionFactoryProvider {
     configuration.addMapper(OptimizerMapper.class);
     configuration.addMapper(ApiTokensMapper.class);
     configuration.addMapper(PlatformFileMapper.class);
+    configuration.addMapper(PlatformPropertyMapper.class);
     configuration.addMapper(ResourceMapper.class);
     configuration.addMapper(TableBlockerMapper.class);
     configuration.addMapper(TableProcessMapper.class);
