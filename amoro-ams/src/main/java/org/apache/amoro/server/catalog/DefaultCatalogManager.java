@@ -179,10 +179,9 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
 
   @Override
   public void createCatalog(CatalogMeta catalogMeta) {
-    // Telemetry is reported in a finally block so that it observes the outcome without taking part
-    // in the control flow: every failure keeps propagating to the caller unchanged.
+    // Telemetry observes the outcome without taking part in the control flow: every failure keeps
+    // propagating to the caller unchanged.
     boolean created = false;
-    Throwable failure = null;
     try {
       if (catalogExist(catalogMeta.getCatalogName())) {
         throw new AlreadyExistsException("Catalog " + catalogMeta.getCatalogName());
@@ -198,16 +197,13 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
           "Create catalog {}, type:{}", catalogMeta.getCatalogName(), catalogMeta.getCatalogType());
       created = true;
     } catch (Throwable t) {
-      // Precise rethrow: the caller receives this same exception, unchanged.
-      failure = t;
+      // trackFailure never throws, so the caller receives this same exception, unchanged.
+      Telemetry.getInstance()
+          .trackFailure(Telemetry.Command.CREATE_CATALOG, catalogMeta.getCatalogType(), t);
       throw t;
     } finally {
-      Telemetry telemetry = Telemetry.getInstance();
-      telemetry.trackCatalogCreated(
-          catalogMeta.getCatalogType(), isOlakeCreated(catalogMeta), created);
-      // Sends nothing when there is no failure or it has no category yet.
-      telemetry.trackFailure(
-          Telemetry.Command.CREATE_CATALOG, catalogMeta.getCatalogType(), failure);
+      Telemetry.getInstance()
+          .trackCatalogCreated(catalogMeta.getCatalogType(), isOlakeCreated(catalogMeta), created);
     }
   }
 

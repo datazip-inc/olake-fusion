@@ -25,6 +25,7 @@ import org.apache.amoro.server.AmoroServiceContainer;
 import org.apache.amoro.server.persistence.PlatformPropertyStore;
 import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,7 +35,10 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -77,27 +81,36 @@ public class Telemetry {
   // Failure telemetry, as the OLake connector's TrackFailure (olake utils/telemetry) and its
   // categories (olake utils/errs). Enum names are sent lower-cased: CREATE_CATALOG ->
   // create_catalog.
-  private static final String FAILURE_EVENT = "Catalog Creation Failed - Fusion";
-  private static final int MAX_CAUSE_DEPTH = 16;
-
+  /** An operation whose failures are reported; its failure event is named after it. */
   public enum Command {
-    CREATE_CATALOG
+    CREATE_CATALOG;
+
+    /** CREATE_CATALOG -> "Create Catalog Failed - Fusion". */
+    String failureEvent() {
+      StringBuilder event = new StringBuilder();
+      for (String word : name().split("_")) {
+        event.append(word.charAt(0)).append(word.substring(1).toLowerCase(Locale.ROOT)).append(' ');
+      }
+      return event.append("Failed - Fusion").toString();
+    }
   }
 
   enum Category {
-    DNS_RESOLUTION_FAILED
+    DNS_RESOLUTION_FAILED,
+    /** Fallback for failures not yet in FAILURE_CATEGORIES; the code still names the exception. */
+    UNKNOWN
   }
 
-  enum FailureField {
-    COMMAND,
-    ERROR_SOURCE,
-    CATEGORY,
-    CODE
-  }
+  /**
+   * Exception type to category, as olake destination/iceberg/errors.go. Checked in insertion order,
+   * so a more specific type must be put before a broader one it extends.
+   */
+  private static final Map<Class<? extends Throwable>, Category> FAILURE_CATEGORIES =
+      new LinkedHashMap<>();
 
-  /** Root cause's simple class name to category, as olake destination/iceberg/errors.go. */
-  private static final Map<String, Category> FAILURE_CATEGORIES =
-      Map.of(UnknownHostException.class.getSimpleName(), Category.DNS_RESOLUTION_FAILED);
+  static {
+    FAILURE_CATEGORIES.put(UnknownHostException.class, Category.DNS_RESOLUTION_FAILED);
+  }
 
   /** Set from the AMS configuration; {@code null} means "not configured, fall back to the env". */
   private static volatile Boolean configuredDisabled;
@@ -424,13 +437,13 @@ public class Telemetry {
 
   /**
    * Reports why an operation failed as a classification, never a message, like the connector's
-   * TrackFailure. Unmapped failures send nothing.
+   * TrackFailure. Unmapped failures are sent with the UNKNOWN category.
    */
   public void trackFailure(Command command, String errorSource, Throwable error) {
     try {
       Map<String, Object> props = failureProps(command, errorSource, error);
       if (props != null) {
-        sendEvent(FAILURE_EVENT, () -> props);
+        sendEvent(command.failureEvent(), () -> props);
       }
     } catch (Throwable t) {
       LOG.debug("Failed to report failure for {}: {}", command, t.getMessage());
@@ -441,30 +454,39 @@ public class Telemetry {
     if (error == null) {
       return null;
     }
-    String exception = rootCause(error).getClass().getSimpleName();
-    Category category = FAILURE_CATEGORIES.get(exception);
-    if (category == null) {
-      return null;
+    // Root first, so the most specific mapped cause wins over a broader wrapper above it.
+    List<Throwable> chain = ExceptionUtils.getThrowableList(error);
+    Collections.reverse(chain);
+    for (Throwable t : chain) {
+      Category category = categoryOf(t);
+      if (category != null) {
+        return failureProps(command, errorSource, category, t);
+      }
     }
+    return failureProps(command, errorSource, Category.UNKNOWN, chain.get(0));
+  }
+
+  private static Map<String, Object> failureProps(
+      Command command, String errorSource, Category category, Throwable exception) {
     Map<String, Object> props = new HashMap<>();
-    props.put(wire(FailureField.COMMAND), wire(command));
-    props.put(wire(FailureField.ERROR_SOURCE), errorSource);
-    props.put(wire(FailureField.CATEGORY), wire(category));
-    props.put(wire(FailureField.CODE), exception);
+    props.put("command", wire(command));
+    props.put("error_source", errorSource);
+    props.put("category", wire(category));
+    props.put("code", exception.getClass().getSimpleName());
     return props;
+  }
+
+  private static Category categoryOf(Throwable t) {
+    for (Map.Entry<Class<? extends Throwable>, Category> e : FAILURE_CATEGORIES.entrySet()) {
+      if (e.getKey().isInstance(t)) {
+        return e.getValue();
+      }
+    }
+    return null;
   }
 
   private static String wire(Enum<?> value) {
     return value.name().toLowerCase(Locale.ROOT);
-  }
-
-  /** The innermost cause, as olake's OlakeFailures.rootCause. */
-  static Throwable rootCause(Throwable t) {
-    Throwable root = t;
-    for (int depth = 0; depth < MAX_CAUSE_DEPTH && root.getCause() != null; depth++) {
-      root = root.getCause();
-    }
-    return root;
   }
 
   public void trackInstalledFusion(int optimizerParallelism) {
