@@ -78,10 +78,11 @@ public class Telemetry {
 
   private static final double BYTES_PER_GB = 1024d * 1024d * 1024d;
 
-  // Failure telemetry, as the OLake connector's TrackFailure (olake utils/telemetry) and its
-  // categories (olake utils/errs). Enum names are sent lower-cased: CREATE_CATALOG ->
-  // create_catalog.
-  /** An operation whose failures are reported; its failure event is named after it. */
+  /**
+   * An operation whose failures are reported; its failure event is named after it. Failure
+   * telemetry follows the OLake connector's TrackFailure (olake utils/telemetry) and its categories
+   * (olake utils/errs). Enum names are sent lower-cased: CREATE_CATALOG -> create_catalog.
+   */
   public enum Command {
     CREATE_CATALOG;
 
