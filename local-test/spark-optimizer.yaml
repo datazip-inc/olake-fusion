@@ -1,0 +1,166 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Modified by Datazip Inc. in 2026
+
+# The Spark optimizer, deployed and kept alive by Kubernetes. The pod runs spark-submit in client
+# mode, so the pod itself is the Spark driver and Kubernetes restarts it when it dies. The optimizer
+# registers itself into Fusion's external optimizer group; Fusion neither starts nor stops it.
+---
+# Headless service that gives the driver a stable address for its executors to connect back to.
+apiVersion: v1
+kind: Service
+metadata:
+  name: fusion-optimizer
+  namespace: spark
+spec:
+  clusterIP: None
+  selector:
+    app: fusion-optimizer
+  ports:
+    - name: driver-rpc
+      port: 7078
+    - name: block-manager
+      port: 7079
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fusion-optimizer
+  namespace: spark
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fusion-optimizer
+  template:
+    metadata:
+      labels:
+        app: fusion-optimizer
+        optimizer-group: spark-container
+    spec:
+      serviceAccountName: spark
+      # The driver is the pod, so a restart must not wait on a graceful Spark shutdown.
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - name: amoro-logs
+          hostPath:
+            path: /mnt/amoro-logs
+      containers:
+        - name: optimizer
+          image: olakego/fusion-spark:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: HADOOP_USER_NAME
+              value: spark
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: fusion-s3-credentials
+                  key: access-key-id
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: fusion-s3-credentials
+                  key: secret-access-key
+          volumeMounts:
+            - name: amoro-logs
+              mountPath: /mnt/amoro-logs
+          resources:
+            requests:
+              cpu: "1"
+              memory: 2Gi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          command:
+            - /opt/spark/bin/spark-submit
+          args:
+            - --master
+            - k8s://https://kubernetes.default.svc
+            - --deploy-mode
+            - client
+            - --class
+            - org.apache.amoro.optimizer.spark.SparkOptimizer
+            # The pod is the driver: bind to the pod IP, and publish the headless service name so
+            # executors can reach the driver.
+            - --conf
+            - spark.driver.bindAddress=$(POD_IP)
+            - --conf
+            - spark.driver.host=fusion-optimizer.spark.svc.cluster.local
+            - --conf
+            - spark.driver.port=7078
+            - --conf
+            - spark.driver.blockManager.port=7079
+            - --conf
+            - spark.driver.memory=1g
+            - --conf
+            - spark.kubernetes.namespace=spark
+            - --conf
+            - spark.kubernetes.container.image=olakego/fusion-spark:latest
+            - --conf
+            - spark.kubernetes.container.image.pullPolicy=IfNotPresent
+            - --conf
+            - spark.kubernetes.executor.podNamePrefix=fusion-optimizer-executor
+            # Executors left behind by a driver that was killed are not owned by the new driver,
+            # so they are cleaned up by label on the next poll.
+            - --conf
+            - spark.kubernetes.executor.label.optimizer-group=spark-container
+            - --conf
+            - spark.kubernetes.executor.deleteOnTermination=true
+            - --conf
+            - spark.executor.memory=1g
+            - --conf
+            - spark.executor.cores=1
+            - --conf
+            - spark.dynamicAllocation.enabled=true
+            - --conf
+            - spark.dynamicAllocation.maxExecutors=1
+            - --conf
+            - spark.shuffle.service.enabled=false
+            - --conf
+            - spark.dynamicAllocation.shuffleTracking.enabled=true
+            # Keep the Spark context alive across executor failures.
+            - --conf
+            - spark.executor.maxNumFailures=2147483647
+            - --conf
+            - spark.executor.failuresValidityInterval=10ms
+            - --conf
+            - spark.task.maxFailures=4
+            - --conf
+            - spark.kubernetes.executor.volumes.hostPath.amoro-logs.mount.path=/mnt/amoro-logs
+            - --conf
+            - spark.kubernetes.executor.volumes.hostPath.amoro-logs.mount.readOnly=false
+            - --conf
+            - spark.kubernetes.executor.volumes.hostPath.amoro-logs.options.path=/mnt/amoro-logs
+            - --conf
+            - spark.driver.extraJavaOptions=-Dlog4j2.configurationFile=file:///opt/spark/conf/log4j2.xml
+            - --conf
+            - spark.executor.extraJavaOptions=-Dlog4j2.configurationFile=file:///opt/spark/conf/log4j2.xml
+            - local:///opt/spark/usrlib/optimizer-job.jar
+            # Optimizer arguments: ams thrift uri, parallelism, optimizer group, resource id.
+            - -a
+            - thrift://10.210.30.10:1261
+            - -p
+            - "1"
+            - -g
+            - spark-container
+            - -id
+            - fusion-optimizer

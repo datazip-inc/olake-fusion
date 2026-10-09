@@ -34,6 +34,7 @@ import org.apache.amoro.config.ConfigurationException;
 import org.apache.amoro.config.Configurations;
 import org.apache.amoro.config.shade.utils.ConfigShadeUtils;
 import org.apache.amoro.exception.AmoroRuntimeException;
+import org.apache.amoro.server.bootstrap.OptimizerBootstrap;
 import org.apache.amoro.server.catalog.CatalogManager;
 import org.apache.amoro.server.catalog.DefaultCatalogManager;
 import org.apache.amoro.server.dashboard.DashboardServer;
@@ -266,6 +267,7 @@ public class AmoroServiceContainer {
     LOG.info("AMS table service have been initialized");
     tableManager.setTableService(tableService);
 
+    new OptimizerBootstrap(serviceConfig, optimizerManager, optimizingService).run();
     initThriftService();
     startThriftService();
   }
