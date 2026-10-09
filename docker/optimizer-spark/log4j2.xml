@@ -21,9 +21,7 @@
 
 <Configuration monitorInterval="30">
     <Properties>
-        <Property name="LOG_DIR">${env:LOG_DIR:-/mnt/amoro-logs/compaction}</Property>
         <Property name="CONSOLE_PATTERN">%d{yyyy-MM-dd HH:mm:ss.SSS'Z'}{UTC} %-5p [%t] [%c{1}] [P:%X{processId}|T:%X{taskId}] - %m%n</Property>
-        <Property name="JSON_LOG_PATTERN">{"level":"%p","time":"%d{yyyy-MM-dd'T'HH:mm:ss.SSS'Z'}{UTC}","processId":"%X{processId}","taskId":"%X{taskId}","logger":"%c{1}","message":"%enc{%m}{JSON}","stackTrace":"%enc{%throwable{full}}{JSON}"}%n</Property>
     </Properties>
 
     <Appenders>
@@ -31,27 +29,18 @@
             <PatternLayout pattern="${CONSOLE_PATTERN}"/>
         </Console>
 
-        <!-- Routing appender: creates per-process/task log files based on MDC logFilePath -->
+        <!-- Routing appender: keyed by MDC logChannel. Neither driver nor executor writes
+             per-process/task log files; AMS is the only disk writer.
+             executor = Spark executor task logs, driver = Spark driver process logs; both are
+             shipped to AMS by the RPC appender installed in code and printed here once.
+             unset = console only.
+             Amoro loggers reference only this appender (not Console directly) so each line
+             is printed once. -->
         <Routing name="RoutingAppender">
-            <Routes pattern="$${ctx:logFilePath}">
-                <!-- When logFilePath MDC is NOT set, route to Console (no file created) -->
-                <Route key="$${ctx:logFilePath}" ref="Console"/>
-                <!-- When logFilePath MDC IS set, create a log file -->
-                <Route>
-                    <RollingFile name="Route-${ctx:logFilePath}"
-                                 fileName="${LOG_DIR}/${ctx:logFilePath}.log"
-                                 filePattern="${LOG_DIR}/${ctx:logFilePath}-%i.log.gz"
-                                 append="true"
-                                 createOnDemand="true"
-                                 bufferedIO="false"
-                                 immediateFlush="true">
-                        <PatternLayout pattern="${JSON_LOG_PATTERN}"/>
-                        <Policies>
-                            <SizeBasedTriggeringPolicy size="100MB"/>
-                        </Policies>
-                        <DefaultRolloverStrategy max="5"/>
-                    </RollingFile>
-                </Route>
+            <Routes pattern="$${ctx:logChannel}">
+                <Route key="executor" ref="Console"/>
+                <Route key="driver" ref="Console"/>
+                <Route key="$${ctx:logChannel}" ref="Console"/>
             </Routes>
         </Routing>
     </Appenders>
@@ -61,19 +50,16 @@
             <AppenderRef ref="Console"/>
         </Root>
 
-        <!-- Catch-all for all Amoro code: routes to per-task/process log files -->
+        <!-- Amoro code: printed via RoutingAppender; the RPC appender attaches to these loggers. -->
         <Logger name="org.apache.amoro" level="info" additivity="false">
-            <AppenderRef ref="Console"/>
             <AppenderRef ref="RoutingAppender"/>
         </Logger>
 
         <Logger name="org.apache.amoro.optimizing" level="debug" additivity="false">
-            <AppenderRef ref="Console"/>
             <AppenderRef ref="RoutingAppender"/>
         </Logger>
 
         <Logger name="org.apache.amoro.optimizer" level="info" additivity="false">
-            <AppenderRef ref="Console"/>
             <AppenderRef ref="RoutingAppender"/>
         </Logger>
 

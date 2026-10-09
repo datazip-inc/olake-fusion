@@ -26,6 +26,8 @@ public class OptimizingService {
 
     public boolean cancelProcess(long processId) throws org.apache.amoro.shade.thrift.org.apache.thrift.TException;
 
+    public void appendLogs(java.lang.String authToken, java.util.List<OptimizingLogLine> lines) throws org.apache.amoro.api.AmoroException, org.apache.amoro.shade.thrift.org.apache.thrift.TException;
+
   }
 
   public interface AsyncIface {
@@ -43,6 +45,8 @@ public class OptimizingService {
     public void authenticate(OptimizerRegisterInfo registerInfo, org.apache.amoro.shade.thrift.org.apache.thrift.async.AsyncMethodCallback<java.lang.String> resultHandler) throws org.apache.amoro.shade.thrift.org.apache.thrift.TException;
 
     public void cancelProcess(long processId, org.apache.amoro.shade.thrift.org.apache.thrift.async.AsyncMethodCallback<java.lang.Boolean> resultHandler) throws org.apache.amoro.shade.thrift.org.apache.thrift.TException;
+
+    public void appendLogs(java.lang.String authToken, java.util.List<OptimizingLogLine> lines, org.apache.amoro.shade.thrift.org.apache.thrift.async.AsyncMethodCallback<Void> resultHandler) throws org.apache.amoro.shade.thrift.org.apache.thrift.TException;
 
   }
 
@@ -240,6 +244,31 @@ public class OptimizingService {
         return result.success;
       }
       throw new org.apache.amoro.shade.thrift.org.apache.thrift.TApplicationException(org.apache.amoro.shade.thrift.org.apache.thrift.TApplicationException.MISSING_RESULT, "cancelProcess failed: unknown result");
+    }
+
+    @Override
+    public void appendLogs(java.lang.String authToken, java.util.List<OptimizingLogLine> lines) throws org.apache.amoro.api.AmoroException, org.apache.amoro.shade.thrift.org.apache.thrift.TException
+    {
+      send_appendLogs(authToken, lines);
+      recv_appendLogs();
+    }
+
+    public void send_appendLogs(java.lang.String authToken, java.util.List<OptimizingLogLine> lines) throws org.apache.amoro.shade.thrift.org.apache.thrift.TException
+    {
+      appendLogs_args args = new appendLogs_args();
+      args.setAuthToken(authToken);
+      args.setLines(lines);
+      sendBase("appendLogs", args);
+    }
+
+    public void recv_appendLogs() throws org.apache.amoro.api.AmoroException, org.apache.amoro.shade.thrift.org.apache.thrift.TException
+    {
+      appendLogs_result result = new appendLogs_result();
+      receiveBase(result, "appendLogs");
+      if (result.e1 != null) {
+        throw result.e1;
+      }
+      return;
     }
 
   }
@@ -519,6 +548,45 @@ public class OptimizingService {
       }
     }
 
+    @Override
+    public void appendLogs(java.lang.String authToken, java.util.List<OptimizingLogLine> lines, org.apache.amoro.shade.thrift.org.apache.thrift.async.AsyncMethodCallback<Void> resultHandler) throws org.apache.amoro.shade.thrift.org.apache.thrift.TException {
+      checkReady();
+      appendLogs_call method_call = new appendLogs_call(authToken, lines, resultHandler, this, ___protocolFactory, ___transport);
+      this.___currentMethod = method_call;
+      ___manager.call(method_call);
+    }
+
+    public static class appendLogs_call extends org.apache.amoro.shade.thrift.org.apache.thrift.async.TAsyncMethodCall<Void> {
+      private java.lang.String authToken;
+      private java.util.List<OptimizingLogLine> lines;
+      public appendLogs_call(java.lang.String authToken, java.util.List<OptimizingLogLine> lines, org.apache.amoro.shade.thrift.org.apache.thrift.async.AsyncMethodCallback<Void> resultHandler, org.apache.amoro.shade.thrift.org.apache.thrift.async.TAsyncClient client, org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TProtocolFactory protocolFactory, org.apache.amoro.shade.thrift.org.apache.thrift.transport.TNonblockingTransport transport) throws org.apache.amoro.shade.thrift.org.apache.thrift.TException {
+        super(client, protocolFactory, transport, resultHandler, false);
+        this.authToken = authToken;
+        this.lines = lines;
+      }
+
+      @Override
+      public void write_args(org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TProtocol prot) throws org.apache.amoro.shade.thrift.org.apache.thrift.TException {
+        prot.writeMessageBegin(new org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TMessage("appendLogs", org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TMessageType.CALL, 0));
+        appendLogs_args args = new appendLogs_args();
+        args.setAuthToken(authToken);
+        args.setLines(lines);
+        args.write(prot);
+        prot.writeMessageEnd();
+      }
+
+      @Override
+      public Void getResult() throws org.apache.amoro.api.AmoroException, org.apache.amoro.shade.thrift.org.apache.thrift.TException {
+        if (getState() != org.apache.amoro.shade.thrift.org.apache.thrift.async.TAsyncMethodCall.State.RESPONSE_READ) {
+          throw new java.lang.IllegalStateException("Method call not finished!");
+        }
+        org.apache.amoro.shade.thrift.org.apache.thrift.transport.TMemoryInputTransport memoryTransport = new org.apache.amoro.shade.thrift.org.apache.thrift.transport.TMemoryInputTransport(getFrameBuffer().array());
+        org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TProtocol prot = client.getProtocolFactory().getProtocol(memoryTransport);
+        (new Client(prot)).recv_appendLogs();
+        return null;
+      }
+    }
+
   }
 
   public static class Processor<I extends Iface> extends org.apache.amoro.shade.thrift.org.apache.thrift.TBaseProcessor<I> implements org.apache.amoro.shade.thrift.org.apache.thrift.TProcessor {
@@ -539,6 +607,7 @@ public class OptimizingService {
       processMap.put("completeTask", new completeTask());
       processMap.put("authenticate", new authenticate());
       processMap.put("cancelProcess", new cancelProcess());
+      processMap.put("appendLogs", new appendLogs());
       return processMap;
     }
 
@@ -759,6 +828,38 @@ public class OptimizingService {
       }
     }
 
+    public static class appendLogs<I extends Iface> extends org.apache.amoro.shade.thrift.org.apache.thrift.ProcessFunction<I, appendLogs_args> {
+      public appendLogs() {
+        super("appendLogs");
+      }
+
+      @Override
+      public appendLogs_args getEmptyArgsInstance() {
+        return new appendLogs_args();
+      }
+
+      @Override
+      protected boolean isOneway() {
+        return false;
+      }
+
+      @Override
+      protected boolean rethrowUnhandledExceptions() {
+        return false;
+      }
+
+      @Override
+      public appendLogs_result getResult(I iface, appendLogs_args args) throws org.apache.amoro.shade.thrift.org.apache.thrift.TException {
+        appendLogs_result result = new appendLogs_result();
+        try {
+          iface.appendLogs(args.authToken, args.lines);
+        } catch (org.apache.amoro.api.AmoroException e1) {
+          result.e1 = e1;
+        }
+        return result;
+      }
+    }
+
   }
 
   public static class AsyncProcessor<I extends AsyncIface> extends org.apache.amoro.shade.thrift.org.apache.thrift.TBaseAsyncProcessor<I> {
@@ -779,6 +880,7 @@ public class OptimizingService {
       processMap.put("completeTask", new completeTask());
       processMap.put("authenticate", new authenticate());
       processMap.put("cancelProcess", new cancelProcess());
+      processMap.put("appendLogs", new appendLogs());
       return processMap;
     }
 
@@ -1265,6 +1367,76 @@ public class OptimizingService {
       @Override
       public void start(I iface, cancelProcess_args args, org.apache.amoro.shade.thrift.org.apache.thrift.async.AsyncMethodCallback<java.lang.Boolean> resultHandler) throws org.apache.amoro.shade.thrift.org.apache.thrift.TException {
         iface.cancelProcess(args.processId,resultHandler);
+      }
+    }
+
+    public static class appendLogs<I extends AsyncIface> extends org.apache.amoro.shade.thrift.org.apache.thrift.AsyncProcessFunction<I, appendLogs_args, Void> {
+      public appendLogs() {
+        super("appendLogs");
+      }
+
+      @Override
+      public appendLogs_args getEmptyArgsInstance() {
+        return new appendLogs_args();
+      }
+
+      @Override
+      public org.apache.amoro.shade.thrift.org.apache.thrift.async.AsyncMethodCallback<Void> getResultHandler(final org.apache.amoro.shade.thrift.org.apache.thrift.server.AbstractNonblockingServer.AsyncFrameBuffer fb, final int seqid) {
+        final org.apache.amoro.shade.thrift.org.apache.thrift.AsyncProcessFunction fcall = this;
+        return new org.apache.amoro.shade.thrift.org.apache.thrift.async.AsyncMethodCallback<Void>() { 
+          @Override
+          public void onComplete(Void o) {
+            appendLogs_result result = new appendLogs_result();
+            try {
+              fcall.sendResponse(fb, result, org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TMessageType.REPLY,seqid);
+            } catch (org.apache.amoro.shade.thrift.org.apache.thrift.transport.TTransportException e) {
+              _LOGGER.error("TTransportException writing to internal frame buffer", e);
+              fb.close();
+            } catch (java.lang.Exception e) {
+              _LOGGER.error("Exception writing to internal frame buffer", e);
+              onError(e);
+            }
+          }
+          @Override
+          public void onError(java.lang.Exception e) {
+            byte msgType = org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TMessageType.REPLY;
+            org.apache.amoro.shade.thrift.org.apache.thrift.TSerializable msg;
+            appendLogs_result result = new appendLogs_result();
+            if (e instanceof org.apache.amoro.api.AmoroException) {
+              result.e1 = (org.apache.amoro.api.AmoroException) e;
+              result.setE1IsSet(true);
+              msg = result;
+            } else if (e instanceof org.apache.amoro.shade.thrift.org.apache.thrift.transport.TTransportException) {
+              _LOGGER.error("TTransportException inside handler", e);
+              fb.close();
+              return;
+            } else if (e instanceof org.apache.amoro.shade.thrift.org.apache.thrift.TApplicationException) {
+              _LOGGER.error("TApplicationException inside handler", e);
+              msgType = org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TMessageType.EXCEPTION;
+              msg = (org.apache.amoro.shade.thrift.org.apache.thrift.TApplicationException)e;
+            } else {
+              _LOGGER.error("Exception inside handler", e);
+              msgType = org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TMessageType.EXCEPTION;
+              msg = new org.apache.amoro.shade.thrift.org.apache.thrift.TApplicationException(org.apache.amoro.shade.thrift.org.apache.thrift.TApplicationException.INTERNAL_ERROR, e.getMessage());
+            }
+            try {
+              fcall.sendResponse(fb,msg,msgType,seqid);
+            } catch (java.lang.Exception ex) {
+              _LOGGER.error("Exception writing to internal frame buffer", ex);
+              fb.close();
+            }
+          }
+        };
+      }
+
+      @Override
+      protected boolean isOneway() {
+        return false;
+      }
+
+      @Override
+      public void start(I iface, appendLogs_args args, org.apache.amoro.shade.thrift.org.apache.thrift.async.AsyncMethodCallback<Void> resultHandler) throws org.apache.amoro.shade.thrift.org.apache.thrift.TException {
+        iface.appendLogs(args.authToken, args.lines,resultHandler);
       }
     }
 
@@ -6976,6 +7148,925 @@ public class OptimizingService {
         if (incoming.get(0)) {
           struct.success = iprot.readBool();
           struct.setSuccessIsSet(true);
+        }
+      }
+    }
+
+    private static <S extends org.apache.amoro.shade.thrift.org.apache.thrift.scheme.IScheme> S scheme(org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TProtocol proto) {
+      return (org.apache.amoro.shade.thrift.org.apache.thrift.scheme.StandardScheme.class.equals(proto.getScheme()) ? STANDARD_SCHEME_FACTORY : TUPLE_SCHEME_FACTORY).getScheme();
+    }
+  }
+
+  @SuppressWarnings({"cast", "rawtypes", "serial", "unchecked", "unused"})
+  public static class appendLogs_args implements org.apache.amoro.shade.thrift.org.apache.thrift.TBase<appendLogs_args, appendLogs_args._Fields>, java.io.Serializable, Cloneable, Comparable<appendLogs_args>   {
+    private static final org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TStruct("appendLogs_args");
+
+    private static final org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TField AUTH_TOKEN_FIELD_DESC = new org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TField("authToken", org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TType.STRING, (short)1);
+    private static final org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TField LINES_FIELD_DESC = new org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TField("lines", org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TType.LIST, (short)2);
+
+    private static final org.apache.amoro.shade.thrift.org.apache.thrift.scheme.SchemeFactory STANDARD_SCHEME_FACTORY = new appendLogs_argsStandardSchemeFactory();
+    private static final org.apache.amoro.shade.thrift.org.apache.thrift.scheme.SchemeFactory TUPLE_SCHEME_FACTORY = new appendLogs_argsTupleSchemeFactory();
+
+    public @org.apache.amoro.shade.thrift.org.apache.thrift.annotation.Nullable java.lang.String authToken; // required
+    public @org.apache.amoro.shade.thrift.org.apache.thrift.annotation.Nullable java.util.List<OptimizingLogLine> lines; // required
+
+    /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
+    public enum _Fields implements org.apache.amoro.shade.thrift.org.apache.thrift.TFieldIdEnum {
+      AUTH_TOKEN((short)1, "authToken"),
+      LINES((short)2, "lines");
+
+      private static final java.util.Map<java.lang.String, _Fields> byName = new java.util.HashMap<java.lang.String, _Fields>();
+
+      static {
+        for (_Fields field : java.util.EnumSet.allOf(_Fields.class)) {
+          byName.put(field.getFieldName(), field);
+        }
+      }
+
+      /**
+       * Find the _Fields constant that matches fieldId, or null if its not found.
+       */
+      @org.apache.amoro.shade.thrift.org.apache.thrift.annotation.Nullable
+      public static _Fields findByThriftId(int fieldId) {
+        switch(fieldId) {
+          case 1: // AUTH_TOKEN
+            return AUTH_TOKEN;
+          case 2: // LINES
+            return LINES;
+          default:
+            return null;
+        }
+      }
+
+      /**
+       * Find the _Fields constant that matches fieldId, throwing an exception
+       * if it is not found.
+       */
+      public static _Fields findByThriftIdOrThrow(int fieldId) {
+        _Fields fields = findByThriftId(fieldId);
+        if (fields == null) throw new java.lang.IllegalArgumentException("Field " + fieldId + " doesn't exist!");
+        return fields;
+      }
+
+      /**
+       * Find the _Fields constant that matches name, or null if its not found.
+       */
+      @org.apache.amoro.shade.thrift.org.apache.thrift.annotation.Nullable
+      public static _Fields findByName(java.lang.String name) {
+        return byName.get(name);
+      }
+
+      private final short _thriftId;
+      private final java.lang.String _fieldName;
+
+      _Fields(short thriftId, java.lang.String fieldName) {
+        _thriftId = thriftId;
+        _fieldName = fieldName;
+      }
+
+      @Override
+      public short getThriftFieldId() {
+        return _thriftId;
+      }
+
+      @Override
+      public java.lang.String getFieldName() {
+        return _fieldName;
+      }
+    }
+
+    // isset id assignments
+    public static final java.util.Map<_Fields, org.apache.amoro.shade.thrift.org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
+    static {
+      java.util.Map<_Fields, org.apache.amoro.shade.thrift.org.apache.thrift.meta_data.FieldMetaData> tmpMap = new java.util.EnumMap<_Fields, org.apache.amoro.shade.thrift.org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.AUTH_TOKEN, new org.apache.amoro.shade.thrift.org.apache.thrift.meta_data.FieldMetaData("authToken", org.apache.amoro.shade.thrift.org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.amoro.shade.thrift.org.apache.thrift.meta_data.FieldValueMetaData(org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TType.STRING)));
+      tmpMap.put(_Fields.LINES, new org.apache.amoro.shade.thrift.org.apache.thrift.meta_data.FieldMetaData("lines", org.apache.amoro.shade.thrift.org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.amoro.shade.thrift.org.apache.thrift.meta_data.ListMetaData(org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TType.LIST, 
+              new org.apache.amoro.shade.thrift.org.apache.thrift.meta_data.StructMetaData(org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TType.STRUCT, OptimizingLogLine.class))));
+      metaDataMap = java.util.Collections.unmodifiableMap(tmpMap);
+      org.apache.amoro.shade.thrift.org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(appendLogs_args.class, metaDataMap);
+    }
+
+    public appendLogs_args() {
+    }
+
+    public appendLogs_args(
+      java.lang.String authToken,
+      java.util.List<OptimizingLogLine> lines)
+    {
+      this();
+      this.authToken = authToken;
+      this.lines = lines;
+    }
+
+    /**
+     * Performs a deep copy on <i>other</i>.
+     */
+    public appendLogs_args(appendLogs_args other) {
+      if (other.isSetAuthToken()) {
+        this.authToken = other.authToken;
+      }
+      if (other.isSetLines()) {
+        java.util.List<OptimizingLogLine> __this__lines = new java.util.ArrayList<OptimizingLogLine>(other.lines.size());
+        for (OptimizingLogLine other_element : other.lines) {
+          __this__lines.add(new OptimizingLogLine(other_element));
+        }
+        this.lines = __this__lines;
+      }
+    }
+
+    @Override
+    public appendLogs_args deepCopy() {
+      return new appendLogs_args(this);
+    }
+
+    @Override
+    public void clear() {
+      this.authToken = null;
+      this.lines = null;
+    }
+
+    @org.apache.amoro.shade.thrift.org.apache.thrift.annotation.Nullable
+    public java.lang.String getAuthToken() {
+      return this.authToken;
+    }
+
+    public appendLogs_args setAuthToken(@org.apache.amoro.shade.thrift.org.apache.thrift.annotation.Nullable java.lang.String authToken) {
+      this.authToken = authToken;
+      return this;
+    }
+
+    public void unsetAuthToken() {
+      this.authToken = null;
+    }
+
+    /** Returns true if field authToken is set (has been assigned a value) and false otherwise */
+    public boolean isSetAuthToken() {
+      return this.authToken != null;
+    }
+
+    public void setAuthTokenIsSet(boolean value) {
+      if (!value) {
+        this.authToken = null;
+      }
+    }
+
+    public int getLinesSize() {
+      return (this.lines == null) ? 0 : this.lines.size();
+    }
+
+    @org.apache.amoro.shade.thrift.org.apache.thrift.annotation.Nullable
+    public java.util.Iterator<OptimizingLogLine> getLinesIterator() {
+      return (this.lines == null) ? null : this.lines.iterator();
+    }
+
+    public void addToLines(OptimizingLogLine elem) {
+      if (this.lines == null) {
+        this.lines = new java.util.ArrayList<OptimizingLogLine>();
+      }
+      this.lines.add(elem);
+    }
+
+    @org.apache.amoro.shade.thrift.org.apache.thrift.annotation.Nullable
+    public java.util.List<OptimizingLogLine> getLines() {
+      return this.lines;
+    }
+
+    public appendLogs_args setLines(@org.apache.amoro.shade.thrift.org.apache.thrift.annotation.Nullable java.util.List<OptimizingLogLine> lines) {
+      this.lines = lines;
+      return this;
+    }
+
+    public void unsetLines() {
+      this.lines = null;
+    }
+
+    /** Returns true if field lines is set (has been assigned a value) and false otherwise */
+    public boolean isSetLines() {
+      return this.lines != null;
+    }
+
+    public void setLinesIsSet(boolean value) {
+      if (!value) {
+        this.lines = null;
+      }
+    }
+
+    @Override
+    public void setFieldValue(_Fields field, @org.apache.amoro.shade.thrift.org.apache.thrift.annotation.Nullable java.lang.Object value) {
+      switch (field) {
+      case AUTH_TOKEN:
+        if (value == null) {
+          unsetAuthToken();
+        } else {
+          setAuthToken((java.lang.String)value);
+        }
+        break;
+
+      case LINES:
+        if (value == null) {
+          unsetLines();
+        } else {
+          setLines((java.util.List<OptimizingLogLine>)value);
+        }
+        break;
+
+      }
+    }
+
+    @org.apache.amoro.shade.thrift.org.apache.thrift.annotation.Nullable
+    @Override
+    public java.lang.Object getFieldValue(_Fields field) {
+      switch (field) {
+      case AUTH_TOKEN:
+        return getAuthToken();
+
+      case LINES:
+        return getLines();
+
+      }
+      throw new java.lang.IllegalStateException();
+    }
+
+    /** Returns true if field corresponding to fieldID is set (has been assigned a value) and false otherwise */
+    @Override
+    public boolean isSet(_Fields field) {
+      if (field == null) {
+        throw new java.lang.IllegalArgumentException();
+      }
+
+      switch (field) {
+      case AUTH_TOKEN:
+        return isSetAuthToken();
+      case LINES:
+        return isSetLines();
+      }
+      throw new java.lang.IllegalStateException();
+    }
+
+    @Override
+    public boolean equals(java.lang.Object that) {
+      if (that instanceof appendLogs_args)
+        return this.equals((appendLogs_args)that);
+      return false;
+    }
+
+    public boolean equals(appendLogs_args that) {
+      if (that == null)
+        return false;
+      if (this == that)
+        return true;
+
+      boolean this_present_authToken = true && this.isSetAuthToken();
+      boolean that_present_authToken = true && that.isSetAuthToken();
+      if (this_present_authToken || that_present_authToken) {
+        if (!(this_present_authToken && that_present_authToken))
+          return false;
+        if (!this.authToken.equals(that.authToken))
+          return false;
+      }
+
+      boolean this_present_lines = true && this.isSetLines();
+      boolean that_present_lines = true && that.isSetLines();
+      if (this_present_lines || that_present_lines) {
+        if (!(this_present_lines && that_present_lines))
+          return false;
+        if (!this.lines.equals(that.lines))
+          return false;
+      }
+
+      return true;
+    }
+
+    @Override
+    public int hashCode() {
+      int hashCode = 1;
+
+      hashCode = hashCode * 8191 + ((isSetAuthToken()) ? 131071 : 524287);
+      if (isSetAuthToken())
+        hashCode = hashCode * 8191 + authToken.hashCode();
+
+      hashCode = hashCode * 8191 + ((isSetLines()) ? 131071 : 524287);
+      if (isSetLines())
+        hashCode = hashCode * 8191 + lines.hashCode();
+
+      return hashCode;
+    }
+
+    @Override
+    public int compareTo(appendLogs_args other) {
+      if (!getClass().equals(other.getClass())) {
+        return getClass().getName().compareTo(other.getClass().getName());
+      }
+
+      int lastComparison = 0;
+
+      lastComparison = java.lang.Boolean.compare(isSetAuthToken(), other.isSetAuthToken());
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+      if (isSetAuthToken()) {
+        lastComparison = org.apache.amoro.shade.thrift.org.apache.thrift.TBaseHelper.compareTo(this.authToken, other.authToken);
+        if (lastComparison != 0) {
+          return lastComparison;
+        }
+      }
+      lastComparison = java.lang.Boolean.compare(isSetLines(), other.isSetLines());
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+      if (isSetLines()) {
+        lastComparison = org.apache.amoro.shade.thrift.org.apache.thrift.TBaseHelper.compareTo(this.lines, other.lines);
+        if (lastComparison != 0) {
+          return lastComparison;
+        }
+      }
+      return 0;
+    }
+
+    @org.apache.amoro.shade.thrift.org.apache.thrift.annotation.Nullable
+    @Override
+    public _Fields fieldForId(int fieldId) {
+      return _Fields.findByThriftId(fieldId);
+    }
+
+    @Override
+    public void read(org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TProtocol iprot) throws org.apache.amoro.shade.thrift.org.apache.thrift.TException {
+      scheme(iprot).read(iprot, this);
+    }
+
+    @Override
+    public void write(org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TProtocol oprot) throws org.apache.amoro.shade.thrift.org.apache.thrift.TException {
+      scheme(oprot).write(oprot, this);
+    }
+
+    @Override
+    public java.lang.String toString() {
+      java.lang.StringBuilder sb = new java.lang.StringBuilder("appendLogs_args(");
+      boolean first = true;
+
+      sb.append("authToken:");
+      if (this.authToken == null) {
+        sb.append("null");
+      } else {
+        sb.append(this.authToken);
+      }
+      first = false;
+      if (!first) sb.append(", ");
+      sb.append("lines:");
+      if (this.lines == null) {
+        sb.append("null");
+      } else {
+        sb.append(this.lines);
+      }
+      first = false;
+      sb.append(")");
+      return sb.toString();
+    }
+
+    public void validate() throws org.apache.amoro.shade.thrift.org.apache.thrift.TException {
+      // check for required fields
+      // check for sub-struct validity
+    }
+
+    private void writeObject(java.io.ObjectOutputStream out) throws java.io.IOException {
+      try {
+        write(new org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TCompactProtocol(new org.apache.amoro.shade.thrift.org.apache.thrift.transport.TIOStreamTransport(out)));
+      } catch (org.apache.amoro.shade.thrift.org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+    private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, java.lang.ClassNotFoundException {
+      try {
+        read(new org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TCompactProtocol(new org.apache.amoro.shade.thrift.org.apache.thrift.transport.TIOStreamTransport(in)));
+      } catch (org.apache.amoro.shade.thrift.org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+    private static class appendLogs_argsStandardSchemeFactory implements org.apache.amoro.shade.thrift.org.apache.thrift.scheme.SchemeFactory {
+      @Override
+      public appendLogs_argsStandardScheme getScheme() {
+        return new appendLogs_argsStandardScheme();
+      }
+    }
+
+    private static class appendLogs_argsStandardScheme extends org.apache.amoro.shade.thrift.org.apache.thrift.scheme.StandardScheme<appendLogs_args> {
+
+      @Override
+      public void read(org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TProtocol iprot, appendLogs_args struct) throws org.apache.amoro.shade.thrift.org.apache.thrift.TException {
+        org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TField schemeField;
+        iprot.readStructBegin();
+        while (true)
+        {
+          schemeField = iprot.readFieldBegin();
+          if (schemeField.type == org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TType.STOP) { 
+            break;
+          }
+          switch (schemeField.id) {
+            case 1: // AUTH_TOKEN
+              if (schemeField.type == org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TType.STRING) {
+                struct.authToken = iprot.readString();
+                struct.setAuthTokenIsSet(true);
+              } else { 
+                org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
+              }
+              break;
+            case 2: // LINES
+              if (schemeField.type == org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TType.LIST) {
+                {
+                  org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TList _list30 = iprot.readListBegin();
+                  struct.lines = new java.util.ArrayList<OptimizingLogLine>(_list30.size);
+                  @org.apache.amoro.shade.thrift.org.apache.thrift.annotation.Nullable OptimizingLogLine _elem31;
+                  for (int _i32 = 0; _i32 < _list30.size; ++_i32)
+                  {
+                    _elem31 = new OptimizingLogLine();
+                    _elem31.read(iprot);
+                    struct.lines.add(_elem31);
+                  }
+                  iprot.readListEnd();
+                }
+                struct.setLinesIsSet(true);
+              } else { 
+                org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
+              }
+              break;
+            default:
+              org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
+          }
+          iprot.readFieldEnd();
+        }
+        iprot.readStructEnd();
+
+        // check for required fields of primitive type, which can't be checked in the validate method
+        struct.validate();
+      }
+
+      @Override
+      public void write(org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TProtocol oprot, appendLogs_args struct) throws org.apache.amoro.shade.thrift.org.apache.thrift.TException {
+        struct.validate();
+
+        oprot.writeStructBegin(STRUCT_DESC);
+        if (struct.authToken != null) {
+          oprot.writeFieldBegin(AUTH_TOKEN_FIELD_DESC);
+          oprot.writeString(struct.authToken);
+          oprot.writeFieldEnd();
+        }
+        if (struct.lines != null) {
+          oprot.writeFieldBegin(LINES_FIELD_DESC);
+          {
+            oprot.writeListBegin(new org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TList(org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TType.STRUCT, struct.lines.size()));
+            for (OptimizingLogLine _iter33 : struct.lines)
+            {
+              _iter33.write(oprot);
+            }
+            oprot.writeListEnd();
+          }
+          oprot.writeFieldEnd();
+        }
+        oprot.writeFieldStop();
+        oprot.writeStructEnd();
+      }
+
+    }
+
+    private static class appendLogs_argsTupleSchemeFactory implements org.apache.amoro.shade.thrift.org.apache.thrift.scheme.SchemeFactory {
+      @Override
+      public appendLogs_argsTupleScheme getScheme() {
+        return new appendLogs_argsTupleScheme();
+      }
+    }
+
+    private static class appendLogs_argsTupleScheme extends org.apache.amoro.shade.thrift.org.apache.thrift.scheme.TupleScheme<appendLogs_args> {
+
+      @Override
+      public void write(org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TProtocol prot, appendLogs_args struct) throws org.apache.amoro.shade.thrift.org.apache.thrift.TException {
+        org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TTupleProtocol oprot = (org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TTupleProtocol) prot;
+        java.util.BitSet optionals = new java.util.BitSet();
+        if (struct.isSetAuthToken()) {
+          optionals.set(0);
+        }
+        if (struct.isSetLines()) {
+          optionals.set(1);
+        }
+        oprot.writeBitSet(optionals, 2);
+        if (struct.isSetAuthToken()) {
+          oprot.writeString(struct.authToken);
+        }
+        if (struct.isSetLines()) {
+          {
+            oprot.writeI32(struct.lines.size());
+            for (OptimizingLogLine _iter34 : struct.lines)
+            {
+              _iter34.write(oprot);
+            }
+          }
+        }
+      }
+
+      @Override
+      public void read(org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TProtocol prot, appendLogs_args struct) throws org.apache.amoro.shade.thrift.org.apache.thrift.TException {
+        org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TTupleProtocol iprot = (org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TTupleProtocol) prot;
+        java.util.BitSet incoming = iprot.readBitSet(2);
+        if (incoming.get(0)) {
+          struct.authToken = iprot.readString();
+          struct.setAuthTokenIsSet(true);
+        }
+        if (incoming.get(1)) {
+          {
+            org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TList _list35 = iprot.readListBegin(org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TType.STRUCT);
+            struct.lines = new java.util.ArrayList<OptimizingLogLine>(_list35.size);
+            @org.apache.amoro.shade.thrift.org.apache.thrift.annotation.Nullable OptimizingLogLine _elem36;
+            for (int _i37 = 0; _i37 < _list35.size; ++_i37)
+            {
+              _elem36 = new OptimizingLogLine();
+              _elem36.read(iprot);
+              struct.lines.add(_elem36);
+            }
+          }
+          struct.setLinesIsSet(true);
+        }
+      }
+    }
+
+    private static <S extends org.apache.amoro.shade.thrift.org.apache.thrift.scheme.IScheme> S scheme(org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TProtocol proto) {
+      return (org.apache.amoro.shade.thrift.org.apache.thrift.scheme.StandardScheme.class.equals(proto.getScheme()) ? STANDARD_SCHEME_FACTORY : TUPLE_SCHEME_FACTORY).getScheme();
+    }
+  }
+
+  @SuppressWarnings({"cast", "rawtypes", "serial", "unchecked", "unused"})
+  public static class appendLogs_result implements org.apache.amoro.shade.thrift.org.apache.thrift.TBase<appendLogs_result, appendLogs_result._Fields>, java.io.Serializable, Cloneable, Comparable<appendLogs_result>   {
+    private static final org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TStruct("appendLogs_result");
+
+    private static final org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TField E1_FIELD_DESC = new org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TField("e1", org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TType.STRUCT, (short)1);
+
+    private static final org.apache.amoro.shade.thrift.org.apache.thrift.scheme.SchemeFactory STANDARD_SCHEME_FACTORY = new appendLogs_resultStandardSchemeFactory();
+    private static final org.apache.amoro.shade.thrift.org.apache.thrift.scheme.SchemeFactory TUPLE_SCHEME_FACTORY = new appendLogs_resultTupleSchemeFactory();
+
+    public @org.apache.amoro.shade.thrift.org.apache.thrift.annotation.Nullable org.apache.amoro.api.AmoroException e1; // required
+
+    /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
+    public enum _Fields implements org.apache.amoro.shade.thrift.org.apache.thrift.TFieldIdEnum {
+      E1((short)1, "e1");
+
+      private static final java.util.Map<java.lang.String, _Fields> byName = new java.util.HashMap<java.lang.String, _Fields>();
+
+      static {
+        for (_Fields field : java.util.EnumSet.allOf(_Fields.class)) {
+          byName.put(field.getFieldName(), field);
+        }
+      }
+
+      /**
+       * Find the _Fields constant that matches fieldId, or null if its not found.
+       */
+      @org.apache.amoro.shade.thrift.org.apache.thrift.annotation.Nullable
+      public static _Fields findByThriftId(int fieldId) {
+        switch(fieldId) {
+          case 1: // E1
+            return E1;
+          default:
+            return null;
+        }
+      }
+
+      /**
+       * Find the _Fields constant that matches fieldId, throwing an exception
+       * if it is not found.
+       */
+      public static _Fields findByThriftIdOrThrow(int fieldId) {
+        _Fields fields = findByThriftId(fieldId);
+        if (fields == null) throw new java.lang.IllegalArgumentException("Field " + fieldId + " doesn't exist!");
+        return fields;
+      }
+
+      /**
+       * Find the _Fields constant that matches name, or null if its not found.
+       */
+      @org.apache.amoro.shade.thrift.org.apache.thrift.annotation.Nullable
+      public static _Fields findByName(java.lang.String name) {
+        return byName.get(name);
+      }
+
+      private final short _thriftId;
+      private final java.lang.String _fieldName;
+
+      _Fields(short thriftId, java.lang.String fieldName) {
+        _thriftId = thriftId;
+        _fieldName = fieldName;
+      }
+
+      @Override
+      public short getThriftFieldId() {
+        return _thriftId;
+      }
+
+      @Override
+      public java.lang.String getFieldName() {
+        return _fieldName;
+      }
+    }
+
+    // isset id assignments
+    public static final java.util.Map<_Fields, org.apache.amoro.shade.thrift.org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
+    static {
+      java.util.Map<_Fields, org.apache.amoro.shade.thrift.org.apache.thrift.meta_data.FieldMetaData> tmpMap = new java.util.EnumMap<_Fields, org.apache.amoro.shade.thrift.org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.E1, new org.apache.amoro.shade.thrift.org.apache.thrift.meta_data.FieldMetaData("e1", org.apache.amoro.shade.thrift.org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.amoro.shade.thrift.org.apache.thrift.meta_data.StructMetaData(org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TType.STRUCT, org.apache.amoro.api.AmoroException.class)));
+      metaDataMap = java.util.Collections.unmodifiableMap(tmpMap);
+      org.apache.amoro.shade.thrift.org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(appendLogs_result.class, metaDataMap);
+    }
+
+    public appendLogs_result() {
+    }
+
+    public appendLogs_result(
+      org.apache.amoro.api.AmoroException e1)
+    {
+      this();
+      this.e1 = e1;
+    }
+
+    /**
+     * Performs a deep copy on <i>other</i>.
+     */
+    public appendLogs_result(appendLogs_result other) {
+      if (other.isSetE1()) {
+        this.e1 = new org.apache.amoro.api.AmoroException(other.e1);
+      }
+    }
+
+    @Override
+    public appendLogs_result deepCopy() {
+      return new appendLogs_result(this);
+    }
+
+    @Override
+    public void clear() {
+      this.e1 = null;
+    }
+
+    @org.apache.amoro.shade.thrift.org.apache.thrift.annotation.Nullable
+    public org.apache.amoro.api.AmoroException getE1() {
+      return this.e1;
+    }
+
+    public appendLogs_result setE1(@org.apache.amoro.shade.thrift.org.apache.thrift.annotation.Nullable org.apache.amoro.api.AmoroException e1) {
+      this.e1 = e1;
+      return this;
+    }
+
+    public void unsetE1() {
+      this.e1 = null;
+    }
+
+    /** Returns true if field e1 is set (has been assigned a value) and false otherwise */
+    public boolean isSetE1() {
+      return this.e1 != null;
+    }
+
+    public void setE1IsSet(boolean value) {
+      if (!value) {
+        this.e1 = null;
+      }
+    }
+
+    @Override
+    public void setFieldValue(_Fields field, @org.apache.amoro.shade.thrift.org.apache.thrift.annotation.Nullable java.lang.Object value) {
+      switch (field) {
+      case E1:
+        if (value == null) {
+          unsetE1();
+        } else {
+          setE1((org.apache.amoro.api.AmoroException)value);
+        }
+        break;
+
+      }
+    }
+
+    @org.apache.amoro.shade.thrift.org.apache.thrift.annotation.Nullable
+    @Override
+    public java.lang.Object getFieldValue(_Fields field) {
+      switch (field) {
+      case E1:
+        return getE1();
+
+      }
+      throw new java.lang.IllegalStateException();
+    }
+
+    /** Returns true if field corresponding to fieldID is set (has been assigned a value) and false otherwise */
+    @Override
+    public boolean isSet(_Fields field) {
+      if (field == null) {
+        throw new java.lang.IllegalArgumentException();
+      }
+
+      switch (field) {
+      case E1:
+        return isSetE1();
+      }
+      throw new java.lang.IllegalStateException();
+    }
+
+    @Override
+    public boolean equals(java.lang.Object that) {
+      if (that instanceof appendLogs_result)
+        return this.equals((appendLogs_result)that);
+      return false;
+    }
+
+    public boolean equals(appendLogs_result that) {
+      if (that == null)
+        return false;
+      if (this == that)
+        return true;
+
+      boolean this_present_e1 = true && this.isSetE1();
+      boolean that_present_e1 = true && that.isSetE1();
+      if (this_present_e1 || that_present_e1) {
+        if (!(this_present_e1 && that_present_e1))
+          return false;
+        if (!this.e1.equals(that.e1))
+          return false;
+      }
+
+      return true;
+    }
+
+    @Override
+    public int hashCode() {
+      int hashCode = 1;
+
+      hashCode = hashCode * 8191 + ((isSetE1()) ? 131071 : 524287);
+      if (isSetE1())
+        hashCode = hashCode * 8191 + e1.hashCode();
+
+      return hashCode;
+    }
+
+    @Override
+    public int compareTo(appendLogs_result other) {
+      if (!getClass().equals(other.getClass())) {
+        return getClass().getName().compareTo(other.getClass().getName());
+      }
+
+      int lastComparison = 0;
+
+      lastComparison = java.lang.Boolean.compare(isSetE1(), other.isSetE1());
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+      if (isSetE1()) {
+        lastComparison = org.apache.amoro.shade.thrift.org.apache.thrift.TBaseHelper.compareTo(this.e1, other.e1);
+        if (lastComparison != 0) {
+          return lastComparison;
+        }
+      }
+      return 0;
+    }
+
+    @org.apache.amoro.shade.thrift.org.apache.thrift.annotation.Nullable
+    @Override
+    public _Fields fieldForId(int fieldId) {
+      return _Fields.findByThriftId(fieldId);
+    }
+
+    @Override
+    public void read(org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TProtocol iprot) throws org.apache.amoro.shade.thrift.org.apache.thrift.TException {
+      scheme(iprot).read(iprot, this);
+    }
+
+    public void write(org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TProtocol oprot) throws org.apache.amoro.shade.thrift.org.apache.thrift.TException {
+      scheme(oprot).write(oprot, this);
+      }
+
+    @Override
+    public java.lang.String toString() {
+      java.lang.StringBuilder sb = new java.lang.StringBuilder("appendLogs_result(");
+      boolean first = true;
+
+      sb.append("e1:");
+      if (this.e1 == null) {
+        sb.append("null");
+      } else {
+        sb.append(this.e1);
+      }
+      first = false;
+      sb.append(")");
+      return sb.toString();
+    }
+
+    public void validate() throws org.apache.amoro.shade.thrift.org.apache.thrift.TException {
+      // check for required fields
+      // check for sub-struct validity
+    }
+
+    private void writeObject(java.io.ObjectOutputStream out) throws java.io.IOException {
+      try {
+        write(new org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TCompactProtocol(new org.apache.amoro.shade.thrift.org.apache.thrift.transport.TIOStreamTransport(out)));
+      } catch (org.apache.amoro.shade.thrift.org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+    private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, java.lang.ClassNotFoundException {
+      try {
+        read(new org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TCompactProtocol(new org.apache.amoro.shade.thrift.org.apache.thrift.transport.TIOStreamTransport(in)));
+      } catch (org.apache.amoro.shade.thrift.org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+    private static class appendLogs_resultStandardSchemeFactory implements org.apache.amoro.shade.thrift.org.apache.thrift.scheme.SchemeFactory {
+      @Override
+      public appendLogs_resultStandardScheme getScheme() {
+        return new appendLogs_resultStandardScheme();
+      }
+    }
+
+    private static class appendLogs_resultStandardScheme extends org.apache.amoro.shade.thrift.org.apache.thrift.scheme.StandardScheme<appendLogs_result> {
+
+      @Override
+      public void read(org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TProtocol iprot, appendLogs_result struct) throws org.apache.amoro.shade.thrift.org.apache.thrift.TException {
+        org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TField schemeField;
+        iprot.readStructBegin();
+        while (true)
+        {
+          schemeField = iprot.readFieldBegin();
+          if (schemeField.type == org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TType.STOP) { 
+            break;
+          }
+          switch (schemeField.id) {
+            case 1: // E1
+              if (schemeField.type == org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TType.STRUCT) {
+                struct.e1 = new org.apache.amoro.api.AmoroException();
+                struct.e1.read(iprot);
+                struct.setE1IsSet(true);
+              } else { 
+                org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
+              }
+              break;
+            default:
+              org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TProtocolUtil.skip(iprot, schemeField.type);
+          }
+          iprot.readFieldEnd();
+        }
+        iprot.readStructEnd();
+
+        // check for required fields of primitive type, which can't be checked in the validate method
+        struct.validate();
+      }
+
+      @Override
+      public void write(org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TProtocol oprot, appendLogs_result struct) throws org.apache.amoro.shade.thrift.org.apache.thrift.TException {
+        struct.validate();
+
+        oprot.writeStructBegin(STRUCT_DESC);
+        if (struct.e1 != null) {
+          oprot.writeFieldBegin(E1_FIELD_DESC);
+          struct.e1.write(oprot);
+          oprot.writeFieldEnd();
+        }
+        oprot.writeFieldStop();
+        oprot.writeStructEnd();
+      }
+
+    }
+
+    private static class appendLogs_resultTupleSchemeFactory implements org.apache.amoro.shade.thrift.org.apache.thrift.scheme.SchemeFactory {
+      @Override
+      public appendLogs_resultTupleScheme getScheme() {
+        return new appendLogs_resultTupleScheme();
+      }
+    }
+
+    private static class appendLogs_resultTupleScheme extends org.apache.amoro.shade.thrift.org.apache.thrift.scheme.TupleScheme<appendLogs_result> {
+
+      @Override
+      public void write(org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TProtocol prot, appendLogs_result struct) throws org.apache.amoro.shade.thrift.org.apache.thrift.TException {
+        org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TTupleProtocol oprot = (org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TTupleProtocol) prot;
+        java.util.BitSet optionals = new java.util.BitSet();
+        if (struct.isSetE1()) {
+          optionals.set(0);
+        }
+        oprot.writeBitSet(optionals, 1);
+        if (struct.isSetE1()) {
+          struct.e1.write(oprot);
+        }
+      }
+
+      @Override
+      public void read(org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TProtocol prot, appendLogs_result struct) throws org.apache.amoro.shade.thrift.org.apache.thrift.TException {
+        org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TTupleProtocol iprot = (org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TTupleProtocol) prot;
+        java.util.BitSet incoming = iprot.readBitSet(1);
+        if (incoming.get(0)) {
+          struct.e1 = new org.apache.amoro.api.AmoroException();
+          struct.e1.read(iprot);
+          struct.setE1IsSet(true);
         }
       }
     }

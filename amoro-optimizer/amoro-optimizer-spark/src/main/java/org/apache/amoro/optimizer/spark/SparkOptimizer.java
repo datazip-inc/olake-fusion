@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.optimizer.spark;
@@ -47,6 +49,7 @@ public class SparkOptimizer extends Optimizer {
             .appName(String.format(APP_NAME_FORMAT, config.getResourceId()))
             .getOrCreate();
     JavaSparkContext jsc = new JavaSparkContext(spark.sparkContext());
+    SparkOptimizingLogSupport.registerOnDriver(config);
     if (!jsc.getConf().getBoolean("spark.dynamicAllocation.enabled", false)) {
       LOG.warn(
           "To better utilize computing resources, it is recommended to enable 'spark.dynamicAllocation.enabled' "
@@ -64,6 +67,7 @@ public class SparkOptimizer extends Optimizer {
     SparkOptimizer optimizer = new SparkOptimizer(config, jsc);
     OptimizerToucher toucher = optimizer.getToucher();
     toucher.withRegisterProperty(Resource.PROPERTY_JOB_ID, spark.sparkContext().applicationId());
+    toucher.withTokenChangeListener(SparkOptimizingLogSupport::onTokenChange);
 
     LOG.info("Starting the spark optimizer with configuration:{}", config);
     optimizer.startOptimizing();
