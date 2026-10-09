@@ -172,17 +172,7 @@ what OLake-UI receives; see section 6.
 
 Note: the token authentication logic for Fusion used by OLake-UI can be found here: `server/internal/services/optimization/client.go`
 
-## 7. Repo rules
-
-- Every file you modify that carries the Apache license header must also contain
-  `Modified by Datazip Inc. in <year>` within its first 40 lines. The CI check
-  `.github/workflows/modification-header-check.yml` fails otherwise. If the line is missing, add it
-  at the end of the license comment, in the same style as other modified files.
-- Java 17. Before handing over, format each module you changed with
-  `./mvnw -o -q spotless:apply -pl <module>` (a few seconds, touches only that module).
-  `make spotless-fix` formats the whole repo and can rewrite files you did not touch.
-
-## 8. Testing
+## 5. Testing
 
 ### Tests in the diff
 
@@ -370,5 +360,13 @@ When done testing:
    Then revert the compose change and your code change, and rerun the Maven command above, so
    `target/` and the dist tarball no longer contain the test code.
 
-3. Do not commit the changes used just for testing.
+3. Note:
+- Do not commit the changes used just for testing.
+- Every file you modify that carries the Apache license header must also contain
+  `Modified by Datazip Inc. in <year>` within its first 40 lines. The CI check
+  `.github/workflows/modification-header-check.yml` fails otherwise. If the line is missing, add it
+  at the end of the license comment, in the same style as other modified files.
+- Java 17. Before handing over, format each module you changed with
+  `./mvnw -o -q spotless:apply -pl <module>` (a few seconds, touches only that module).
+  `make spotless-fix` formats the whole repo and can rewrite files you did not touch.
 
