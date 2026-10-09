@@ -197,10 +197,8 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
           "Create catalog {}, type:{}", catalogMeta.getCatalogName(), catalogMeta.getCatalogType());
       created = true;
     } catch (Throwable t) {
-      // trackFailure never throws, so the caller receives this same exception, unchanged.
       Telemetry.getInstance()
           .trackFailure(Telemetry.Command.CREATE_CATALOG, catalogMeta.getCatalogType(), t);
-      throw t;
     } finally {
       Telemetry.getInstance()
           .trackCatalogCreated(catalogMeta.getCatalogType(), isOlakeCreated(catalogMeta), created);
