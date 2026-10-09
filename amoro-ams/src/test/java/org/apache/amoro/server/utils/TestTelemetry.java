@@ -24,6 +24,7 @@ import org.apache.iceberg.exceptions.RESTException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.net.UnknownHostException;
 import java.util.Map;
 
@@ -62,10 +63,34 @@ public class TestTelemetry {
   }
 
   @Test
-  public void noFailureOrUnmappedFailureSendsNothing() {
+  public void unknownHostIsFoundMidChain() {
+    Throwable failure =
+        new RuntimeException(new UnknownHostException(HOST).initCause(new IOException(HOST)));
+    Map<String, Object> props =
+        Telemetry.failureProps(Telemetry.Command.CREATE_CATALOG, "rest", failure);
+
+    Assertions.assertEquals("dns_resolution_failed", props.get("category"));
+    Assertions.assertEquals("UnknownHostException", props.get("code"));
+  }
+
+  @Test
+  public void failureEventIsNamedAfterTheCommand() {
+    Assertions.assertEquals(
+        "Create Catalog Failed - Fusion", Telemetry.Command.CREATE_CATALOG.failureEvent());
+  }
+
+  @Test
+  public void noFailureSendsNothing() {
     Assertions.assertNull(Telemetry.failureProps(Telemetry.Command.CREATE_CATALOG, "rest", null));
-    Assertions.assertNull(
+  }
+
+  @Test
+  public void unmappedFailureIsReportedAsUnknown() {
+    Map<String, Object> props =
         Telemetry.failureProps(
-            Telemetry.Command.CREATE_CATALOG, "rest", new IllegalStateException(HOST)));
+            Telemetry.Command.CREATE_CATALOG, "rest", new IllegalStateException(HOST));
+
+    Assertions.assertEquals("unknown", props.get("category"));
+    Assertions.assertEquals("IllegalStateException", props.get("code"));
   }
 }
