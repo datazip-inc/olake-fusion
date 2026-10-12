@@ -52,6 +52,7 @@ import org.apache.amoro.server.resource.QuotaProvider;
 import org.apache.amoro.server.table.DefaultTableRuntime;
 import org.apache.amoro.server.table.RuntimeHandlerChain;
 import org.apache.amoro.server.table.TableService;
+import org.apache.amoro.server.utils.Telemetry;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Sets;
 import org.apache.amoro.shade.guava32.com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -74,6 +75,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -102,6 +104,9 @@ public class DefaultOptimizingService extends StatedPersistentBase
   private final Map<String, OptimizingQueue> optimizingQueueByToken = new ConcurrentHashMap<>();
   private final Map<String, OptimizerInstance> authOptimizers = new ConcurrentHashMap<>();
   private final OptimizerKeeper optimizerKeeper = new OptimizerKeeper();
+  /** "Installed Fusion" describes the deployment, so it is reported once per AMS process. */
+  private final AtomicBoolean fusionInstallTracked = new AtomicBoolean(false);
+
   private final OptimizingConfigWatcher optimizingConfigWatcher = new OptimizingConfigWatcher();
   private final CatalogManager catalogManager;
   private final OptimizerManager optimizerManager;
@@ -165,6 +170,9 @@ public class DefaultOptimizingService extends StatedPersistentBase
           optimizingQueueByGroup.put(groupName, optimizingQueue);
         });
     optimizers.forEach(optimizer -> registerOptimizer(optimizer, false));
+    if (!optimizers.isEmpty()) {
+      trackInstalledFusion();
+    }
     groupToTableRuntimes
         .keySet()
         .forEach(groupName -> LOG.warn("Unloaded task runtime in group {}", groupName));
@@ -180,6 +188,20 @@ public class DefaultOptimizingService extends StatedPersistentBase
     authOptimizers.put(optimizer.getToken(), optimizer);
     optimizingQueueByToken.put(optimizer.getToken(), optimizingQueue);
     optimizerKeeper.keepInTouch(optimizer);
+    if (needPersistent) {
+      // A newly authenticated optimizer is the first sign of life on a fresh install, where the
+      // restore above had nothing to load.
+      trackInstalledFusion();
+    }
+  }
+
+  private void trackInstalledFusion() {
+    if (!fusionInstallTracked.compareAndSet(false, true)) {
+      return;
+    }
+    int parallelism =
+        authOptimizers.values().stream().mapToInt(OptimizerInstance::getThreadCount).sum();
+    Telemetry.getInstance().trackInstalledFusion(parallelism);
   }
 
   private void unregisterOptimizer(String token) {
