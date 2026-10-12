@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro;
@@ -24,6 +26,10 @@ public class OptimizerProperties {
   public static final String RESOURCE_ID = "resource-id";
   public static final String AMS_OPTIMIZER_URI = "ams-optimizing-uri";
   public static final String AMS_HOME = "ams-home";
+
+  // helps identify old / new optimizers with release tag
+  public static final String OPTIMIZER_TAG = "optimizer-tag";
+  public static final String OPTIMIZER_TAG_VALUE = "v0.1.5";
 
   // Resource container properties
   public static final String EXPORT_PROPERTY_PREFIX = "export.";

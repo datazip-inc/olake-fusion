@@ -264,6 +264,7 @@ public class DefaultOptimizingService extends StatedPersistentBase
             });
 
     OptimizingQueue queue = getQueueByGroup(registerInfo.getGroupName());
+    retireUntaggedRegistrations(registerInfo);
     // An optimizer that Kubernetes restarted registers again under the same resource id. Retire
     // the registration of the process it replaces, so that one optimizer never holds two entries.
     // NOTE: For multioptimizers we might need to remove it
@@ -271,6 +272,46 @@ public class DefaultOptimizingService extends StatedPersistentBase
     OptimizerInstance optimizer = new OptimizerInstance(registerInfo, queue.getContainerName());
     registerOptimizer(optimizer, true);
     return optimizer.getToken();
+  }
+
+  // tagged optimizer :
+  //      - optimizer created in the current Fusion release, accept.
+  //      - release all optimizers present if a tagged optimizer is trying to authenticate
+  // un-tagged optimizer :
+  //      - optimzier created from an older Fusion release, accept only when no optimizers exist
+  private void retireUntaggedRegistrations(OptimizerRegisterInfo registerInfo) {
+    List<OptimizerInstance> groupOptimizers =
+        authOptimizers.values().stream()
+            .filter(optimizer -> optimizer.getGroupName().equals(registerInfo.getGroupName()))
+            .collect(Collectors.toList());
+    if (!isTagged(registerInfo.getProperties())) {
+      if (groupOptimizers.stream().anyMatch(optimizer -> isTagged(optimizer.getProperties()))) {
+        // the optimizer will auto-kill itself on this exception
+        throw new ForbiddenException(
+            String.format(
+                "Optimizer %s has no %s, and a tagged optimizer is registered in group %s",
+                registerInfo.getResourceId(),
+                OptimizerProperties.OPTIMIZER_TAG,
+                registerInfo.getGroupName()));
+      }
+      return;
+    }
+    groupOptimizers.stream()
+        .filter(optimizer -> !isTagged(optimizer.getProperties()))
+        .forEach(
+            untagged -> {
+              LOG.info(
+                  "Retiring registration {} of untagged optimizer {}, replaced by optimizer {}",
+                  untagged.getToken(),
+                  untagged.getResourceId(),
+                  registerInfo.getResourceId());
+              unregisterOptimizer(untagged.getToken());
+            });
+  }
+
+  private static boolean isTagged(Map<String, String> properties) {
+    return properties != null
+        && StringUtils.isNotBlank(properties.get(OptimizerProperties.OPTIMIZER_TAG));
   }
 
   private void retirePreviousRegistrations(String resourceId) {
