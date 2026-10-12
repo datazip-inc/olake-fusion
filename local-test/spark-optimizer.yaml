@@ -150,8 +150,9 @@ spec:
             - spark.kubernetes.executor.volumes.hostPath.amoro-logs.mount.readOnly=false
             - --conf
             - spark.kubernetes.executor.volumes.hostPath.amoro-logs.options.path=/mnt/amoro-logs
+            # the driver exits on its first OutOfMemoryError, so that Kubernetes restarts the optimizer.
             - --conf
-            - spark.driver.extraJavaOptions=-Dlog4j2.configurationFile=file:///opt/spark/conf/log4j2.xml
+            - spark.driver.extraJavaOptions=-Dlog4j2.configurationFile=file:///opt/spark/conf/log4j2.xml -XX:+ExitOnOutOfMemoryError
             - --conf
             - spark.executor.extraJavaOptions=-Dlog4j2.configurationFile=file:///opt/spark/conf/log4j2.xml
             - local:///opt/spark/usrlib/optimizer-job.jar
