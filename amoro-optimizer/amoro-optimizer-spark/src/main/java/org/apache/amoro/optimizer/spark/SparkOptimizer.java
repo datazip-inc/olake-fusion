@@ -14,10 +14,13 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.optimizer.spark;
 
+import org.apache.amoro.OptimizerProperties;
 import org.apache.amoro.optimizer.common.Optimizer;
 import org.apache.amoro.optimizer.common.OptimizerConfig;
 import org.apache.amoro.optimizer.common.OptimizerToucher;
@@ -64,6 +67,17 @@ public class SparkOptimizer extends Optimizer {
     SparkOptimizer optimizer = new SparkOptimizer(config, jsc);
     OptimizerToucher toucher = optimizer.getToucher();
     toucher.withRegisterProperty(Resource.PROPERTY_JOB_ID, spark.sparkContext().applicationId());
+    // Fusion has no other source for the optimizer's Spark settings, which its telemetry reports.
+    // A setting that is not set is sent empty, not as Spark's default.
+    toucher.withRegisterProperty(
+        OptimizerProperties.SPARK_DRIVER_MEMORY,
+        jsc.getConf().get(OptimizerProperties.SPARK_DRIVER_MEMORY, ""));
+    toucher.withRegisterProperty(
+        OptimizerProperties.SPARK_EXECUTOR_MEMORY,
+        jsc.getConf().get(OptimizerProperties.SPARK_EXECUTOR_MEMORY, ""));
+    toucher.withRegisterProperty(
+        OptimizerProperties.SPARK_EXECUTOR_CORES,
+        jsc.getConf().get(OptimizerProperties.SPARK_EXECUTOR_CORES, ""));
 
     LOG.info("Starting the spark optimizer with configuration:{}", config);
     optimizer.startOptimizing();

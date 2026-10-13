@@ -31,6 +31,11 @@ public class OptimizerProperties {
   public static final String OPTIMIZER_TAG = "optimizer-tag";
   public static final String OPTIMIZER_TAG_VALUE = "v0.1.5";
 
+  // Spark settings that the Spark optimizer reports when it registers, for telemetry
+  public static final String SPARK_DRIVER_MEMORY = "spark.driver.memory";
+  public static final String SPARK_EXECUTOR_MEMORY = "spark.executor.memory";
+  public static final String SPARK_EXECUTOR_CORES = "spark.executor.cores";
+
   // Resource container properties
   public static final String EXPORT_PROPERTY_PREFIX = "export.";
 

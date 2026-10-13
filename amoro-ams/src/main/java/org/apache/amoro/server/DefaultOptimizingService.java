@@ -188,6 +188,7 @@ public class DefaultOptimizingService extends StatedPersistentBase
     authOptimizers.put(optimizer.getToken(), optimizer);
     optimizingQueueByToken.put(optimizer.getToken(), optimizingQueue);
     optimizerKeeper.keepInTouch(optimizer);
+    AmoroServiceContainer.updateSparkConfig(optimizer.getProperties());
     if (needPersistent) {
       // A newly authenticated optimizer is the first sign of life on a fresh install, where the
       // restore above had nothing to load.
