@@ -36,7 +36,7 @@
         <maven.compiler.target>17</maven.compiler.target>
         <hive.version>2.1.1</hive.version>
         <!-- hive-exec is test-only here; kept >= 2.3.4 for CVE-2018-1314. Metastore stays on hive.version (2.1.1 API). -->
-        <hive-exec-test.version>2.3.9</hive-exec-test.version>
+        <hive-exec-test.version>4.0.1</hive-exec-test.version>
         <airlift.version>214</airlift.version>
         <airlift-units.version>1.6</airlift-units.version>
         <airlift-slice.version>0.44</airlift-slice.version>
