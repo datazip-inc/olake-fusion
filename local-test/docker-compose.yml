@@ -378,7 +378,6 @@ services:
     volumes:
       - spark-home:/spark-vol
 
-  
 networks:
   iceberg-net:
     driver: bridge
