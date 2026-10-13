@@ -17,47 +17,44 @@
 #
 # Modified by Datazip Inc. in 2026
 
-# Brings up the integration test stack and waits until fusion-init has
-# created the optimizer group, the optimizer and the catalog.
-#
-#   FUSION_IMAGE        AMS image to test        (default: fusion:it)
-#   FUSION_SPARK_IMAGE  Spark optimizer image    (default: fusion-spark:it)
-#   IT_LOG_DIR          host dir for AMS/Spark optimization logs (default: /tmp/fusion-it-logs)
+# Starts the stack and waits until the bootstrap has created the optimizer group, the
+# optimizer and the catalog, and the Spark Connect port accepts connections.
+# Expects fusion:it and fusion-spark:it to exist and build/config.yaml to be rendered.
 
 set -euo pipefail
 
 DOCKER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../docker" && pwd)"
-FUSION_IMAGE="${FUSION_IMAGE:-fusion:it}"
-FUSION_SPARK_IMAGE="${FUSION_SPARK_IMAGE:-fusion-spark:it}"
 export IT_LOG_DIR="${IT_LOG_DIR:-/tmp/fusion-it-logs}"
-
-[[ "$FUSION_IMAGE" == "fusion:it" ]] || docker tag "$FUSION_IMAGE" fusion:it
-[[ "$FUSION_SPARK_IMAGE" == "fusion-spark:it" ]] || docker tag "$FUSION_SPARK_IMAGE" fusion-spark:it
+SPARK_CONNECT_PORT="${IT_SPARK_CONNECT_PORT:-15002}"
 
 mkdir -p "$IT_LOG_DIR/compaction"
 chmod -R 777 "$IT_LOG_DIR"
 
 compose() { docker compose -f "$DOCKER_DIR/docker-compose.yml" "$@"; }
 
+INIT=fusion-it-init
+
+compose build spark-connect
 compose up -d
 
-echo "Waiting for fusion-init to finish..."
-for _ in $(seq 1 180); do
-  state="$(docker inspect -f '{{.State.Status}} {{.State.ExitCode}}' fusion-it-init 2>/dev/null || echo 'missing -1')"
+echo "Waiting for $INIT to finish..."
+state="missing -1"
+for _ in $(seq 1 360); do
+  state="$(docker inspect -f '{{.State.Status}} {{.State.ExitCode}}' "$INIT" 2>/dev/null || echo 'missing -1')"
   case "$state" in
     "exited 0")
-      compose logs fusion-init
-      echo "Stack is up."
-      exit 0
+      docker logs "$INIT"
+      break
       ;;
     exited*)
-      compose logs fusion-init kind-setup kind-load-image fusion || true
-      echo "fusion-init failed: $state" >&2
+      docker logs "$INIT" || true
+      compose logs kind-setup kind-load-image fusion || true
+      echo "$INIT failed: $state" >&2
       exit 1
       ;;
   esac
   # fusion-init only waits for Fusion to start, so a crashed AMS would otherwise cost
-  # fusion-init's whole 5-minute wait before anything fails.
+  # fusion-init's whole wait before anything fails.
   ams="$(docker inspect -f '{{.State.Status}}' fusion-it-ams 2>/dev/null || echo missing)"
   if [[ "$ams" == "exited" || "$ams" == "dead" ]]; then
     compose logs fusion || true
@@ -66,7 +63,20 @@ for _ in $(seq 1 180); do
   fi
   sleep 5
 done
+if [[ "$state" != "exited 0" ]]; then
+  compose logs || true
+  echo "Timed out waiting for $INIT." >&2
+  exit 1
+fi
 
-compose logs || true
-echo "Timed out waiting for fusion-init." >&2
+echo "Waiting for Spark Connect on port $SPARK_CONNECT_PORT..."
+for _ in $(seq 1 60); do
+  if (exec 3<>"/dev/tcp/127.0.0.1/$SPARK_CONNECT_PORT") 2>/dev/null; then
+    echo "Stack is up."
+    exit 0
+  fi
+  sleep 2
+done
+compose logs spark-connect || true
+echo "Spark Connect did not open port $SPARK_CONNECT_PORT." >&2
 exit 1

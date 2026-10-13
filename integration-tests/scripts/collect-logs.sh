@@ -27,11 +27,13 @@ mkdir -p "$OUT/pods"
 
 docker compose -f "$DOCKER_DIR/docker-compose.yml" logs --no-color > "$OUT/compose.log" 2>&1
 
-KUBECTL=(docker exec fusion-it-cluster-control-plane kubectl --kubeconfig /etc/kubernetes/admin.conf -n spark)
-"${KUBECTL[@]}" get pods -o wide > "$OUT/pods/pods.txt" 2>&1
-for pod in $("${KUBECTL[@]}" get pods -o name 2>/dev/null); do
-  name="${pod#pod/}"
-  "${KUBECTL[@]}" logs "$name" --all-containers > "$OUT/pods/$name.log" 2>&1
+for ns in spark; do
+  KUBECTL=(docker exec fusion-it-cluster-control-plane kubectl --kubeconfig /etc/kubernetes/admin.conf -n "$ns")
+  "${KUBECTL[@]}" get pods -o wide > "$OUT/pods/$ns-pods.txt" 2>&1
+  for pod in $("${KUBECTL[@]}" get pods -o name 2>/dev/null); do
+    name="${pod#pod/}"
+    "${KUBECTL[@]}" logs "$name" --all-containers > "$OUT/pods/$ns-$name.log" 2>&1
+  done
 done
 
 if [[ -d "${IT_LOG_DIR:-/tmp/fusion-it-logs}" ]]; then

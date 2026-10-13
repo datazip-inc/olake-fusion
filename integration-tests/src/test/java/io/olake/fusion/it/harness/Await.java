@@ -18,31 +18,21 @@
  * Modified by Datazip Inc. in 2026
  */
 
-package org.apache.amoro.it.support;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+package io.olake.fusion.it.harness;
 
 import java.time.Duration;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
-/** Poll-until helper. A timeout fails the test with the last observed value. */
+/** Polls an observable signal until it holds or a deadline passes. Never a fixed sleep. */
 public final class Await {
-
-  private static final Logger LOG = LoggerFactory.getLogger(Await.class);
-  private static final Duration DEFAULT_POLL = Duration.ofSeconds(5);
+  private static final Duration POLL = Duration.ofSeconds(3);
 
   private Await() {}
 
   public static <T> T until(
       String description, Duration timeout, Supplier<T> probe, Predicate<T> done) {
-    return until(description, timeout, DEFAULT_POLL, probe, done);
-  }
-
-  public static <T> T until(
-      String description, Duration timeout, Duration poll, Supplier<T> probe, Predicate<T> done) {
-    long deadline = System.currentTimeMillis() + timeout.toMillis();
+    long deadline = System.nanoTime() + timeout.toNanos();
     T last = null;
     RuntimeException lastError = null;
     while (true) {
@@ -55,28 +45,26 @@ public final class Await {
       } catch (RuntimeException e) {
         lastError = e;
       }
-      if (System.currentTimeMillis() >= deadline) {
+      if (System.nanoTime() >= deadline) {
         AssertionError error =
             new AssertionError(
-                String.format(
-                    "Timed out after %s waiting for: %s. Last value: %s",
-                    timeout, description, last));
+                "Timed out after "
+                    + timeout
+                    + " waiting for: "
+                    + description
+                    + ". Last value: "
+                    + last);
         if (lastError != null) {
           error.initCause(lastError);
         }
         throw error;
       }
-      LOG.debug("Waiting for {}; last value {}", description, last);
-      sleep(poll);
-    }
-  }
-
-  public static void sleep(Duration duration) {
-    try {
-      Thread.sleep(duration.toMillis());
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-      throw new IllegalStateException("Interrupted while waiting", e);
+      try {
+        Thread.sleep(POLL.toMillis());
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        throw new IllegalStateException("interrupted waiting for " + description, e);
+      }
     }
   }
 }

@@ -16,13 +16,13 @@
 #
 # Modified by Datazip Inc. in 2026
 
-# Integration test stack. Same topology as local-test/docker-compose.yml
-# (Fusion + Postgres + MinIO + Spark optimizer on Kind), but isolated from a
-# developer's local stack: own container names, subnet, Kind cluster, volumes
-# and host ports, and no bind-mounted data directories.
+# Integration test stack: Fusion (AMS) + catalog Postgres + MinIO + Spark optimizer on
+# Kind, plus what a user brings: a source Postgres for OLake and a Spark Connect query
+# engine. Same topology as local-test/docker-compose.yml, isolated from it: own
+# container names, subnet, Kind cluster, volumes and host ports.
 #
-# Images come from FUSION_IMAGE / FUSION_SPARK_IMAGE; stack-up.sh tags them as
-# fusion:it and fusion-spark:it, which is what this file and config.yaml use.
+# scripts/it.sh tags the images under test as fusion:it and fusion-spark:it and renders
+# ../build/config.yaml (shipped config + fusion-config.overlay.yaml) before starting.
 
 name: fusion-it
 
@@ -53,7 +53,7 @@ services:
       AWS_REGION: us-east-1
       LOG_DIR: /mnt/amoro-logs/compaction
     volumes:
-      - ./config.yaml:/usr/local/amoro/conf/config.yaml:ro
+      - ../build/config.yaml:/usr/local/amoro/conf/config.yaml:ro
       - kind-kubeconfig:/root/.kube:ro
       - spark-home:/opt/spark:ro
       - ${IT_LOG_DIR:-/tmp/fusion-it-logs}:/mnt/amoro-logs
@@ -70,76 +70,11 @@ services:
     networks:
       fusion-it-net:
     environment:
+      API: http://fusion:1630/api/ams/v1
       OPTIMIZER_PARALLELISM: ${IT_OPTIMIZER_PARALLELISM:-2}
-    entrypoint:
-      - /bin/sh
-      - -c
-      - |
-        set -e
-        API=http://fusion:1630/api/ams/v1
-        H='X-Request-Source: Web'
-
-        echo "Waiting for Fusion..."
-        i=0
-        until curl -sf $$API/versionInfo >/dev/null 2>&1; do
-          i=$$((i+1)); [ $$i -gt 150 ] && { echo "Fusion did not come up"; exit 1; }
-          sleep 2
-        done
-
-        curl -sf -c /tmp/c -X POST $$API/login -H "$$H" -H 'Content-Type: application/json' \
-          -d '{"user":"admin","password":"password"}'
-        echo
-
-        if ! curl -sf -b /tmp/c -H "$$H" $$API/optimize/resourceGroups | grep -q '"name":"spark-container"'; then
-          echo "Creating optimizer group spark-container"
-          curl -sf -b /tmp/c -X POST $$API/optimize/resourceGroups -H "$$H" -H 'Content-Type: application/json' \
-            -d '{"name":"spark-container","container":"sparkContainer","properties":{}}'
-          echo
-        fi
-
-        if ! curl -sf -b /tmp/c -H "$$H" "$$API/optimize/optimizerGroups/spark-container/optimizers?page=1&pageSize=10" | grep -q '"jobStatus":"RUNNING"'; then
-          echo "Scaling out Spark optimizer, parallelism=$$OPTIMIZER_PARALLELISM"
-          curl -sf -b /tmp/c -X POST $$API/optimize/optimizerGroups/spark-container/optimizers -H "$$H" \
-            -H 'Content-Type: application/json' -d "{\"parallelism\":$$OPTIMIZER_PARALLELISM}"
-          echo
-        fi
-
-        if ! curl -sf -b /tmp/c -H "$$H" $$API/catalogs | grep -q '"catalogName":"olake_iceberg"'; then
-          echo "Creating catalog olake_iceberg"
-          curl -sf -b /tmp/c -X POST $$API/catalogs -H "$$H" -H 'Content-Type: application/json' -d '{
-              "name":"olake_iceberg",
-              "type":"custom",
-              "optimizerGroup":"spark-container",
-              "tableFormatList":["ICEBERG"],
-              "storageConfig":{
-                "storage.type":"S3",
-                "storage.s3.endpoint":"http://10.210.40.5:9000",
-                "storage.s3.region":"us-east-1"
-              },
-              "authConfig":{
-                "auth.type":"AKSK",
-                "auth.aksk.access-key":"admin",
-                "auth.aksk.secret-key":"password"
-              },
-              "properties":{
-                "catalog-impl":"org.apache.iceberg.jdbc.JdbcCatalog",
-                "uri":"jdbc:postgresql://postgres:5432/iceberg",
-                "jdbc.user":"iceberg",
-                "jdbc.password":"password",
-                "jdbc.driver":"org.postgresql.Driver",
-                "jdbc.schema-version":"V1",
-                "warehouse":"s3://warehouse/olake_iceberg/",
-                "s3.path-style-access":"true",
-                "io-impl":"org.apache.iceberg.aws.s3.S3FileIO",
-                "endpoint":"http://10.210.40.5:9000",
-                "access-key-id":"admin",
-                "secret-access-key":"password"
-              },
-              "tableProperties":{}
-            }'
-          echo
-        fi
-        echo "Fusion IT stack initialised."
+    volumes:
+      - ./bootstrap.sh:/bootstrap.sh:ro
+    entrypoint: ["/bin/sh", "/bootstrap.sh"]
 
   postgres:
     image: postgres:15
@@ -159,6 +94,44 @@ services:
       timeout: 10s
       retries: 20
     command: postgres -c max_connections=300
+
+  # The user's source database that OLake replicates from (CDC).
+  source-postgres:
+    image: postgres:15
+    container_name: fusion-it-source
+    networks:
+      fusion-it-net:
+    ports:
+      - "${IT_SOURCE_PORT:-25432}:5432"
+    environment:
+      POSTGRES_USER: source
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: source
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "source", "-d", "source"]
+      interval: 3s
+      timeout: 10s
+      retries: 20
+    command: postgres -c wal_level=logical -c max_replication_slots=20 -c max_wal_senders=20
+
+  # The user's query engine.
+  spark-connect:
+    image: fusion-spark-connect:it
+    build:
+      context: ../..
+      dockerfile: integration-tests/docker/spark-connect/Dockerfile
+    container_name: fusion-it-spark-connect
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mc:
+        condition: service_completed_successfully
+    networks:
+      fusion-it-net:
+    ports:
+      - "${IT_SPARK_CONNECT_PORT:-15002}:15002"
+    environment:
+      AWS_REGION: us-east-1
 
   minio:
     image: olakego/minio:RELEASE.2025-04-03T14-56-28Z
