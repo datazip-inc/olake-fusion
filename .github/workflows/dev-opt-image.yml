@@ -1,0 +1,15 @@
+name: Fusion Dev Optimizer Image
+on:
+  push:
+    branches:
+      - feat/optimzier_with_k8s_config-dev2
+  workflow_dispatch:
+
+jobs:
+  release:
+    uses: ./.github/workflows/docker-images.yml
+    with:
+      # Publishes olakego/fusion:dev-opt-v1 and olakego/fusion-spark:dev-opt-v1
+      tag: dev-opt-v1
+      skip_latest_tag: true
+    secrets: inherit

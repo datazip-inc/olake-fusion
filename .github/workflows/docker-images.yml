@@ -21,7 +21,7 @@
 #
 # Tag rules:
 # - tag matches vX.X.X -> :latest and :<tag>
-# - any other tag      -> :<tag>-latest and :<tag>
+# - any other tag      -> :<tag>-latest and :<tag> (only :<tag> with skip_latest_tag)
 
 name: Publish Docker Image
 
@@ -41,6 +41,11 @@ on:
         required: true
       called_by_releaser:
         description: 'Set by the Fusion Releaser wrapper. Do not set by hand.'
+        type: boolean
+        required: false
+        default: false
+      skip_latest_tag:
+        description: 'Skip the moving <tag>-latest tag for non-vX.X.X tags.'
         type: boolean
         required: false
         default: false
@@ -109,6 +114,8 @@ jobs:
               exit 1
             fi
             echo "tags=olakego/fusion:latest,olakego/fusion:${INPUT_TAG}" >> $GITHUB_OUTPUT
+          elif [ "${{ inputs.skip_latest_tag }}" = "true" ]; then
+            echo "tags=olakego/fusion:${INPUT_TAG}" >> $GITHUB_OUTPUT
           else
             echo "tags=olakego/fusion:${INPUT_TAG}-latest,olakego/fusion:${INPUT_TAG}" >> $GITHUB_OUTPUT
           fi
@@ -170,6 +177,8 @@ jobs:
               exit 1
             fi
             echo "tags=olakego/fusion-spark:latest,olakego/fusion-spark:${INPUT_TAG}" >> $GITHUB_OUTPUT
+          elif [ "${{ inputs.skip_latest_tag }}" = "true" ]; then
+            echo "tags=olakego/fusion-spark:${INPUT_TAG}" >> $GITHUB_OUTPUT
           else
             echo "tags=olakego/fusion-spark:${INPUT_TAG}-latest,olakego/fusion-spark:${INPUT_TAG}" >> $GITHUB_OUTPUT
           fi
