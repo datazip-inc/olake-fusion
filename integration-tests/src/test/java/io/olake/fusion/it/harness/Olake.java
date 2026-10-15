@@ -57,6 +57,9 @@ public final class Olake {
   private static final String SOURCE_PASSWORD = "password";
   private static final Duration SYNC_TIMEOUT = Duration.ofMinutes(10);
 
+  /** The stream selection the test writes from OLake's discovered streams.json. */
+  private static final String SELECTED_STREAMS = "streams.selected.json";
+
   private final String database;
   private final String slot;
   private final String publication;
@@ -177,7 +180,7 @@ public final class Olake {
                 "--config",
                 "/mnt/config/source.json",
                 "--catalog",
-                "/mnt/config/streams.json",
+                "/mnt/config/" + SELECTED_STREAMS,
                 "--destination",
                 "/mnt/config/destination.json"));
     if (Files.exists(workDir.resolve("state.json"))) {
@@ -223,9 +226,15 @@ public final class Olake {
     }
   }
 
-  /** Keeps only {@link #TABLE} selected, with the settings from stream-settings.json. */
+  /**
+   * Writes {@link #SELECTED_STREAMS}: OLake's discovered catalog with only {@link #TABLE} selected
+   * and the settings from stream-settings.json.
+   */
   private void patchStreams() {
     Path path = workDir.resolve("streams.json");
+    // OLake runs as root in its container, so on Linux the streams.json it writes is not
+    // writable by the test; the selection goes into a file the test owns.
+    Path target = workDir.resolve(SELECTED_STREAMS);
     ObjectNode catalog = (ObjectNode) readJson(path);
     JsonNode settings = readJson(FIXTURES.resolve("olake/stream-settings.json"));
 
@@ -258,7 +267,7 @@ public final class Olake {
     }
     catalog.set("streams", streams);
     try {
-      Json.MAPPER.writerWithDefaultPrettyPrinter().writeValue(path.toFile(), catalog);
+      Json.MAPPER.writerWithDefaultPrettyPrinter().writeValue(target.toFile(), catalog);
     } catch (IOException e) {
       throw new UncheckedIOException(e);
     }
