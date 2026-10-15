@@ -37,8 +37,8 @@ import org.apache.amoro.table.MixedTable;
  *
  * <p>The score is stored in the table summary together with the snapshot it was calculated on, and
  * is calculated again only once the table's current snapshot changes.
- * 
- * TODO: Store timestamp when the last healthscore was calculated.
+ *
+ * <p>TODO: Store timestamp when the last healthscore was calculated.
  */
 public class TableHealthScoreExecutor extends PeriodicTableScheduler {
 
