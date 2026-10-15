@@ -52,6 +52,7 @@ affects them, mention it in one line and move on.
   it to run or test compaction, and do not suggest it.
 - Amoro's own web UI, `amoro-web` (served by Fusion on port 1630). It is not the product UI;
   OLake-UI is. Ask before changing anything there.
+- Fusion uses PostgreSQL as its database. Ignore modules for other databases completely.
 
 ## 2. Deployment
 
