@@ -52,6 +52,7 @@ import org.apache.amoro.server.dashboard.controller.OptimizerGroupController;
 import org.apache.amoro.server.dashboard.controller.OverviewController;
 import org.apache.amoro.server.dashboard.controller.PlatformFileInfoController;
 import org.apache.amoro.server.dashboard.controller.SettingController;
+import org.apache.amoro.server.dashboard.controller.TableConfigurationDetails;
 import org.apache.amoro.server.dashboard.controller.TableController;
 import org.apache.amoro.server.dashboard.controller.TelemetryController;
 import org.apache.amoro.server.dashboard.controller.TerminalController;
@@ -90,6 +91,7 @@ public class DashboardServer {
   private final PlatformFileInfoController platformFileInfoController;
   private final SettingController settingController;
   private final TableController tableController;
+  private final TableConfigurationDetails tableConfigurations;
   private final TerminalController terminalController;
   private final VersionController versionController;
   private final OverviewController overviewController;
@@ -120,6 +122,7 @@ public class DashboardServer {
         new ServerTableDescriptor(catalogManager, tableManager, serviceConfig);
     this.tableController =
         new TableController(catalogManager, tableManager, tableDescriptor, serviceConfig);
+    this.tableConfigurations = new TableConfigurationDetails(catalogManager, tableManager);
     this.terminalController = new TerminalController(terminalManager);
     this.versionController = new VersionController();
     OverviewManager manager = new OverviewManager(serviceConfig);
@@ -246,6 +249,12 @@ public class DashboardServer {
 
   private EndpointGroup apiGroup() {
     return () -> {
+      // new fusion apis
+      get("/{catalog}/{db}/tables", tableConfigurations::getIcebergTables);
+      get("/{catalog}/{db}/{table}/config", tableConfigurations::getTableConfig);
+      get("/{catalog}/{db}/{table}/optimizing", tableConfigurations::getOptimizing);
+      put("/{catalog}/{db}/tables/config", tableConfigurations::updateConfigurations);
+
       // table apis
       path(
           "/tables",
