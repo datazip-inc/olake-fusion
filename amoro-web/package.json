@@ -32,7 +32,6 @@
     "@vitejs/plugin-vue": "^5.0.5",
     "eslint": "^9.4.0",
     "less": "4.2.0",
-    "mockjs": "^1.1.0",
     "monaco-editor": "^0.49.0",
     "qs": "^6.16.0",
     "sql-formatter": "^15.3.1",
@@ -60,10 +59,14 @@
       "svgo@2": "^2.8.4",
       "flatted": "^3.4.4",
       "browserslist": "^4.29.0",
-      "js-yaml@4": "4.3.2"
-    },
-    "patchedDependencies": {
-      "mockjs@1.1.0": "patches/mockjs@1.1.0.patch"
+      "js-yaml@4": "4.3.2",
+      "lodash@<4.18.0": "^4.18.1",
+      "minimatch@3": "^3.1.5",
+      "minimatch@7": "^7.4.9",
+      "minimatch@9": "^9.0.9",
+      "brace-expansion@1": "^1.1.21",
+      "brace-expansion@2": "^2.1.7",
+      "postcss@<8.5.18": "^8.5.28"
     }
   }
 }
