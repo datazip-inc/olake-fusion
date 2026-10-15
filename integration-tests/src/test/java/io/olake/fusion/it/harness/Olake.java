@@ -162,8 +162,8 @@ public final class Olake {
       Files.createDirectories(workDir);
       Map<String, String> values =
           Map.of("${SOURCE_DB}", database, "${SLOT}", slot, "${PUBLICATION}", publication);
-      render("olake/source.json.tmpl", "source.json", values);
-      render("olake/destination.json.tmpl", "destination.json", values);
+      render("olake/source.template.json", "source.json", values);
+      render("olake/destination.template.json", "destination.json", values);
     } catch (IOException e) {
       throw new UncheckedIOException(e);
     }
