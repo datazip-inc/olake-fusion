@@ -25,7 +25,6 @@ import org.apache.amoro.api.OptimizingTaskResult;
 import org.apache.amoro.log.OptimizingTaskLogContext;
 import org.apache.amoro.optimizer.common.OptimizerConfig;
 import org.apache.amoro.optimizer.common.OptimizerExecutor;
-import org.apache.logging.log4j.status.StatusLogger;
 import org.apache.spark.api.java.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,7 +35,6 @@ import org.slf4j.LoggerFactory;
  */
 public class SparkOptimizingTaskFunction implements Function<OptimizingTask, OptimizingTaskResult> {
   private static final Logger LOG = LoggerFactory.getLogger(SparkOptimizingTaskFunction.class);
-  private static final StatusLogger STATUS = StatusLogger.getLogger();
   private final OptimizerConfig config;
   private final int threadId;
 
@@ -54,7 +52,7 @@ public class SparkOptimizingTaskFunction implements Function<OptimizingTask, Opt
       SparkOptimizingLogRpcClient.get().bindDriverEndpoint();
     } catch (Exception e) {
       // Lines stay buffered (capped) and the next task retries the bind.
-      STATUS.warn("Failed to bind optimizing log RPC client to driver", e);
+      LOG.warn("Failed to bind optimizing log RPC client to driver", e);
     }
 
     // Ships this thread's logs to AMS as task lines (AMS writes <processId>/<taskId>.log).
@@ -69,7 +67,7 @@ public class SparkOptimizingTaskFunction implements Function<OptimizingTask, Opt
     } finally {
       // Wait (bounded) for this task's lines to be acknowledged by the driver before returning.
       if (!SparkOptimizingLogRpcClient.get().drain(SparkOptimizingLogRpcClient.DRAIN_TIMEOUT_MS)) {
-        STATUS.warn("Optimizing logs of task {} not yet delivered to driver", taskId);
+        LOG.warn("Optimizing logs of task {} not yet delivered to driver", taskId);
       }
       OptimizingTaskLogContext.clearContext();
     }

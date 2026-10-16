@@ -26,9 +26,7 @@ import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.databind.ObjectMapp
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -37,14 +35,9 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Stream;
 
 /**
  * AMS disk store for optimizing logs, and the only writer of them. Layout matches what {@code
@@ -58,8 +51,7 @@ import java.util.stream.Stream;
  * dashboard only sees the logs the serving node received, unless {@code LOG_DIR} is shared or logs
  * move to a central store.
  *
- * <p>Retention: a process directory with no file modified for {@code LOG_RETENTION_DAYS} (env,
- * default 7, 0 or less disables) is deleted by an hourly task.
+ * <p>AMS does not delete these logs; retention is handled by olake-worker.
  */
 public class OptimizingLogStore {
 
@@ -71,22 +63,17 @@ public class OptimizingLogStore {
 
   public static final String DRIVER_LOG_FILE = "driver.log";
   public static final String DEFAULT_LOG_DIR = "/mnt/amoro-logs/compaction";
-  static final int DEFAULT_RETENTION_DAYS = 7;
-  private static final long RETENTION_CHECK_INTERVAL_MS = TimeUnit.HOURS.toMillis(1);
   // Striped locks: writes to different files proceed in parallel, same-file writes stay whole.
   private static final int LOCK_STRIPES = 64;
 
   private static final OptimizingLogStore INSTANCE =
-      new OptimizingLogStore(envOrDefault("LOG_DIR", DEFAULT_LOG_DIR), retentionDaysFromEnv());
+      new OptimizingLogStore(envOrDefault("LOG_DIR", DEFAULT_LOG_DIR));
 
   private final String logBaseDir;
-  private final long retentionMs;
   private final Object[] locks = new Object[LOCK_STRIPES];
-  private ScheduledExecutorService retentionExecutor;
 
-  private OptimizingLogStore(String logBaseDir, int retentionDays) {
+  private OptimizingLogStore(String logBaseDir) {
     this.logBaseDir = logBaseDir;
-    this.retentionMs = TimeUnit.DAYS.toMillis(Math.max(0, retentionDays));
     for (int i = 0; i < LOCK_STRIPES; i++) {
       locks[i] = new Object();
     }
@@ -140,46 +127,6 @@ public class OptimizingLogStore {
     }
   }
 
-  public synchronized void startRetention() {
-    if (retentionMs <= 0 || retentionExecutor != null) {
-      return;
-    }
-    retentionExecutor =
-        Executors.newSingleThreadScheduledExecutor(
-            runnable -> {
-              Thread thread = new Thread(runnable, "amoro-optimizing-log-retention");
-              thread.setDaemon(true);
-              return thread;
-            });
-    retentionExecutor.scheduleWithFixedDelay(
-        this::deleteExpired, 0, RETENTION_CHECK_INTERVAL_MS, TimeUnit.MILLISECONDS);
-  }
-
-  public synchronized void stopRetention() {
-    if (retentionExecutor != null) {
-      retentionExecutor.shutdownNow();
-      retentionExecutor = null;
-    }
-  }
-
-  private void deleteExpired() {
-    Path baseDir = Paths.get(logBaseDir);
-    if (!Files.isDirectory(baseDir)) {
-      return;
-    }
-    long cutoff = System.currentTimeMillis() - retentionMs;
-    try (DirectoryStream<Path> processDirs =
-        Files.newDirectoryStream(baseDir, Files::isDirectory)) {
-      for (Path processDir : processDirs) {
-        if (lastModified(processDir) < cutoff) {
-          deleteRecursively(processDir);
-        }
-      }
-    } catch (Exception e) {
-      LOG.warn("Failed to clean up expired optimizing logs under {}", baseDir, e);
-    }
-  }
-
   private void write(Path path, StringBuilder content) {
     synchronized (locks[Math.floorMod(path.hashCode(), LOCK_STRIPES)]) {
       try {
@@ -210,38 +157,8 @@ public class OptimizingLogStore {
     return line.getTaskId() == null || line.getTaskId().getTaskId() == 0;
   }
 
-  private static long lastModified(Path dir) throws IOException {
-    long latest = Files.getLastModifiedTime(dir).toMillis();
-    try (Stream<Path> files = Files.list(dir)) {
-      for (Path file : (Iterable<Path>) files::iterator) {
-        latest = Math.max(latest, Files.getLastModifiedTime(file).toMillis());
-      }
-    }
-    return latest;
-  }
-
-  private static void deleteRecursively(Path dir) throws IOException {
-    try (Stream<Path> paths = Files.walk(dir)) {
-      paths.sorted(Comparator.reverseOrder()).forEach(p -> p.toFile().delete());
-    }
-    LOG.info("Deleted expired optimizing logs {}", dir);
-  }
-
   private static String envOrDefault(String key, String defaultValue) {
     String value = System.getenv(key);
     return value == null || value.isEmpty() ? defaultValue : value;
-  }
-
-  private static int retentionDaysFromEnv() {
-    String value = System.getenv("LOG_RETENTION_DAYS");
-    if (value == null || value.isEmpty()) {
-      return DEFAULT_RETENTION_DAYS;
-    }
-    try {
-      return Integer.parseInt(value.trim());
-    } catch (NumberFormatException e) {
-      LOG.warn("Invalid LOG_RETENTION_DAYS '{}', using {}", value, DEFAULT_RETENTION_DAYS);
-      return DEFAULT_RETENTION_DAYS;
-    }
   }
 }

@@ -440,7 +440,6 @@ public class DefaultOptimizingService extends StatedPersistentBase
     planExecutor.shutdown();
     // shutdown sync group first, stop syncing group
     optimizingConfigWatcher.dispose();
-    OptimizingLogStore.get().stopRetention();
     // dispose all queues
     optimizingQueueByGroup.values().forEach(OptimizingQueue::dispose);
     optimizerKeeper.dispose();
@@ -509,7 +508,6 @@ public class DefaultOptimizingService extends StatedPersistentBase
               .collect(Collectors.toList()));
       optimizerKeeper.start();
       optimizingConfigWatcher.start();
-      OptimizingLogStore.get().startRetention();
       LOG.info("SuspendingDetector for Optimizer has been started.");
       LOG.info("OptimizerManagementService initializing has completed");
     }

@@ -23,7 +23,6 @@ package org.apache.amoro.optimizer.spark;
 import org.apache.amoro.log.OptimizingLogEvent;
 import org.apache.amoro.log.OptimizingTaskLogContext;
 import org.apache.amoro.optimizer.common.OptimizingLogBuffer;
-import org.apache.logging.log4j.status.StatusLogger;
 import org.apache.spark.SparkEnv;
 import org.apache.spark.rpc.RpcAddress;
 import org.apache.spark.rpc.RpcEndpointRef;
@@ -46,17 +45,19 @@ import java.util.concurrent.locks.ReentrantLock;
  * it goes back to the head of the buffer and is retried on the next flush. Delivery is
  * at-least-once: a batch whose ack times out after the driver accepted it is sent again.
  *
- * <p>Uses Log4j2 {@link StatusLogger} for its own warnings, because this class runs inside a Log4j2
- * appender and must not log through it.
+ * <p>Prints its own warnings to {@code System.err}, because this class runs inside a Log4j2
+ * appender and must not log through it; Log4j2's {@link
+ * org.apache.logging.log4j.status.StatusLogger} prints only ERROR by default, which would make
+ * these warnings invisible on the executor console.
  */
 public class SparkOptimizingLogRpcClient {
-
-  private static final StatusLogger STATUS = StatusLogger.getLogger();
 
   static final long FLUSH_INTERVAL_MS = 200L;
   static final long ASK_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(5);
   // Max time a task waits at its end for its lines to reach the driver.
   static final long DRAIN_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(10);
+  // Short bounded wait for an ERROR line's ack, so logging an error never stalls the task long.
+  static final long ERROR_FLUSH_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(2);
   static final long MAX_BATCH_BYTES = 1024L * 1024L;
   static final long MAX_BUFFER_BYTES = 16L * 1024L * 1024L;
 
@@ -180,15 +181,14 @@ public class SparkOptimizingLogRpcClient {
       try {
         ref.askSync(new SparkOptimizingLogSupport.LogBatch(batch), askTimeout, ACK_TAG);
         if (failing) {
-          STATUS.info("Resumed sending optimizing logs to driver");
+          System.err.println("Resumed sending optimizing logs to driver");
           failing = false;
         }
       } catch (Throwable t) {
         buffer.requeue(batch);
         if (!failing) {
-          STATUS.warn(
-              "Failed to send optimizing logs to driver; keeping them buffered: {}",
-              t.getMessage());
+          System.err.println(
+              "Failed to send optimizing logs to driver; keeping them buffered: " + t.getMessage());
           failing = true;
         }
         return false;

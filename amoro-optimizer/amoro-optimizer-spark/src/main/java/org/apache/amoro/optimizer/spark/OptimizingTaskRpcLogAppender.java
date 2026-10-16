@@ -22,6 +22,7 @@ package org.apache.amoro.optimizer.spark;
 
 import org.apache.amoro.log.OptimizingLogEvent;
 import org.apache.amoro.log.OptimizingTaskLogContext;
+import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.Appender;
 import org.apache.logging.log4j.core.Filter;
@@ -118,11 +119,22 @@ public class OptimizingTaskRpcLogAppender extends AbstractAppender {
         parseLong(event.getContextData().getValue(OptimizingTaskLogContext.PROCESS_ID_KEY));
     int taskId = parseInt(event.getContextData().getValue(OptimizingTaskLogContext.TASK_ID_KEY));
     OptimizingLogEvent logEvent = new OptimizingLogEvent(processId, taskId, ndjson);
+    // Buffered sends (200ms on executors, 1s on the driver) can lose an ERROR line if the pod is
+    // OOM-killed or the driver exits via -XX:+ExitOnOutOfMemoryError before the next flush, often
+    // losing the error itself. Send ERROR lines right away and wait briefly for the ack.
+    boolean isError = event.getLevel() != null && event.getLevel().isMoreSpecificThan(Level.ERROR);
     OptimizingLogCollector collector = OptimizingLogCollector.getIfInitialized();
     if (collector != null) {
       collector.accept(logEvent);
+      if (isError) {
+        collector.flushNow();
+      }
     } else {
-      SparkOptimizingLogRpcClient.get().add(logEvent);
+      SparkOptimizingLogRpcClient client = SparkOptimizingLogRpcClient.get();
+      client.add(logEvent);
+      if (isError) {
+        client.drain(SparkOptimizingLogRpcClient.ERROR_FLUSH_TIMEOUT_MS);
+      }
     }
   }
 

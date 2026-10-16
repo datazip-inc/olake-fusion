@@ -59,4 +59,9 @@ public class OptimizingLogCollector {
     }
     batcher.offer(event);
   }
+
+  /** Sends what is buffered now, bounded by a single Thrift call. Used for ERROR lines. */
+  public void flushNow() {
+    batcher.flush();
+  }
 }

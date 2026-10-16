@@ -25,6 +25,7 @@ import org.apache.amoro.api.OptimizingTaskResult;
 import org.apache.amoro.log.OptimizingTaskLogContext;
 import org.apache.amoro.optimizer.common.OptimizerConfig;
 import org.apache.amoro.optimizer.common.OptimizerExecutor;
+import org.apache.amoro.optimizer.common.OptimizingLogBatcher;
 import org.apache.amoro.optimizing.RewriteFilesInput;
 import org.apache.amoro.optimizing.TableOptimizing;
 import org.apache.amoro.shade.guava32.com.google.common.collect.ImmutableList;
@@ -86,6 +87,11 @@ public class SparkOptimizerExecutor extends OptimizerExecutor {
       result.setErrorMessage(ExceptionUtil.getErrorMessage(r, ERROR_MESSAGE_MAX_LENGTH));
       return result;
     } finally {
+      // The driver's own lines (above) are still buffered for up to FLUSH_INTERVAL_MS; flush them
+      // now so a failure's summary line reaches AMS before the result does, not after.
+      if (OptimizingLogBatcher.isInitialized()) {
+        OptimizingLogBatcher.get().flush();
+      }
       OptimizingTaskLogContext.clearContext();
     }
   }
