@@ -54,6 +54,7 @@ import org.apache.amoro.server.resource.QuotaProvider;
 import org.apache.amoro.server.table.DefaultTableRuntime;
 import org.apache.amoro.server.table.RuntimeHandlerChain;
 import org.apache.amoro.server.table.TableService;
+import org.apache.amoro.server.utils.Telemetry;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Sets;
 import org.apache.amoro.shade.guava32.com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -76,6 +77,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -104,6 +106,9 @@ public class DefaultOptimizingService extends StatedPersistentBase
   private final Map<String, OptimizingQueue> optimizingQueueByToken = new ConcurrentHashMap<>();
   private final Map<String, OptimizerInstance> authOptimizers = new ConcurrentHashMap<>();
   private final OptimizerKeeper optimizerKeeper = new OptimizerKeeper();
+  /** "Installed Fusion" describes the deployment, so it is reported once per AMS process. */
+  private final AtomicBoolean fusionInstallTracked = new AtomicBoolean(false);
+
   private final OptimizingConfigWatcher optimizingConfigWatcher = new OptimizingConfigWatcher();
   private final CatalogManager catalogManager;
   private final OptimizerManager optimizerManager;
@@ -167,6 +172,9 @@ public class DefaultOptimizingService extends StatedPersistentBase
           optimizingQueueByGroup.put(groupName, optimizingQueue);
         });
     optimizers.forEach(optimizer -> registerOptimizer(optimizer, false));
+    if (!optimizers.isEmpty()) {
+      trackInstalledFusion();
+    }
     groupToTableRuntimes
         .keySet()
         .forEach(groupName -> LOG.warn("Unloaded task runtime in group {}", groupName));
@@ -182,6 +190,21 @@ public class DefaultOptimizingService extends StatedPersistentBase
     authOptimizers.put(optimizer.getToken(), optimizer);
     optimizingQueueByToken.put(optimizer.getToken(), optimizingQueue);
     optimizerKeeper.keepInTouch(optimizer);
+    AmoroServiceContainer.updateSparkConfig(optimizer.getProperties());
+    if (needPersistent) {
+      // A newly authenticated optimizer is the first sign of life on a fresh install, where the
+      // restore above had nothing to load.
+      trackInstalledFusion();
+    }
+  }
+
+  private void trackInstalledFusion() {
+    if (!fusionInstallTracked.compareAndSet(false, true)) {
+      return;
+    }
+    int parallelism =
+        authOptimizers.values().stream().mapToInt(OptimizerInstance::getThreadCount).sum();
+    Telemetry.getInstance().trackInstalledFusion(parallelism);
   }
 
   private void unregisterOptimizer(String token) {
@@ -266,9 +289,69 @@ public class DefaultOptimizingService extends StatedPersistentBase
             });
 
     OptimizingQueue queue = getQueueByGroup(registerInfo.getGroupName());
+    retireUntaggedRegistrations(registerInfo);
+    // An optimizer that Kubernetes restarted registers again under the same resource id. Retire
+    // the registration of the process it replaces, so that one optimizer never holds two entries.
+    // NOTE: For multioptimizers we might need to remove it
+    retirePreviousRegistrations(registerInfo.getResourceId());
     OptimizerInstance optimizer = new OptimizerInstance(registerInfo, queue.getContainerName());
     registerOptimizer(optimizer, true);
     return optimizer.getToken();
+  }
+
+  // tagged optimizer :
+  //      - optimizer created in the current Fusion release, accept.
+  //      - release all optimizers present if a tagged optimizer is trying to authenticate
+  // un-tagged optimizer :
+  //      - optimzier created from an older Fusion release, accept only when no optimizers exist
+  private void retireUntaggedRegistrations(OptimizerRegisterInfo registerInfo) {
+    List<OptimizerInstance> groupOptimizers =
+        authOptimizers.values().stream()
+            .filter(optimizer -> optimizer.getGroupName().equals(registerInfo.getGroupName()))
+            .collect(Collectors.toList());
+    if (!isTagged(registerInfo.getProperties())) {
+      if (groupOptimizers.stream().anyMatch(optimizer -> isTagged(optimizer.getProperties()))) {
+        // the optimizer will auto-kill itself on this exception
+        throw new ForbiddenException(
+            String.format(
+                "Optimizer %s has no %s, and a tagged optimizer is registered in group %s",
+                registerInfo.getResourceId(),
+                OptimizerProperties.OPTIMIZER_TAG,
+                registerInfo.getGroupName()));
+      }
+      return;
+    }
+    groupOptimizers.stream()
+        .filter(optimizer -> !isTagged(optimizer.getProperties()))
+        .forEach(
+            untagged -> {
+              LOG.info(
+                  "Retiring registration {} of untagged optimizer {}, replaced by optimizer {}",
+                  untagged.getToken(),
+                  untagged.getResourceId(),
+                  registerInfo.getResourceId());
+              unregisterOptimizer(untagged.getToken());
+            });
+  }
+
+  private static boolean isTagged(Map<String, String> properties) {
+    return properties != null
+        && StringUtils.isNotBlank(properties.get(OptimizerProperties.OPTIMIZER_TAG));
+  }
+
+  private void retirePreviousRegistrations(String resourceId) {
+    if (StringUtils.isBlank(resourceId)) {
+      return;
+    }
+    getAs(OptimizerMapper.class, mapper -> mapper.selectByResourceId(resourceId))
+        .forEach(
+            previous -> {
+              LOG.info(
+                  "Retiring registration {} of optimizer {}, which has registered again",
+                  previous.getToken(),
+                  resourceId);
+              unregisterOptimizer(previous.getToken());
+            });
   }
 
   @Override

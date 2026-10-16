@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server;
@@ -32,6 +34,7 @@ import org.apache.amoro.config.ConfigurationException;
 import org.apache.amoro.config.Configurations;
 import org.apache.amoro.config.shade.utils.ConfigShadeUtils;
 import org.apache.amoro.exception.AmoroRuntimeException;
+import org.apache.amoro.server.bootstrap.OptimizerBootstrap;
 import org.apache.amoro.server.catalog.CatalogManager;
 import org.apache.amoro.server.catalog.DefaultCatalogManager;
 import org.apache.amoro.server.dashboard.DashboardServer;
@@ -59,6 +62,7 @@ import org.apache.amoro.server.table.TableManager;
 import org.apache.amoro.server.table.TableRuntimeFactoryManager;
 import org.apache.amoro.server.table.TableService;
 import org.apache.amoro.server.terminal.TerminalManager;
+import org.apache.amoro.server.utils.Telemetry;
 import org.apache.amoro.server.utils.ThriftServiceProxy;
 import org.apache.amoro.shade.guava32.com.google.common.annotations.VisibleForTesting;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Maps;
@@ -89,6 +93,7 @@ import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -103,6 +108,10 @@ public class AmoroServiceContainer {
 
   public static final String SERVER_CONFIG_FILENAME = "config.yaml";
   private static boolean IS_MASTER_SLAVE_MODE = false;
+  private static volatile Map<String, Object> SPARK_CONFIG = Map.of();
+  private static final String NOT_AVAILABLE = "NA";
+  private static final String SPARK_CONTAINER_IMPL =
+      "org.apache.amoro.server.manager.SparkOptimizerContainer";
 
   private final HighAvailabilityContainer haContainer;
   private DataSource dataSource;
@@ -258,6 +267,7 @@ public class AmoroServiceContainer {
     LOG.info("AMS table service have been initialized");
     tableManager.setTableService(tableService);
 
+    new OptimizerBootstrap(serviceConfig, optimizerManager, optimizingService).run();
     initThriftService();
     startThriftService();
   }
@@ -325,10 +335,45 @@ public class AmoroServiceContainer {
     LOG.info("initializing configurations...");
     new ConfigurationHelper().init();
     IS_MASTER_SLAVE_MODE = serviceConfig.getBoolean(USE_MASTER_SLAVE_MODE);
+    Telemetry.configure(serviceConfig.getBoolean(AmoroManagementConf.TELEMETRY_DISABLED));
   }
 
   public Configurations getServiceConfig() {
     return serviceConfig;
+  }
+
+  public static Map<String, Object> getSparkConfig() {
+    return SPARK_CONFIG;
+  }
+
+  // A Spark optimizer reports its Spark settings when it registers. They replace those of a
+  // configured Spark optimizer container, and are the only source when Kubernetes deploys the
+  // optimizer.
+  static void updateSparkConfig(Map<String, String> optimizerProperties) {
+    if (optimizerProperties != null
+        && optimizerProperties.containsKey(OptimizerProperties.SPARK_DRIVER_MEMORY)) {
+      SPARK_CONFIG = resolveSparkConfig(optimizerProperties, "");
+    }
+  }
+
+  private static Map<String, Object> resolveSparkConfig(
+      Map<String, String> sparkProperties, String keyPrefix) {
+    Map<String, String> properties =
+        sparkProperties == null ? Collections.emptyMap() : sparkProperties;
+    Map<String, Object> sparkConfigMap = new HashMap<>();
+    sparkConfigMap.put(
+        "spark_driver_memory",
+        properties.getOrDefault(
+            keyPrefix + OptimizerProperties.SPARK_DRIVER_MEMORY, NOT_AVAILABLE));
+    sparkConfigMap.put(
+        "spark_executor_memory",
+        properties.getOrDefault(
+            keyPrefix + OptimizerProperties.SPARK_EXECUTOR_MEMORY, NOT_AVAILABLE));
+    sparkConfigMap.put(
+        "spark_executor_cores",
+        properties.getOrDefault(
+            keyPrefix + OptimizerProperties.SPARK_EXECUTOR_CORES, NOT_AVAILABLE));
+    return Collections.unmodifiableMap(sparkConfigMap);
   }
 
   private void startThriftService() {
@@ -524,6 +569,7 @@ public class AmoroServiceContainer {
   private class ConfigurationHelper {
 
     private JsonNode yamlConfig;
+    private Map<String, String> sparkContainerProperties;
 
     public void init() throws Exception {
       Map<String, Object> envConfig = initEnvConfig();
@@ -611,7 +657,18 @@ public class AmoroServiceContainer {
           // put addition system properties
           container.setProperties(containerProperties);
           containerList.add(container);
+          if (SPARK_CONTAINER_IMPL.equals(container.getImplClass())) {
+            if (sparkContainerProperties != null) {
+              LOG.warn(
+                  "Multiple Spark optimizer containers configured, telemetry reports the last one");
+            }
+            sparkContainerProperties = containerProperties;
+          }
         }
+      }
+      if (sparkContainerProperties != null) {
+        AmoroServiceContainer.SPARK_CONFIG =
+            resolveSparkConfig(sparkContainerProperties, "spark-conf.");
       }
       Containers.init(containerList);
     }

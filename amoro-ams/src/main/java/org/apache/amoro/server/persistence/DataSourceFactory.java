@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.persistence;
@@ -76,6 +78,7 @@ public class DataSourceFactory {
         BaseObjectPoolConfig.DEFAULT_SOFT_MIN_EVICTABLE_IDLE_TIME.toMillis());
     dataSource.setLifo(BaseObjectPoolConfig.DEFAULT_LIFO);
     createTablesIfNeed(dataSource, config);
+    SchemaMigrator.migrate(dataSource, config);
     return dataSource;
   }
 

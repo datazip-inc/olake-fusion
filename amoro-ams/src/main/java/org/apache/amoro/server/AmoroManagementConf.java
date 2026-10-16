@@ -64,6 +64,14 @@ public class AmoroManagementConf {
               "This setting controls whether to enable the AMS horizontal scaling feature, "
                   + "which is currently under development and testing.");
 
+  public static final ConfigOption<Boolean> TELEMETRY_DISABLED =
+      ConfigOptions.key("telemetry.disabled")
+          .booleanType()
+          .defaultValue(false)
+          .withDescription(
+              "Whether anonymous usage telemetry is turned off. Telemetry is also off when the "
+                  + "TELEMETRY_DISABLED=true environment variable is set.");
+
   public static final ConfigOption<Duration> CATALOG_META_CACHE_EXPIRATION_INTERVAL =
       ConfigOptions.key("catalog-meta-cache.expiration-interval")
           .durationType()
@@ -516,6 +524,9 @@ public class AmoroManagementConf {
           .durationType()
           .defaultValue(Duration.ofSeconds(3))
           .withDescription("Optimizer polling task timeout.");
+
+  public static final ConfigOption<String> OPTIMIZER_BOOTSTRAP_GROUP_NAME =
+      ConfigOptions.key("optimizer.bootstrap.group-name").stringType().noDefaultValue();
 
   public static final ConfigOption<Duration> OPTIMIZING_REFRESH_GROUP_INTERVAL =
       ConfigOptions.key("self-optimizing.refresh-group-interval")

@@ -53,6 +53,7 @@ import org.apache.amoro.server.dashboard.controller.OverviewController;
 import org.apache.amoro.server.dashboard.controller.PlatformFileInfoController;
 import org.apache.amoro.server.dashboard.controller.SettingController;
 import org.apache.amoro.server.dashboard.controller.TableController;
+import org.apache.amoro.server.dashboard.controller.TelemetryController;
 import org.apache.amoro.server.dashboard.controller.TerminalController;
 import org.apache.amoro.server.dashboard.controller.VersionController;
 import org.apache.amoro.server.dashboard.response.ErrorResponse;
@@ -94,6 +95,7 @@ public class DashboardServer {
   private final OverviewController overviewController;
   private final ApiTokenController apiTokenController;
   private final LogController logController;
+  private final TelemetryController telemetryController;
 
   private final PasswdAuthenticationProvider basicAuthProvider;
   private final TokenAuthenticationProvider jwtAuthProvider;
@@ -125,6 +127,7 @@ public class DashboardServer {
     APITokenManager apiTokenManager = new APITokenManager();
     this.apiTokenController = new ApiTokenController(apiTokenManager);
     this.logController = new LogController();
+    this.telemetryController = new TelemetryController();
 
     String authType = serviceConfig.get(AmoroManagementConf.HTTP_SERVER_REST_AUTH_TYPE);
     this.basicAuthProvider =
@@ -366,6 +369,9 @@ public class DashboardServer {
             post("", platformFileInfoController::uploadFile);
             get("/{fileId}", platformFileInfoController::downloadFile);
           });
+
+      // telemetry apis
+      path("/telemetry", () -> put("/install-id", telemetryController::setInstallId));
 
       // setting apis
       path(
