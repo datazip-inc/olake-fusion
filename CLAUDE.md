@@ -70,10 +70,10 @@ Fusion is deployed together with OLake-UI, in one of two modes:
 
 | Repo | Local path | Role |
 | --- | --- | --- |
-| OLake-UI | `<path>` | Product UI for Fusion. Its Go backend sits between the UI and Fusion: Its `docker-compose-v1.yml` is also the Docker deployment of Fusion. |
-| OLake-Helm | `<path>` | Helm deployment of Fusion |
-| Iceberg | `<path>` | Apache Iceberg Java source |
-| OLake | `<path>` | Ingestion; writes the Iceberg tables Fusion maintains |
+| OLake-UI | `~/workrepos/olake-ui` | Product UI for Fusion. Its Go backend sits between the UI and Fusion: Its `docker-compose-v1.yml` is also the Docker deployment of Fusion. |
+| OLake-Helm | `~/workrepos/helm` | Helm deployment of Fusion |
+| Iceberg | `~/workrepos/iceberg` | Apache Iceberg Java source |
+| OLake | `~/workrepos/olake` | Ingestion; writes the Iceberg tables Fusion maintains |
 
 - If you change a Fusion REST endpoint's path, request or response, grep OLake-UI for its callers
   and report what would break.

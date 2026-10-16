@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.dashboard;
@@ -31,6 +33,7 @@ import org.apache.amoro.catalog.BasicCatalogTestHelper;
 import org.apache.amoro.catalog.CatalogTestHelper;
 import org.apache.amoro.io.MixedDataTestHelpers;
 import org.apache.amoro.server.dashboard.model.OverviewTopTableItem;
+import org.apache.amoro.server.scheduler.inline.TableHealthScoreExecutor;
 import org.apache.amoro.server.scheduler.inline.TableRuntimeRefreshExecutor;
 import org.apache.amoro.server.table.AMSTableTestBase;
 import org.apache.amoro.server.table.DefaultTableRuntime;
@@ -108,9 +111,13 @@ public class TestOverviewManager extends AMSTableTestBase {
 
   void refreshPending() {
     TableRuntimeRefreshExecutor refresher =
-        new TableRuntimeRefreshExecutor(tableService(), 1, Integer.MAX_VALUE, Integer.MAX_VALUE);
+        new TableRuntimeRefreshExecutor(tableService(), 1, Integer.MAX_VALUE);
     refresher.execute(getDefaultTableRuntime(serverTableIdentifier().getId()));
     refresher.dispose();
+    TableHealthScoreExecutor healthScorer =
+        new TableHealthScoreExecutor(tableService(), 1, Integer.MAX_VALUE);
+    healthScorer.execute(getDefaultTableRuntime(serverTableIdentifier().getId()));
+    healthScorer.dispose();
   }
 
   @Test

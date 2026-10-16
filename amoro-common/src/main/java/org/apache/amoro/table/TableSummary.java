@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.table;
@@ -28,6 +30,8 @@ public class TableSummary {
   private int positionalDeleteScore = 0;
   private long pendingFileSize = 0L;
   private int pendingFileCount = 0;
+  // the snapshot the health score was calculated on, -1 means not calculated
+  private long healthScoreSnapshotId = -1L;
 
   public TableSummary copy() {
     TableSummary summary = new TableSummary();
@@ -39,6 +43,7 @@ public class TableSummary {
     summary.setPositionalDeleteScore(this.positionalDeleteScore);
     summary.setPendingFileSize(this.pendingFileSize);
     summary.setPendingFileCount(this.pendingFileCount);
+    summary.setHealthScoreSnapshotId(this.healthScoreSnapshotId);
     return summary;
   }
 
@@ -104,5 +109,13 @@ public class TableSummary {
 
   public void setPendingFileCount(int pendingFileCount) {
     this.pendingFileCount = pendingFileCount;
+  }
+
+  public long getHealthScoreSnapshotId() {
+    return healthScoreSnapshotId;
+  }
+
+  public void setHealthScoreSnapshotId(long healthScoreSnapshotId) {
+    this.healthScoreSnapshotId = healthScoreSnapshotId;
   }
 }
