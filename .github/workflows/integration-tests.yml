@@ -17,6 +17,7 @@
 # Modified by Datazip Inc. in 2026
 
 # Fusion integration tests (integration-tests/) against images built from this commit.
+# (dummy change to trigger CI)
 # Two jobs, so a failure points at the stage that broke:
 #   setup              Maven builds the Fusion distribution, the Spark optimizer job and the
 #                      test sources (`make it-build`) and hands the artifacts to the next job.
