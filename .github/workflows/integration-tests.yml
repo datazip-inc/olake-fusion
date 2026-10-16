@@ -1,0 +1,130 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Modified by Datazip Inc. in 2026
+
+# Fusion integration tests (integration-tests/) against images built from this commit.
+# Two jobs, so a failure points at the stage that broke:
+#   setup              Maven builds the Fusion distribution, the Spark optimizer job and the
+#                      test sources (`make it-build`) and hands the artifacts to the next job.
+#   integration-tests  Builds the images from those artifacts (`make it-images`) and runs the
+#                      suite against them (`make it`), the same entry point developers run.
+
+name: Integration Tests
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches:
+      - master
+      - staging
+  pull_request:
+    branches:
+      - master
+      - staging
+    paths:
+      - '**/*.java'
+      - '**/*.scala'
+      - '**/pom.xml'
+      - '**/Dockerfile*'
+      - '**/src/main/resources/**'
+      - 'dist/**'
+      - 'docker/**'
+      - 'integration-tests/**'
+      - '.github/workflows/integration-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  setup:
+    name: Build Fusion, optimizer and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build distribution, optimizer job and test sources
+        run: make -C integration-tests it-build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: fusion-build
+          path: |
+            dist/target/*-bin.tar.gz
+            amoro-optimizer/amoro-optimizer-spark/target/*-jar-with-dependencies.jar
+          retention-days: 1
+          if-no-files-found: error
+
+  integration-tests:
+    name: Run integration tests
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      # Restores dist/target and amoro-optimizer/.../target, where the Dockerfiles expect them.
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: fusion-build
+
+      - name: Build images
+        timeout-minutes: 20
+        run: make -C integration-tests it-images
+
+      - name: Run integration tests
+        env:
+          FUSION_IMAGE: fusion:it
+          FUSION_SPARK_IMAGE: fusion-spark:it
+          IT_RUN_ID: ${{ github.run_id }}
+        run: make -C integration-tests it
+
+      - name: Upload logs and test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-logs
+          path: |
+            integration-tests/target/it-logs
+            integration-tests/target/failsafe-reports
+          retention-days: 7
+
+      - name: Stop stack
+        if: always()
+        run: make -C integration-tests it-down

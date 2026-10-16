@@ -1,0 +1,80 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Modified by Datazip Inc. in 2026
+
+# Only the keys the integration tests change. scripts/render-config.sh merges this
+# file over the shipped dist/src/main/amoro-bin/conf/config.yaml, so every other key
+# keeps its shipped value. Lists (containers) are replaced, not merged.
+
+ams:
+  admin-password: password
+  server-expose-host: "10.210.40.10"
+  telemetry:
+    disabled: true
+  # Fast discovery of new tables and catalog changes.
+  refresh-external-catalogs:
+    interval: 10s
+  refresh-tables:
+    interval: 15s
+  optimizer:
+    heart-beat-timeout: 30s
+  catalog-meta-cache:
+    expiration-interval: 10s
+  # Health score on /overview/top is served from this cache.
+  overview-cache:
+    refresh-interval: 10s
+  database:
+    url: jdbc:postgresql://postgres:5432/iceberg
+    username: iceberg
+    password: password
+
+containers:
+  - name: sparkContainer
+    container-impl: org.apache.amoro.server.manager.SparkOptimizerContainer
+    properties:
+      spark-home: /opt/spark/
+      master: k8s://https://fusion-it-cluster-control-plane:6443
+      deploy-mode: cluster
+      job-uri: "local:///opt/spark/usrlib/optimizer-job.jar"
+      export.HADOOP_USER_NAME: spark
+      export.SPARK_CONF_DIR: /opt/spark/conf/
+      spark-conf.spark.kubernetes.container.image: "fusion-spark:it"
+      spark-conf.spark.kubernetes.container.image.pullPolicy: "IfNotPresent"
+      spark-conf.spark.kubernetes.namespace: spark
+      spark-conf.spark.kubernetes.authenticate.driver.serviceAccountName: spark
+      spark-conf.spark.kubernetes.authenticate.executor.serviceAccountName: spark
+      spark-conf.spark.dynamicAllocation.enabled: "true"
+      spark-conf.spark.shuffle.service.enabled: "false"
+      spark-conf.spark.dynamicAllocation.shuffleTracking.enabled: "true"
+      spark-conf.spark.driver.memory: "1g"
+      spark-conf.spark.executor.memory: "1g"
+      spark-conf.spark.executor.cores: "1"
+      spark-conf.spark.executor.maxNumFailures: "2147483647"
+      spark-conf.spark.executor.failuresValidityInterval: "10ms"
+      spark-conf.spark.task.maxFailures: "4"
+      spark-conf.spark.kubernetes.driver.secretKeyRef.AWS_ACCESS_KEY_ID: "fusion-s3-credentials:access-key-id"
+      spark-conf.spark.kubernetes.driver.secretKeyRef.AWS_SECRET_ACCESS_KEY: "fusion-s3-credentials:secret-access-key"
+      spark-conf.spark.kubernetes.executor.secretKeyRef.AWS_ACCESS_KEY_ID: "fusion-s3-credentials:access-key-id"
+      spark-conf.spark.kubernetes.executor.secretKeyRef.AWS_SECRET_ACCESS_KEY: "fusion-s3-credentials:secret-access-key"
+      spark-conf.spark.kubernetes.driver.volumes.hostPath.amoro-logs.mount.path: "/mnt/amoro-logs"
+      spark-conf.spark.kubernetes.driver.volumes.hostPath.amoro-logs.mount.readOnly: "false"
+      spark-conf.spark.kubernetes.driver.volumes.hostPath.amoro-logs.options.path: "/mnt/amoro-logs"
+      spark-conf.spark.kubernetes.executor.volumes.hostPath.amoro-logs.mount.path: "/mnt/amoro-logs"
+      spark-conf.spark.kubernetes.executor.volumes.hostPath.amoro-logs.mount.readOnly: "false"
+      spark-conf.spark.kubernetes.executor.volumes.hostPath.amoro-logs.options.path: "/mnt/amoro-logs"
+      spark-conf.spark.driver.extraJavaOptions: "-Dlog4j2.configurationFile=file:///opt/spark/conf/log4j2.xml"
+      spark-conf.spark.executor.extraJavaOptions: "-Dlog4j2.configurationFile=file:///opt/spark/conf/log4j2.xml"
