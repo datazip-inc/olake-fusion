@@ -35,7 +35,6 @@ import io.olake.fusion.it.harness.Fusion;
 import io.olake.fusion.it.harness.SizeClass;
 import io.olake.fusion.it.harness.SparkTable;
 import io.olake.fusion.it.harness.SparkTable.FileInfo;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -193,22 +192,20 @@ class FusionIT extends ItBase {
 
   // Health score: partitioned
 
+  /**
+   * The score scales its penalties by the table's file count and size, so fragments alone keep a
+   * table this small at 98-100; undersized segments bring it to about 90. A snapshot scored
+   * mid-setup can still be at 100, so the first wait is for a score below 100.
+   */
   @Test
-  @Disabled("health score is not implemented yet; Fusion serves -1")
   void healthScoreImprovesAfterFull() {
-    TestTable t = TestTable.spark("health", true);
-    regions(t)
-        .forEach(
-            r -> {
-              t.append(r, SizeClass.FRAGMENT, 3);
-              t.deleteRows(r);
-            });
+    TestTable t = eligibleForAllTypes("health");
     long before =
         Await.until(
-            "a health score for " + t.table.ident(),
+            "a health score below 100 for " + t.table.ident(),
             Duration.ofMinutes(3),
             () -> fusion.healthScore(t.table.namespace(), t.table.name()),
-            score -> score >= 0);
+            score -> score >= 0 && score < 100);
 
     assertProcess(optimize(t, FULL), FULL, SUCCESS);
     Await.until(
