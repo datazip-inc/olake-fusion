@@ -22,10 +22,11 @@ package org.apache.amoro.server.optimizing;
 
 import org.apache.amoro.api.OptimizingLogLine;
 import org.apache.amoro.api.OptimizingTaskId;
+import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.core.JsonProcessingException;
 import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -55,7 +56,6 @@ import java.util.Map;
  */
 public class OptimizingLogStore {
 
-  private static final Logger LOG = LoggerFactory.getLogger(OptimizingLogStore.class);
   private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
   // Same time format as the optimizer's JSON log lines.
   private static final DateTimeFormatter DRIVER_LOG_TIME_FORMAT =
@@ -63,20 +63,17 @@ public class OptimizingLogStore {
 
   public static final String DRIVER_LOG_FILE = "driver.log";
   public static final String DEFAULT_LOG_DIR = "/mnt/amoro-logs/compaction";
-  // Striped locks: writes to different files proceed in parallel, same-file writes stay whole.
-  private static final int LOCK_STRIPES = 64;
 
   private static final OptimizingLogStore INSTANCE =
       new OptimizingLogStore(envOrDefault("LOG_DIR", DEFAULT_LOG_DIR));
 
   private final String logBaseDir;
-  private final Object[] locks = new Object[LOCK_STRIPES];
+  // driver.log is the only file with more than one writer (the optimizer and AMS itself both
+  // append to it); every other file has a single writer. One lock is enough for either case.
+  private final Object lock = new Object();
 
   private OptimizingLogStore(String logBaseDir) {
     this.logBaseDir = logBaseDir;
-    for (int i = 0; i < LOCK_STRIPES; i++) {
-      locks[i] = new Object();
-    }
   }
 
   public static OptimizingLogStore get() {
@@ -107,28 +104,38 @@ public class OptimizingLogStore {
     contentByPath.forEach(this::write);
   }
 
-  /** Appends a line written by AMS itself (not by the optimizer) to the process driver.log. */
+  /**
+   * Appends a line written by AMS itself (not by the optimizer) to the process driver.log.
+   *
+   * @throws UncheckedIOException if the entry cannot be serialized or persisted; we cannot afford
+   *     to silently drop a log line, so the caller sees the failure.
+   */
   public void appendDriverEntry(long processId, String level, String message, String stackTrace) {
+    Map<String, String> logEntry = new LinkedHashMap<>();
+    logEntry.put("level", level);
+    logEntry.put("time", DRIVER_LOG_TIME_FORMAT.format(Instant.now()));
+    logEntry.put("processId", String.valueOf(processId));
+    logEntry.put("taskId", "");
+    logEntry.put("logger", "");
+    logEntry.put("message", message);
+    logEntry.put("stackTrace", stackTrace == null ? "" : stackTrace);
+    String ndjson;
     try {
-      Map<String, String> logEntry = new LinkedHashMap<>();
-      logEntry.put("level", level);
-      logEntry.put("time", DRIVER_LOG_TIME_FORMAT.format(Instant.now()));
-      logEntry.put("processId", String.valueOf(processId));
-      logEntry.put("taskId", "");
-      logEntry.put("logger", "");
-      logEntry.put("message", message);
-      logEntry.put("stackTrace", stackTrace == null ? "" : stackTrace);
-      OptimizingLogLine line =
-          new OptimizingLogLine(
-              new OptimizingTaskId(processId, 0), OBJECT_MAPPER.writeValueAsString(logEntry));
-      append(Collections.singletonList(line));
-    } catch (Exception e) {
-      LOG.warn("Failed to append {} entry to driver log for process {}", level, processId, e);
+      ndjson = OBJECT_MAPPER.writeValueAsString(logEntry);
+    } catch (JsonProcessingException e) {
+      throw new UncheckedIOException(
+          "Failed to serialize " + level + " entry for driver log of process " + processId, e);
     }
+    OptimizingLogLine line = new OptimizingLogLine(new OptimizingTaskId(processId, 0), ndjson);
+    append(Collections.singletonList(line));
   }
 
+  /**
+   * @throws UncheckedIOException if the lines cannot be persisted; we cannot afford to silently
+   *     drop a log line, so the caller sees the failure.
+   */
   private void write(Path path, StringBuilder content) {
-    synchronized (locks[Math.floorMod(path.hashCode(), LOCK_STRIPES)]) {
+    synchronized (lock) {
       try {
         Files.createDirectories(path.getParent());
         Files.write(
@@ -136,25 +143,25 @@ public class OptimizingLogStore {
             content.toString().getBytes(StandardCharsets.UTF_8),
             StandardOpenOption.CREATE,
             StandardOpenOption.APPEND);
-      } catch (Exception e) {
-        LOG.warn("Failed to persist optimizing log lines to {}", path, e);
+      } catch (IOException e) {
+        throw new UncheckedIOException("Failed to persist optimizing log lines to " + path, e);
       }
     }
   }
 
   private Path resolvePath(OptimizingLogLine line) {
     OptimizingTaskId taskId = line.getTaskId();
-    long processId = taskId == null ? 0L : taskId.getProcessId();
-    Path processDir = Paths.get(logBaseDir, String.valueOf(processId));
+    Path processDir = Paths.get(logBaseDir, String.valueOf(taskId.getProcessId()));
     if (isDriverLine(line)) {
       return processDir.resolve(DRIVER_LOG_FILE);
     }
     return processDir.resolve(taskId.getTaskId() + ".log");
   }
 
-  // Task ids start at 1 (see OptimizingQueue), so taskId 0 always means a process-level line.
+  // Task ids start at 1 (see OptimizingQueue); taskId is never null, 0 always means a
+  // process-level line.
   private static boolean isDriverLine(OptimizingLogLine line) {
-    return line.getTaskId() == null || line.getTaskId().getTaskId() == 0;
+    return line.getTaskId().getTaskId() == 0;
   }
 
   private static String envOrDefault(String key, String defaultValue) {

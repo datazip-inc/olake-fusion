@@ -24,14 +24,12 @@ import org.apache.amoro.api.OptimizingLogLine;
 import org.apache.amoro.api.OptimizingTaskId;
 import org.apache.amoro.client.OptimizingClientPools;
 import org.apache.amoro.log.OptimizingLogEvent;
-import org.apache.amoro.log.OptimizingTaskLogContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executors;
-import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
@@ -39,28 +37,22 @@ import java.util.concurrent.locks.ReentrantLock;
 /**
  * Sends optimizer log events to AMS through {@code OptimizingService.appendLogs}.
  *
- * <p>Events wait in a size-capped {@link OptimizingLogBuffer} and are flushed every {@link
- * #FLUSH_INTERVAL_MS}, or sooner when a full batch is buffered. Each flush makes one attempt per
- * batch; a failed batch goes back to the head of the buffer and the next scheduled flush is the
- * retry. There is no inner retry loop, so a flush never blocks longer than one Thrift call.
+ * <p>Events wait in an {@link OptimizingLogBuffer} and the whole buffer is flushed every {@link
+ * #FLUSH_INTERVAL_MS} in one {@code appendLogs} call. A failed flush goes back to the head of the
+ * buffer and the next scheduled flush is the retry. There is no inner retry loop, so a flush never
+ * blocks longer than one Thrift call.
  */
 public class OptimizingLogBatcher extends AbstractOptimizerOperator {
 
   private static final Logger LOG = LoggerFactory.getLogger(OptimizingLogBatcher.class);
 
   static final long FLUSH_INTERVAL_MS = TimeUnit.SECONDS.toMillis(1);
-  // Max payload of one appendLogs call. Must stay well below AMS thrift-server.max-message-size
-  // (100 MB by default).
-  static final long MAX_BATCH_BYTES = 10L * 1024L * 1024L;
-  // Cap on buffered bytes while AMS is unreachable; the oldest lines are dropped past it.
-  static final long MAX_BUFFER_BYTES = 64L * 1024L * 1024L;
   // Upper bound for the final flush in the JVM shutdown hook.
   static final long SHUTDOWN_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(10);
 
   private static volatile OptimizingLogBatcher instance;
 
-  private final OptimizingLogBuffer buffer =
-      new OptimizingLogBuffer(MAX_BUFFER_BYTES, OptimizingTaskLogContext.LOG_CHANNEL_DRIVER);
+  private final OptimizingLogBuffer buffer = new OptimizingLogBuffer();
   private final ScheduledExecutorService flushExecutor =
       Executors.newSingleThreadScheduledExecutor(
           runnable -> {
@@ -107,13 +99,6 @@ public class OptimizingLogBatcher extends AbstractOptimizerOperator {
 
   public void offer(OptimizingLogEvent event) {
     buffer.add(event);
-    if (buffer.pendingBytes() >= MAX_BATCH_BYTES) {
-      try {
-        flushExecutor.execute(this::flush);
-      } catch (RejectedExecutionException e) {
-        // Shutting down: stopAndFlush sends what is left.
-      }
-    }
   }
 
   /**
@@ -159,16 +144,15 @@ public class OptimizingLogBatcher extends AbstractOptimizerOperator {
   }
 
   private boolean sendAll() {
-    while (true) {
-      List<OptimizingLogEvent> batch = buffer.drain(MAX_BATCH_BYTES);
-      if (batch.isEmpty()) {
-        return true;
-      }
-      if (!send(batch)) {
-        buffer.requeue(batch);
-        return false;
-      }
+    List<OptimizingLogEvent> batch = buffer.drain(Long.MAX_VALUE);
+    if (batch.isEmpty()) {
+      return true;
     }
+    if (!send(batch)) {
+      buffer.requeue(batch);
+      return false;
+    }
+    return true;
   }
 
   private boolean send(List<OptimizingLogEvent> batch) {
