@@ -133,13 +133,33 @@ public final class SparkTable {
     return files;
   }
 
-  /** Id of the current snapshot, or null when the table has none. */
+  /**
+   * Id of the snapshot the table points at, or null when it has none. Read from the table's refs,
+   * not from the newest row of {@code .snapshots}: after a rollback the newest snapshot is still
+   * listed but is no longer the current one.
+   */
   public String currentSnapshotId() {
     List<Row> rows =
-        sql(
-            "SELECT CAST(snapshot_id AS STRING) FROM "
-                + ident()
-                + ".snapshots ORDER BY committed_at DESC LIMIT 1");
+        sql("SELECT CAST(snapshot_id AS STRING) FROM " + ident() + ".refs WHERE name = 'main'");
     return rows.isEmpty() ? null : rows.get(0).getString(0);
+  }
+
+  // Writes
+
+  /**
+   * Rolls the table back to {@code snapshotId}, the way a user time travels in their query engine.
+   * Fusion then sees a table whose current snapshot changed and plans for it again.
+   */
+  public void rollbackTo(String snapshotId) {
+    sql(
+        "CALL "
+            + Names.CATALOG
+            + ".system.rollback_to_snapshot(table => '"
+            + namespace
+            + "."
+            + name
+            + "', snapshot_id => "
+            + snapshotId
+            + ")");
   }
 }

@@ -26,14 +26,16 @@ import static io.olake.fusion.it.Contract.OptimizingType.MINOR;
 import static io.olake.fusion.it.Contract.ProcessStatus.SKIPPED;
 import static io.olake.fusion.it.Contract.ProcessStatus.SUCCESS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.olake.fusion.it.Contract.SkipReason;
 import io.olake.fusion.it.harness.Await;
-import io.olake.fusion.it.harness.SparkTable.FileInfo;
+import io.olake.fusion.it.harness.Fusion;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.time.Duration;
-import java.util.List;
 
 /**
  * What a Fusion user does, one test per behavior, each on its own unpartitioned table. Every table
@@ -41,6 +43,9 @@ import java.util.List;
  * only way Fusion's tables come into being in the product. Fusion is configured and triggered
  * through the table settings OLake-UI writes; results are read back through Spark and Fusion's REST
  * API.
+ *
+ * <p>What each compaction type does to the files of a table is in {@link CompactionLifecycleIT},
+ * which drives one table through MINOR, MAJOR and FULL in that order.
  */
 @ExtendWith(Report.class)
 class FusionIT extends ItBase {
@@ -52,103 +57,49 @@ class FusionIT extends ItBase {
 
   private static final int HEALTH_SYNCS = 6;
 
-  // Compaction
-
-  @Test
-  void minorCompaction() {
-    TestTable t = TestTable.create("minor");
-    t.cdc();
-    requireDeletes(t, true);
-    List<FileInfo> before = t.table.files();
-
-    assertProcess(optimize(t, MINOR), MINOR, SUCCESS);
-    assertRows(t);
-    assertFiles(t, MINOR, before);
-  }
-
-  @Test
-  void majorCompaction() {
-    TestTable t = TestTable.create("major");
-    t.cdc();
-    t.load();
-    requireDeletes(t, true);
-    List<FileInfo> before = t.table.files();
-
-    assertProcess(optimize(t, MAJOR), MAJOR, SUCCESS);
-    assertRows(t);
-    assertFiles(t, MAJOR, before);
-  }
-
-  @Test
-  void fullCompaction() {
-    TestTable t = TestTable.create("full");
-    t.cdc();
-    requireDeletes(t, true);
-    List<FileInfo> before = t.table.files();
-
-    assertProcess(optimize(t, FULL), FULL, SUCCESS);
-    assertRows(t);
-    assertFiles(t, FULL, before);
-  }
-
-  /** No deletes: MAJOR is decided by the "more than one data file" branch. */
-  @Test
-  void majorWithoutDeletes() {
-    TestTable t = insertsOnly("major_nodel");
-    requireDeletes(t, false);
-    requireDataFiles(t, 2);
-    List<FileInfo> before = t.table.files();
-
-    assertProcess(optimize(t, MAJOR), MAJOR, SUCCESS);
-    assertRows(t);
-    assertFiles(t, MAJOR, before);
-  }
-
-  /** No deletes: FULL is decided by the "two or more fragments" branch. */
-  @Test
-  void fullFragmentsOnly() {
-    TestTable t = insertsOnly("full_frag");
-    requireDeletes(t, false);
-    requireDataFiles(t, 2);
-    List<FileInfo> before = t.table.files();
-
-    assertProcess(optimize(t, FULL), FULL, SUCCESS);
-    assertRows(t);
-    assertFiles(t, FULL, before);
-  }
-
-  // Priority
+  // Priority: when several crons fire in the same minute, only the highest type runs.
 
   @Test
   void fullBeatsMajorAndMinor() {
     TestTable t = eligibleForAllTypes("prio_full");
-    assertProcess(optimize(t, FULL, MAJOR, MINOR), FULL, SUCCESS);
+    assertProcess(optimizeOnly(t, FULL, FULL, MAJOR, MINOR), FULL, SUCCESS);
     assertRows(t);
   }
 
   @Test
   void majorBeatsMinor() {
     TestTable t = eligibleForAllTypes("prio_major");
-    assertProcess(optimize(t, MAJOR, MINOR), MAJOR, SUCCESS);
+    assertProcess(optimizeOnly(t, MAJOR, MAJOR, MINOR), MAJOR, SUCCESS);
     assertRows(t);
   }
 
   // Nothing to do
 
   /**
-   * After a FULL has left one data file and no deletes, the next FULL cron finds nothing to do: the
-   * process is SKIPPED and no snapshot is committed.
+   * After a FULL has left no deletes, the next FULL cron finds nothing to do: the process is
+   * SKIPPED, no snapshot is committed, and the run history says why it was skipped.
    */
   @Test
-  void nothingToDoIsSkipped() {
+  void nothingToDoIsSkippedWithAReason() {
     TestTable t = TestTable.create("nothing_to_do");
     t.cdc();
     assertProcess(optimize(t, FULL), FULL, SUCCESS);
-    String snapshot = t.table.currentSnapshotId();
+    String snapshot = t.currentSnapshotId();
 
-    assertProcess(cronFiresOnce(t, FULL), FULL, SKIPPED);
-    assertEquals(snapshot, t.table.currentSnapshotId(), "no new snapshot");
+    Fusion.Process skipped = cronFiresOnce(t, FULL);
+    assertProcess(skipped, FULL, SKIPPED);
+    assertEquals(snapshot, t.currentSnapshotId(), "no new snapshot");
     assertRows(t);
+
+    String reason = skipped.skipReason();
+    assertNotNull(reason, "skip reason in the process metrics of " + skipped);
+    assertTrue(
+        reason.contains(SkipReason.SNAPSHOT_UNCHANGED),
+        "skip reason says why it was skipped: " + reason);
+    assertNotNull(skipped.failReason(), "skip reason on the process: " + skipped);
+    assertTrue(
+        skipped.failReason().contains(SkipReason.SNAPSHOT_UNCHANGED),
+        "skip reason on the process: " + skipped.failReason());
   }
 
   // Health score
@@ -168,16 +119,16 @@ class FusionIT extends ItBase {
     }
     long before =
         Await.until(
-            "a health score below 100 for " + t.table.ident(),
+            "a health score below 100 for " + t.ident(),
             Duration.ofMinutes(3),
-            () -> fusion.healthScore(t.table.namespace(), t.table.name()),
+            t::healthScore,
             score -> score >= 0 && score < 100);
 
     assertProcess(optimize(t, FULL), FULL, SUCCESS);
     Await.until(
         "health score above " + before,
         Duration.ofMinutes(3),
-        () -> fusion.healthScore(t.table.namespace(), t.table.name()),
+        t::healthScore,
         score -> score > before);
   }
 
@@ -188,21 +139,7 @@ class FusionIT extends ItBase {
     TestTable t = TestTable.create(name);
     t.cdc();
     t.load();
-    requireDeletes(t, true);
-    return t;
-  }
-
-  /**
-   * A table with several data files and no delete file. OLake writes an equality delete for every
-   * source update and delete, and also for the inserts of the first sync after the backfill, so a
-   * FULL first clears the table to one data file and no deletes; the plain insert syncs after it
-   * add data files only.
-   */
-  private static TestTable insertsOnly(String name) {
-    TestTable t = TestTable.create(name);
-    t.load();
-    assertProcess(optimize(t, FULL), FULL, SUCCESS);
-    t.load();
+    requireDeleteFiles(t);
     return t;
   }
 }

@@ -114,6 +114,10 @@ public final class Contract {
     public static final String FINISH_TIME = "finishTime";
     public static final String FAIL_REASON = "failReason";
     public static final String TOTAL_TASKS = "totalTasks";
+    /** Per-process metrics. A SKIPPED process carries {@link #SKIP_REASON} in it. */
+    public static final String SUMMARY = "summary";
+
+    public static final String SKIP_REASON = "skipReason";
 
     // Snapshots tab.
     public static final String SNAPSHOT_ID = "snapshotId";
@@ -161,6 +165,17 @@ public final class Contract {
         Set.of(SUCCESS, FAILED, CLOSED, CANCELED, KILLED, SKIPPED);
 
     private ProcessStatus() {}
+  }
+
+  /**
+   * What Fusion tells a user when a cron fired but there was nothing to optimize. Only the stable
+   * part of the sentence is kept: the reason is shown in OLake-UI's run history, so it must stay
+   * recognizable.
+   */
+  public static final class SkipReason {
+    public static final String SNAPSHOT_UNCHANGED = "snapshot unchanged";
+
+    private SkipReason() {}
   }
 
   /** Table property keys a user sets to configure and trigger optimization. */

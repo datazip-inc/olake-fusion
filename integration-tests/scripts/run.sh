@@ -72,7 +72,13 @@ t=$(date +%s)
 status=0
 mvn_args=(-B -ntp -f "$TESTS_DIR/pom.xml" verify "-Dtest.parallelism=${TEST_PARALLELISM:-2}")
 if [[ -n "${TEST_ONLY:-}" ]]; then
-  mvn_args+=("-Dit.test=FusionIT#${TEST_ONLY}" -Dfailsafe.failIfNoSpecifiedTests=false)
+  # A method name selects it in FusionIT; anything that names its own class is passed through.
+  if [[ "$TEST_ONLY" == *"#"* || "$TEST_ONLY" == *"IT" ]]; then
+    selection="$TEST_ONLY"
+  else
+    selection="FusionIT#${TEST_ONLY}"
+  fi
+  mvn_args+=("-Dit.test=${selection}" -Dfailsafe.failIfNoSpecifiedTests=false)
 fi
 ./mvnw "${mvn_args[@]}" || status=$?
 timing verify "$t"

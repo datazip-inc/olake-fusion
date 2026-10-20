@@ -79,6 +79,7 @@ public final class Fusion {
     private final long finishTime;
     private final long totalTasks;
     private final String failReason;
+    private final String skipReason;
 
     Process(
         String id,
@@ -87,7 +88,8 @@ public final class Fusion {
         long startTime,
         long finishTime,
         long totalTasks,
-        String failReason) {
+        String failReason,
+        String skipReason) {
       this.id = id;
       this.type = type;
       this.status = status;
@@ -95,6 +97,7 @@ public final class Fusion {
       this.finishTime = finishTime;
       this.totalTasks = totalTasks;
       this.failReason = failReason;
+      this.skipReason = skipReason;
     }
 
     public String id() {
@@ -125,6 +128,11 @@ public final class Fusion {
       return failReason;
     }
 
+    /** Why a SKIPPED process did nothing, from the process metrics; null for a process that ran. */
+    public String skipReason() {
+      return skipReason;
+    }
+
     public boolean ran() {
       return !ProcessStatus.SKIPPED.equals(status);
     }
@@ -149,6 +157,8 @@ public final class Fusion {
           + totalTasks
           + ", failReason="
           + failReason
+          + ", skipReason="
+          + skipReason
           + "]";
     }
   }
@@ -295,8 +305,18 @@ public final class Fusion {
                     Json.number(p, Fields.START_TIME),
                     Json.number(p, Fields.FINISH_TIME),
                     Json.number(p, Fields.TOTAL_TASKS),
-                    Json.nullableText(p, Fields.FAIL_REASON)))
+                    Json.nullableText(p, Fields.FAIL_REASON),
+                    skipReason(p)))
         .collect(Collectors.toList());
+  }
+
+  /**
+   * The skip reason out of a process's metrics. The field is only there on a SKIPPED process, so a
+   * missing summary reads as "no reason", not as a contract violation.
+   */
+  private static String skipReason(JsonNode process) {
+    JsonNode summary = process.get(Fields.SUMMARY);
+    return summary == null ? null : Json.optionalText(summary, Fields.SKIP_REASON);
   }
 
   public Set<String> processIds(String database, String table) {
