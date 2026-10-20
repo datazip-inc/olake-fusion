@@ -93,13 +93,10 @@ class FusionIT extends ItBase {
 
     String reason = skipped.skipReason();
     assertNotNull(reason, "skip reason in the process metrics of " + skipped);
-    assertTrue(
-        reason.contains(SkipReason.SNAPSHOT_UNCHANGED),
-        "skip reason says why it was skipped: " + reason);
-    assertNotNull(skipped.failReason(), "skip reason on the process: " + skipped);
-    assertTrue(
-        skipped.failReason().contains(SkipReason.SNAPSHOT_UNCHANGED),
-        "skip reason on the process: " + skipped.failReason());
+    assertTrue(reason.contains(SkipReason.CRON_FIRED), "skip reason names the cron: " + reason);
+    assertTrue(reason.contains(FULL), "skip reason names the optimizing type: " + reason);
+    assertTrue(reason.contains(SkipReason.NO_DATA), "skip reason says why: " + reason);
+    assertEquals(reason, skipped.failReason(), "the process carries the same reason");
   }
 
   // Health score

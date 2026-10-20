@@ -168,12 +168,18 @@ public final class Contract {
   }
 
   /**
-   * What Fusion tells a user when a cron fired but there was nothing to optimize. Only the stable
-   * part of the sentence is kept: the reason is shown in OLake-UI's run history, so it must stay
-   * recognizable.
+   * What Fusion tells a user when a cron fired but there was nothing to optimize. The reason is
+   * shown in OLake-UI's run history, so it must keep saying which cron fired and that there was no
+   * data for it. Fusion has two of these paths — the cron tick finds the snapshot unchanged, or the
+   * planner finds nothing to plan — and which one a run takes is a matter of timing, so only the
+   * parts both of them share are pinned here.
    */
   public static final class SkipReason {
-    public static final String SNAPSHOT_UNCHANGED = "snapshot unchanged";
+    /** Names the cron that fired, followed by the optimizing type. */
+    public static final String CRON_FIRED = "cron fired for";
+
+    /** Says there was nothing for it to do. */
+    public static final String NO_DATA = "data to process";
 
     private SkipReason() {}
   }
