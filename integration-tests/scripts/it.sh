@@ -17,7 +17,7 @@
 #
 # Modified by Datazip Inc. in 2026
 
-# The single entry point of the integration tests, used by `make it` locally and in CI.
+# The single entry point of the integration tests, used by `make it` (root Makefile) locally and in CI.
 #
 #   FUSION_IMAGE, FUSION_SPARK_IMAGE  images under test; built from the working tree when unset
 #   OLAKE_IMAGE                       OLake Postgres source image (default olakego/source-postgres:latest)

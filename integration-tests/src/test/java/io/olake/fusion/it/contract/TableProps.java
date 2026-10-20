@@ -22,9 +22,13 @@ package io.olake.fusion.it.contract;
 
 /** Table property keys a user sets to configure and trigger optimization. */
 public final class TableProps {
+  public static final String ENABLED = "self-optimizing.enabled";
+
   public static final String MINOR_CRON = "self-optimizing.minor.trigger.cron";
   public static final String MAJOR_CRON = "self-optimizing.major.trigger.cron";
   public static final String FULL_CRON = "self-optimizing.full.trigger.cron";
+  /** OLake-UI's "Never" schedule: an empty cron. */
+  public static final String NEVER = "";
 
   public static final String TARGET_SIZE = "self-optimizing.target-size";
   public static final String FRAGMENT_RATIO = "self-optimizing.fragment-ratio";

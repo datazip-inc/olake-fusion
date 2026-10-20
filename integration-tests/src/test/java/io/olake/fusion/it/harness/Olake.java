@@ -50,7 +50,6 @@ import java.util.stream.Collectors;
  */
 public final class Olake {
   public static final String TABLE = "orders";
-  public static final String[] REGIONS = {"ap", "eu", "us"};
 
   private static final Path FIXTURES = Paths.get("fixtures").toAbsolutePath();
   private static final String SOURCE_USER = "source";
@@ -63,19 +62,13 @@ public final class Olake {
   private final String database;
   private final String slot;
   private final String publication;
-  private final boolean partitioned;
   private final Path workDir;
 
-  public Olake(String journey, boolean partitioned, Path workDir) {
+  public Olake(String journey, Path workDir) {
     this.database = ("src_" + journey + "_" + Env.RUN_ID).toLowerCase();
     this.slot = database + "_slot";
     this.publication = database + "_pub";
-    this.partitioned = partitioned;
     this.workDir = workDir.resolve("olake").toAbsolutePath();
-  }
-
-  public static String regionOf(long id) {
-    return REGIONS[(int) (id % REGIONS.length)];
   }
 
   // Source database
@@ -227,8 +220,18 @@ public final class Olake {
   }
 
   /**
-   * Writes {@link #SELECTED_STREAMS}: OLake's discovered catalog with only {@link #TABLE} selected
-   * and the settings from stream-settings.json.
+   * Does what a user does in OLake-UI's stream selection after discover: OLake's {@code discover}
+   * lists every table of the source database in {@code streams.json}, all of them selected with
+   * default settings. A sync needs that catalog trimmed to the stream to replicate and given its
+   * settings, so this writes {@link #SELECTED_STREAMS}, which {@link #sync} passes as {@code
+   * --catalog}:
+   *
+   * <ul>
+   *   <li>only {@link #TABLE} stays, in both {@code selected_streams} and {@code streams};
+   *   <li>its selection gets {@code stream-settings.json}'s {@code selected} block (normalization,
+   *       no append mode, equality deletes for updates, no partitioning);
+   *   <li>its stream gets the {@code stream} block (CDC sync mode).
+   * </ul>
    */
   private void patchStreams() {
     Path path = workDir.resolve("streams.json");
@@ -243,11 +246,6 @@ public final class Olake {
       if (TABLE.equals(Json.text(entry, "stream_name"))) {
         ObjectNode copy = ((ObjectNode) entry).deepCopy();
         copy.setAll((ObjectNode) Json.required(settings, "selected"));
-        copy.put(
-            "partition_regex",
-            Json.text(
-                Json.required(settings, "partition_regex"),
-                partitioned ? "PARTITIONED" : "UNPARTITIONED"));
         selected.add(copy);
       }
     }

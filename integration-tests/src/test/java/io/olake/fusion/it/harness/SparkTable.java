@@ -55,23 +55,17 @@ public final class SparkTable {
   /** One live file from the engine's {@code files} metadata table. */
   public static final class FileInfo {
     private final String path;
-    private final String partition;
     private final int content;
     private final long size;
 
-    FileInfo(String path, String partition, int content, long size) {
+    FileInfo(String path, int content, long size) {
       this.path = path;
-      this.partition = partition;
       this.content = content;
       this.size = size;
     }
 
     public String path() {
       return path;
-    }
-
-    public String partition() {
-      return partition;
     }
 
     public int content() {
@@ -84,15 +78,7 @@ public final class SparkTable {
 
     @Override
     public String toString() {
-      return "FileInfo[path="
-          + path
-          + ", partition="
-          + partition
-          + ", content="
-          + content
-          + ", size="
-          + size
-          + "]";
+      return "FileInfo[path=" + path + ", content=" + content + ", size=" + size + "]";
     }
   }
 
@@ -100,13 +86,10 @@ public final class SparkTable {
 
   private final String namespace;
   private final String name;
-  /** Identity partition column, or null when the table is unpartitioned. */
-  private final String partitionColumn;
 
-  public SparkTable(String namespace, String name, String partitionColumn) {
+  public SparkTable(String namespace, String name) {
     this.namespace = namespace;
     this.name = name;
-    this.partitionColumn = partitionColumn;
   }
 
   public String namespace() {
@@ -115,10 +98,6 @@ public final class SparkTable {
 
   public String name() {
     return name;
-  }
-
-  public boolean partitioned() {
-    return partitionColumn != null;
   }
 
   public String ident() {
@@ -151,9 +130,8 @@ public final class SparkTable {
    * Creates a table the way a Spark user would, with the same business columns as the OLake table
    * plus {@code _olake_id} and {@code _op_type}, so every journey reads rows the same way.
    */
-  public static SparkTable create(
-      String namespace, String name, String partitionColumn, Map<String, String> properties) {
-    SparkTable table = new SparkTable(namespace, name, partitionColumn);
+  public static SparkTable create(String namespace, String name, Map<String, String> properties) {
+    SparkTable table = new SparkTable(namespace, name);
     StringBuilder props = new StringBuilder("'format-version' = '2'");
     properties.forEach(
         (k, v) -> props.append(", ").append(quote(k)).append(" = ").append(quote(v)));
@@ -162,7 +140,6 @@ public final class SparkTable {
             + table.ident()
             + " (id BIGINT, region STRING, payload STRING, updated_at TIMESTAMP,"
             + " _olake_id STRING, _op_type STRING) USING iceberg"
-            + (partitionColumn == null ? "" : " PARTITIONED BY (" + partitionColumn + ")")
             + " TBLPROPERTIES ("
             + props
             + ")");
@@ -182,18 +159,10 @@ public final class SparkTable {
     exec("ALTER TABLE " + ident() + " SET TBLPROPERTIES (" + pairs + ")");
   }
 
-  public void removeProperties(Collection<String> keys) {
-    if (keys.isEmpty()) {
-      return;
-    }
-    String list = keys.stream().map(SparkTable::quote).collect(Collectors.joining(", "));
-    exec("ALTER TABLE " + ident() + " UNSET TBLPROPERTIES IF EXISTS (" + list + ")");
-  }
-
   /**
-   * Appends {@code count} rows with ids {@code firstId..} as one file in {@code region}'s partition
-   * (or in the table when unpartitioned). Columns the table has beyond the business columns get the
-   * values a user writer would give them: {@code _olake_id} a unique key, the rest null.
+   * Appends {@code count} rows with ids {@code firstId..} as one file, all with {@code region}.
+   * Columns the table has beyond the business columns get the values a user writer would give them:
+   * {@code _olake_id} a unique key, the rest null.
    */
   public void append(String region, long firstId, int count) {
     List<String> select = new ArrayList<>();
@@ -280,23 +249,10 @@ public final class SparkTable {
 
   /** Live data and delete files of the current snapshot. */
   public List<FileInfo> files() {
-    String partition =
-        partitioned()
-            ? "concat('"
-                + partitionColumn
-                + "=', CAST(partition."
-                + partitionColumn
-                + " AS STRING))"
-            : "''";
     List<FileInfo> files = new ArrayList<>();
     for (Row row :
-        sql(
-            "SELECT file_path, "
-                + partition
-                + ", content, file_size_in_bytes FROM "
-                + ident()
-                + ".files")) {
-      files.add(new FileInfo(row.getString(0), row.getString(1), row.getInt(2), row.getLong(3)));
+        sql("SELECT file_path, content, file_size_in_bytes FROM " + ident() + ".files")) {
+      files.add(new FileInfo(row.getString(0), row.getInt(1), row.getLong(2)));
     }
     return files;
   }

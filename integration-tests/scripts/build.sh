@@ -25,6 +25,9 @@
 #   build.sh images     Docker: fusion:it and fusion-spark:it from those artifacts
 #
 #   SPARK_VERSION, SCALA_VERSION  optimizer build (default 3.5.8 / 2.13.18)
+#
+# TODO: build the images with .github/workflows/docker-images.yml (same Dockerfiles) once it
+# can build without pushing to Docker Hub, and keep the test images in GHCR.
 
 set -euo pipefail
 

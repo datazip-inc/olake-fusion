@@ -32,6 +32,10 @@ public final class Fields {
   public static final String USER = "user";
   public static final String PASSWORD = "password";
 
+  // API token.
+  public static final String API_KEY = "apikey";
+  public static final String SECRET = "secret";
+
   // Catalogs, resource groups, tables.
   public static final String CATALOG_NAME = "catalogName";
   public static final String RESOURCE_GROUP = "resourceGroup";
@@ -55,16 +59,16 @@ public final class Fields {
   public static final String SNAPSHOT_ID = "snapshotId";
   public static final String COMMIT_TIME = "commitTime";
 
-  // Partitions and files tabs.
-  public static final String PARTITION = "partition";
-  public static final String PATH = "path";
-  public static final String FILE_TYPE = "fileType";
-  public static final String FILE_SIZE = "fileSize";
-
   // Health score: table details and overview.
   public static final String TABLE_SUMMARY = "tableSummary";
   public static final String HEALTH_SCORE = "healthScore";
   public static final String TABLE_NAME = "tableName";
+
+  // Terminal.
+  public static final String SQL = "sql";
+  public static final String SESSION_ID = "sessionId";
+  public static final String LOG_STATUS = "logStatus";
+  public static final String LOGS = "logs";
 
   private Fields() {}
 }

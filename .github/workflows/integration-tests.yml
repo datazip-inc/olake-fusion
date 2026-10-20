@@ -22,6 +22,12 @@
 #                      test sources (`make it-build`) and hands the artifacts to the next job.
 #   integration-tests  Builds the images from those artifacts (`make it-images`) and runs the
 #                      suite against them (`make it`), the same entry point developers run.
+#                      The images are built once: `make it` gets them pinned through
+#                      FUSION_IMAGE/FUSION_SPARK_IMAGE and only tags them.
+#
+# TODO: build the images with docker-images.yml once it can build without pushing to Docker
+# Hub, and push the test images to GHCR so later jobs and reruns can pull them. Today they exist
+# only in this job's local Docker.
 
 name: Integration Tests
 
@@ -36,8 +42,7 @@ on:
       - staging
   pull_request:
     branches:
-      - master
-      - staging
+      - "*"
     paths:
       - '**/*.java'
       - '**/*.scala'
@@ -70,7 +75,7 @@ jobs:
           cache: maven
 
       - name: Build distribution, optimizer job and test sources
-        run: make -C integration-tests it-build
+        run: make it-build
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -106,14 +111,14 @@ jobs:
 
       - name: Build images
         timeout-minutes: 20
-        run: make -C integration-tests it-images
+        run: make it-images
 
       - name: Run integration tests
         env:
           FUSION_IMAGE: fusion:it
           FUSION_SPARK_IMAGE: fusion-spark:it
           IT_RUN_ID: ${{ github.run_id }}
-        run: make -C integration-tests it
+        run: make it
 
       - name: Upload logs and test reports
         if: always()
@@ -127,4 +132,4 @@ jobs:
 
       - name: Stop stack
         if: always()
-        run: make -C integration-tests it-down
+        run: make it-down

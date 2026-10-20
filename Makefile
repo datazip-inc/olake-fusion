@@ -44,7 +44,7 @@ MVN := JAVA_HOME="$(JAVA_HOME_17)" PATH="$(JAVA_HOME_17)/bin:$(PATH)" ./mvnw
 
 .PHONY: help build sync-libs setup-debug-mode clean-debug-mode \
         start-deps stop-deps start-fusion-docker clean-fusion-docker \
-        sync-frontend spotless-fix
+        sync-frontend spotless-fix it it-build it-images it-down
 
 help:
 	@echo "Fusion (Amoro) Development Makefile"
@@ -62,6 +62,12 @@ help:
 	@echo "  make stop-deps             Stop Postgres and Minio"
 	@echo "  make start-fusion-docker   Start Kind cluster + all services + optimizer"
 	@echo "  make clean-fusion-docker   Remove Kind cluster + services + volumes"
+	@echo ""
+	@echo "Integration tests (integration-tests/):"
+	@echo "  make it                    Build, start the stack, run the suite (IT_ONLY=<test> runs one test)"
+	@echo "  make it-build              Maven: distribution, Spark optimizer job, test sources"
+	@echo "  make it-images             Docker: fusion:it and fusion-spark:it from those artifacts"
+	@echo "  make it-down               Remove the integration-test stack"
 	@echo ""
 	@echo "Access:"
 	@echo "  Fusion Web UI : http://localhost:1630  (admin / password)"
@@ -146,3 +152,22 @@ sync-frontend:
 	mkdir -p "$$DST"; \
 	cp -r "$$SRC"/. "$$DST"/
 	@echo "Frontend synced. Refresh http://localhost:1630"
+
+# ---------------------------------------------------------------------------
+# Integration tests (integration-tests/)
+# ---------------------------------------------------------------------------
+
+# Single entry point, locally and in CI. `make it` builds artifacts and images itself unless
+# FUSION_IMAGE and FUSION_SPARK_IMAGE pin them.
+it:
+	./integration-tests/scripts/it.sh
+
+# Build phases, run as separate CI steps (see integration-tests/scripts/build.sh).
+it-build:
+	./integration-tests/scripts/build.sh artifacts
+
+it-images:
+	./integration-tests/scripts/build.sh images
+
+it-down:
+	./integration-tests/scripts/stack-down.sh

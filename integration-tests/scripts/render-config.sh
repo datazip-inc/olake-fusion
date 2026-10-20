@@ -17,9 +17,13 @@
 #
 # Modified by Datazip Inc. in 2026
 
-# Renders build/config.yaml: the shipped AMS config with docker/fusion-config.overlay.yaml
-# merged over it. Nothing is committed as a copy, so the tests always run the shipped
-# defaults for every key the overlay does not set.
+# Renders build/config.yaml, the config.yaml the Fusion container starts with: the shipped AMS
+# config (dist/src/main/amoro-bin/conf/config.yaml) with docker/fusion-config.overlay.yaml merged
+# over it. The overlay holds only what the test stack needs (database URL, exposed host, the
+# sparkContainer pointing at fusion-spark:it and the Kind cluster, short refresh intervals).
+# Merging instead of committing a full copy keeps the tests on the shipped defaults for every
+# other key, so a change to the product config is tested without editing the tests. yq runs in
+# a container so no local install is needed.
 
 set -euo pipefail
 

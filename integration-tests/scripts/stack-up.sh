@@ -34,6 +34,10 @@ compose() { docker compose -f "$DOCKER_DIR/docker-compose.yml" "$@"; }
 
 INIT=fusion-it-init
 
+# spark-connect is the only image compose builds itself (Spark 3.5.8 with the Iceberg runtime
+# OLake writes with). `up` builds an image only when it is missing, so an edited Dockerfile or
+# spark-defaults.conf would silently keep the old image; building first picks up the change
+# (cached layers make this a no-op otherwise).
 compose build spark-connect
 compose up -d
 

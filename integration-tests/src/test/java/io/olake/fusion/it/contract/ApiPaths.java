@@ -26,6 +26,12 @@ public final class ApiPaths {
 
   public static final String LOGIN = "/login";
   public static final String CURRENT_USER = "/login/current";
+  /** Creates an API token for the logged-in user. */
+  public static final String API_TOKEN_CREATE = "/api/token/create";
+  /** Query parameters of a token-signed request. */
+  public static final String API_KEY_PARAM = "apiKey";
+
+  public static final String SIGNATURE_PARAM = "signature";
   public static final String CATALOGS = "/catalogs";
   /** catalog, database. */
   public static final String TABLES = "/catalogs/%s/databases/%s/tables";
@@ -36,13 +42,6 @@ public final class ApiPaths {
       "/tables/catalogs/%s/dbs/%s/tables/%s/optimizing-processes";
   /** catalog, database, table. */
   public static final String SNAPSHOTS = "/tables/catalogs/%s/dbs/%s/tables/%s/snapshots";
-  /** catalog, database, table. */
-  public static final String PARTITIONS = "/tables/catalogs/%s/dbs/%s/tables/%s/partitions";
-  /** catalog, database, table, partition ({@link #UNPARTITIONED} for an unpartitioned table). */
-  public static final String PARTITION_FILES =
-      "/tables/catalogs/%s/dbs/%s/tables/%s/partitions/%s/files";
-  /** The partition segment the UI sends for an unpartitioned table. */
-  public static final String UNPARTITIONED = "null";
 
   public static final String RESOURCE_GROUPS = "/optimize/resourceGroups";
   /** optimizer group. */
@@ -50,7 +49,12 @@ public final class ApiPaths {
 
   public static final String OVERVIEW_TOP = "/overview/top";
 
-  /** Header every UI request carries. */
+  /** catalog. Runs a SQL script in Fusion's terminal, as OLake-UI does for table settings. */
+  public static final String TERMINAL_EXECUTE = "/terminal/catalogs/%s/execute";
+  /** terminal session id. */
+  public static final String TERMINAL_LOGS = "/terminal/%s/logs";
+
+  /** Header of a request authenticated by the login session (the UI); token requests omit it. */
   public static final String SOURCE_HEADER = "X-Request-Source";
 
   public static final String SOURCE_HEADER_VALUE = "Web";

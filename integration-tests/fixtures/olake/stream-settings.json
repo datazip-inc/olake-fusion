@@ -5,10 +5,7 @@
   "selected": {
     "normalization": true,
     "append_mode": false,
-    "update_type": "eq"
-  },
-  "partition_regex": {
-    "PARTITIONED": "/{region,identity}",
-    "UNPARTITIONED": ""
+    "update_type": "eq",
+    "partition_regex": ""
   }
 }

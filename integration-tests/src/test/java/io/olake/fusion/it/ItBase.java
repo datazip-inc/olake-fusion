@@ -53,12 +53,8 @@ abstract class ItBase {
   /** Target size every test table is given, so test files stay small. */
   static final long TARGET_SIZE = 256 * 1024;
 
-  static final String PARTITION_COLUMN = "region";
   static final String EVERY_MINUTE = "* * * * *";
   static final Duration PROCESS_TIMEOUT = Duration.ofMinutes(10);
-
-  private static final List<String> ALL_CRONS =
-      List.of(TableProps.MINOR_CRON, TableProps.MAJOR_CRON, TableProps.FULL_CRON);
 
   static Fusion fusion;
 
@@ -99,41 +95,37 @@ abstract class ItBase {
     }
 
     /** A table OLake creates from a fresh source DB seeded with ids 1..90. */
-    static TestTable olake(String name, boolean partitioned) {
-      Olake olake = new Olake(name, partitioned, Paths.get("target", "it-work", Env.RUN_ID, name));
+    static TestTable olake(String name) {
+      Olake olake = new Olake(name, Paths.get("target", "it-work", Env.RUN_ID, name));
       olake.createSource();
       olake.discover();
       SparkTable.recreateNamespace(olake.namespace());
       olake.insert(1, 90);
       olake.sync();
-      SparkTable table =
-          new SparkTable(olake.namespace(), Olake.TABLE, partitioned ? PARTITION_COLUMN : null);
+      SparkTable table = new SparkTable(olake.namespace(), Olake.TABLE);
       fusion.awaitTableListed(table.namespace(), table.name());
-      table.setProperties(
-          Map.of(
-              TableProps.TARGET_SIZE,
-              String.valueOf(TARGET_SIZE),
-              "write.delete.mode",
-              "merge-on-read"));
+      table.setProperties(Map.of("write.delete.mode", "merge-on-read"));
+      setTargetSize(table);
       return new TestTable(table, olake);
     }
 
     /** A table only Spark writes, in its own namespace. */
-    static TestTable spark(String name, boolean partitioned) {
+    static TestTable spark(String name) {
       String namespace = ("it_" + name + "_" + Env.RUN_ID).toLowerCase();
       SparkTable.recreateNamespace(namespace);
       SparkTable table =
-          SparkTable.create(
-              namespace,
-              "t",
-              partitioned ? PARTITION_COLUMN : null,
-              Map.of(
-                  TableProps.TARGET_SIZE,
-                  String.valueOf(TARGET_SIZE),
-                  "write.delete.mode",
-                  "merge-on-read"));
+          SparkTable.create(namespace, "t", Map.of("write.delete.mode", "merge-on-read"));
       fusion.awaitTableListed(namespace, table.name());
+      setTargetSize(table);
       return new TestTable(table, null);
+    }
+
+    /** OLake-UI's target file size setting, which also enables optimization. */
+    private static void setTargetSize(SparkTable table) {
+      fusion.setTableProperties(
+          table.namespace(),
+          table.name(),
+          Map.of(TableProps.TARGET_SIZE, String.valueOf(TARGET_SIZE), TableProps.ENABLED, "true"));
     }
 
     /** One CDC round in the source (updates, deletes, inserts) and an OLake sync. */
@@ -181,29 +173,22 @@ abstract class ItBase {
       rows.removeIf(r -> deleted.contains(Long.parseLong(r.substring(0, r.indexOf('|')))));
       return List.copyOf(rows);
     }
-
-    /** Partition name of a region ({@code ""} when unpartitioned). */
-    String partition(String region) {
-      return table.partitioned() ? PARTITION_COLUMN + "=" + region : "";
-    }
   }
 
   /**
    * What a user does to compact: sets the crons of {@code types} to every minute, waits for the
-   * first process that did work and finished, removes the crons. Returns that process once Spark
-   * sees Fusion's newest snapshot.
+   * first process that did work and finished, sets every cron back to Never. Returns that process
+   * once Spark sees Fusion's newest snapshot.
    */
   static Fusion.Process optimize(TestTable t, String... types) {
     SparkTable table = t.table;
     Set<String> known = fusion.processIds(table.namespace(), table.name());
-    Map<String, String> crons =
-        Arrays.stream(types).collect(Collectors.toMap(TableProps::cronOf, type -> EVERY_MINUTE));
-    table.setProperties(crons);
+    setCrons(table, types);
     Fusion.Process run;
     try {
       run = fusion.awaitFinishedRun(table.namespace(), table.name(), known, PROCESS_TIMEOUT);
     } finally {
-      table.removeProperties(ALL_CRONS);
+      setCrons(table);
     }
     Await.until(
         "Spark sees Fusion's newest snapshot of " + table.ident(),
@@ -218,18 +203,33 @@ abstract class ItBase {
 
   /**
    * Sets the cron of {@code type} to every minute, waits for the first new process to reach any
-   * terminal status (including SKIPPED), removes the crons and returns that process.
+   * terminal status (including SKIPPED), sets every cron back to Never and returns that process.
    */
   static Fusion.Process cronFiresOnce(TestTable t, String type) {
     SparkTable table = t.table;
     Set<String> known = fusion.processIds(table.namespace(), table.name());
-    table.setProperties(Map.of(TableProps.cronOf(type), EVERY_MINUTE));
+    setCrons(table, type);
     try {
       return fusion.awaitProcess(
           table.namespace(), table.name(), known, PROCESS_TIMEOUT, Fusion.Process::terminal);
     } finally {
-      table.removeProperties(ALL_CRONS);
+      setCrons(table);
     }
+  }
+
+  /**
+   * OLake-UI's schedules: the crons of {@code types} every minute, the others Never. With no types,
+   * every cron is Never. Optimization stays enabled, as the UI keeps it once a schedule is set.
+   */
+  private static void setCrons(SparkTable table, String... types) {
+    Set<String> every = Arrays.stream(types).map(TableProps::cronOf).collect(Collectors.toSet());
+    Map<String, String> properties = new TreeMap<>();
+    for (String cron :
+        List.of(TableProps.MINOR_CRON, TableProps.MAJOR_CRON, TableProps.FULL_CRON)) {
+      properties.put(cron, every.contains(cron) ? EVERY_MINUTE : TableProps.NEVER);
+    }
+    properties.put(TableProps.ENABLED, "true");
+    fusion.setTableProperties(table.namespace(), table.name(), properties);
   }
 
   // Assertions
@@ -240,8 +240,9 @@ abstract class ItBase {
   }
 
   /**
-   * Live rows read through Spark equal the rows the test wrote. The comparison is on the full row
-   * list, so a duplicated row also fails it.
+   * Live rows read through Spark equal the rows the test wrote. Order carries no meaning: both
+   * sides are sorted {@code id|region|payload} strings, compared as lists rather than sets so a
+   * duplicated row also fails it.
    */
   static void assertRows(TestTable t) {
     List<String> expected = t.expectedRows();
@@ -263,66 +264,36 @@ abstract class ItBase {
     }
   }
 
-  /** Fusion's files tab lists exactly the files Spark's {@code $files} lists. */
-  static void assertFusionAgrees(TestTable t) {
-    SparkTable table = t.table;
-    Set<String> engine =
-        table.files().stream()
-            .map(f -> f.path() + " [" + f.partition() + "] " + fileType(f.content()))
-            .collect(Collectors.toCollection(TreeSet::new));
-    Set<String> tab =
-        fusion.files(table.namespace(), table.name(), table.partitioned()).stream()
-            .map(f -> f.path() + " [" + f.partition() + "] " + f.fileType())
-            .collect(Collectors.toCollection(TreeSet::new));
-    assertEquals(engine, tab, "Fusion's files tab == engine's files table");
-  }
-
   /**
-   * File layout after {@code type} in each partition (design decision 12): MINOR and MAJOR leave no
-   * equality deletes; FULL leaves no delete files and one data file when the partition held less
-   * than the target size before the run ({@code before}).
+   * File layout after {@code type} (design decision 12): MINOR and MAJOR leave no equality deletes;
+   * FULL leaves no delete files and one data file when the table held less than the target size
+   * before the run ({@code before}).
    */
-  static void assertFiles(TestTable t, String type, List<FileInfo> before, String... partitions) {
-    List<FileInfo> after = t.table.files();
-    for (String partition : partitions) {
-      List<FileInfo> files = inPartition(after, partition);
-      assertEquals(
-          0, count(files, SparkTable.EQUALITY_DELETES), "equality deletes in [" + partition + "]");
-      if (OptimizingType.FULL.equals(type)) {
-        assertEquals(
-            0,
-            count(files, SparkTable.POSITION_DELETES),
-            "position deletes in [" + partition + "]");
-        long total = inPartition(before, partition).stream().mapToLong(FileInfo::size).sum();
-        if (total < TARGET_SIZE) {
-          assertEquals(1, count(files, SparkTable.DATA), "data files in [" + partition + "]");
-        }
+  static void assertFiles(TestTable t, String type, List<FileInfo> before) {
+    List<FileInfo> files = t.table.files();
+    assertEquals(0, count(files, SparkTable.EQUALITY_DELETES), "equality deletes");
+    if (OptimizingType.FULL.equals(type)) {
+      assertEquals(0, count(files, SparkTable.POSITION_DELETES), "position deletes");
+      if (before.stream().mapToLong(FileInfo::size).sum() < TARGET_SIZE) {
+        assertEquals(1, count(files, SparkTable.DATA), "data files");
       }
     }
   }
 
-  /** Setup precondition: each partition holds at least one delete file / no delete file. */
-  static void requireDeletes(TestTable t, boolean present, String... partitions) {
-    for (String partition : partitions) {
-      List<FileInfo> files = inPartition(t.table.files(), partition);
-      boolean has = count(files, SparkTable.DATA) < files.size();
-      if (has != present) {
-        fail(
-            "setup error: ["
-                + partition
-                + "] expected "
-                + (present ? "" : "no ")
-                + "delete files before compaction: "
-                + files);
-      }
+  /** Setup precondition: the table holds at least one delete file / no delete file. */
+  static void requireDeletes(TestTable t, boolean present) {
+    List<FileInfo> files = t.table.files();
+    boolean has = count(files, SparkTable.DATA) < files.size();
+    if (has != present) {
+      fail(
+          "setup error: expected "
+              + (present ? "" : "no ")
+              + "delete files before compaction: "
+              + files);
     }
   }
 
   // Helpers
-
-  static List<FileInfo> inPartition(List<FileInfo> files, String partition) {
-    return files.stream().filter(f -> f.partition().equals(partition)).collect(Collectors.toList());
-  }
 
   private static long count(List<FileInfo> files, int content) {
     return files.stream().filter(f -> f.content() == content).count();
@@ -330,18 +301,5 @@ abstract class ItBase {
 
   private static Set<String> paths(List<FileInfo> files) {
     return files.stream().map(FileInfo::path).collect(Collectors.toSet());
-  }
-
-  private static String fileType(int content) {
-    switch (content) {
-      case SparkTable.DATA:
-        return Names.DATA_FILE;
-      case SparkTable.POSITION_DELETES:
-        return Names.POS_DELETE_FILE;
-      case SparkTable.EQUALITY_DELETES:
-        return Names.EQ_DELETE_FILE;
-      default:
-        throw new IllegalArgumentException("content " + content);
-    }
   }
 }

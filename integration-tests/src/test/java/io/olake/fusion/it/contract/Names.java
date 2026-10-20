@@ -20,19 +20,13 @@
 
 package io.olake.fusion.it.contract;
 
-/** Names of what the stack bootstrap creates, and the file types the files tab serves. */
+/** Names of what the stack bootstrap creates. */
 public final class Names {
   public static final String OPTIMIZER_GROUP = "spark-container";
   public static final String SPARK_CONTAINER = "sparkContainer";
   public static final String CATALOG = "olake_iceberg";
   public static final String ADMIN_USER = "admin";
   public static final String ADMIN_PASSWORD = "password";
-
-  /** {@code fileType} values of the files tab. */
-  public static final String DATA_FILE = "BASE_FILE";
-
-  public static final String EQ_DELETE_FILE = "EQ_DELETE_FILE";
-  public static final String POS_DELETE_FILE = "POS_DELETE_FILE";
 
   private Names() {}
 }
