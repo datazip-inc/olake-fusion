@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ~ Licensed to the Apache Software Foundation (ASF) under one
+  ~ or more contributor license agreements.  See the NOTICE file
+  ~ distributed with this work for additional information
+  ~ regarding copyright ownership.  The ASF licenses this file
+  ~ to you under the Apache License, Version 2.0 (the
+  ~ "License"); you may not use this file except in compliance
+  ~ with the License.  You may obtain a copy of the License at
+  ~
+  ~     http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  ~
+  ~ Modified by Datazip Inc. in 2026
+  -->
+<!--
+  Fusion integration tests. Deliberately standalone: no parent, not a module of the
+  product reactor, and no product, Amoro or Iceberg library on the classpath. The suite
+  drives Fusion only through what a user can reach (REST, Spark SQL, OLake), so any
+  accidental coupling to the product code is a compile error here.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>io.olake.fusion</groupId>
+    <artifactId>fusion-integration-tests</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <name>Fusion Integration Tests</name>
+
+    <properties>
+        <maven.compiler.release>17</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <junit.version>5.10.2</junit.version>
+        <jackson.version>2.15.2</jackson.version>
+        <spark.version>3.5.8</spark.version>
+        <scala.binary.version>2.12</scala.binary.version>
+        <postgresql.version>42.7.4</postgresql.version>
+        <slf4j.version>2.0.13</slf4j.version>
+        <failsafe.version>3.2.5</failsafe.version>
+        <spotless.version>2.27.2</spotless.version>
+        <test.parallelism>2</test.parallelism>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- The user's query engine, reached over Spark Connect. -->
+        <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-connect-client-jvm_${scala.binary.version}</artifactId>
+            <version>${spark.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- The user's source database for OLake. -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <version>${postgresql.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-simple</artifactId>
+            <version>${slf4j.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Same formatting rules as the product build (root pom.xml). -->
+            <plugin>
+                <groupId>com.diffplug.spotless</groupId>
+                <artifactId>spotless-maven-plugin</artifactId>
+                <version>${spotless.version}</version>
+                <configuration>
+                    <java>
+                        <googleJavaFormat>
+                            <version>1.7</version>
+                        </googleJavaFormat>
+                        <removeUnusedImports></removeUnusedImports>
+                        <importOrder>
+                            <order>,javax,java,\\#</order>
+                        </importOrder>
+                    </java>
+                    <pom>
+                        <includes>
+                            <include>pom.xml</include>
+                        </includes>
+                        <sortPom>
+                            <encoding>${project.build.sourceEncoding}</encoding>
+                            <expandEmptyElements>true</expandEmptyElements>
+                            <indentSchemaLocation>true</indentSchemaLocation>
+                            <nrOfIndentSpace>4</nrOfIndentSpace>
+                        </sortPom>
+                    </pom>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>spotless-check</id>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                        <phase>validate</phase>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>${failsafe.version}</version>
+                <configuration>
+                    <skip>true</skip>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>${failsafe.version}</version>
+                <configuration>
+                    <includes>
+                        <include>**/*IT.java</include>
+                    </includes>
+                    <trimStackTrace>false</trimStackTrace>
+                    <!-- Spark Connect's Arrow reader needs these on Java 17. -->
+                    <argLine>--add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED</argLine>
+                </configuration>
+                <executions>
+                    <!-- Tests without the serial tag, run concurrently. -->
+                    <execution>
+                        <id>parallel</id>
+                        <goals>
+                            <goal>integration-test</goal>
+                        </goals>
+                        <configuration>
+                            <excludedGroups>serial</excludedGroups>
+                            <reportsDirectory>${project.build.directory}/failsafe-reports/parallel</reportsDirectory>
+                            <summaryFile>${project.build.directory}/failsafe-reports/failsafe-summary-parallel.xml</summaryFile>
+                            <properties>
+                                <configurationParameters>junit.jupiter.execution.parallel.enabled = true
+                                    junit.jupiter.execution.parallel.mode.default = concurrent
+                                    junit.jupiter.execution.parallel.config.strategy = fixed
+                                    junit.jupiter.execution.parallel.config.fixed.parallelism = ${test.parallelism}</configurationParameters>
+                            </properties>
+                        </configuration>
+                    </execution>
+                    <!-- Timing-sensitive tests, one at a time, after the parallel ones. -->
+                    <execution>
+                        <id>serial</id>
+                        <goals>
+                            <goal>integration-test</goal>
+                        </goals>
+                        <configuration>
+                            <groups>serial</groups>
+                            <reportsDirectory>${project.build.directory}/failsafe-reports/serial</reportsDirectory>
+                            <failIfNoTests>false</failIfNoTests>
+                            <summaryFile>${project.build.directory}/failsafe-reports/failsafe-summary-serial.xml</summaryFile>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>verify</id>
+                        <goals>
+                            <goal>verify</goal>
+                        </goals>
+                        <configuration>
+                            <summaryFiles>
+                                <summaryFile>${project.build.directory}/failsafe-reports/failsafe-summary-parallel.xml</summaryFile>
+                                <summaryFile>${project.build.directory}/failsafe-reports/failsafe-summary-serial.xml</summaryFile>
+                            </summaryFiles>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

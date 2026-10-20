@@ -1,0 +1,148 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Modified by Datazip Inc. in 2026
+
+# Fusion integration tests (integration-tests/) against images built from this commit.
+#
+# One job, because every stage needs the one before it on the same disk: the Dockerfiles copy
+# the Maven output, and the suite needs the images. Splitting it only bought a label on which
+# stage broke - which the step names already give - and cost an artifact round trip of the
+# distribution and the optimizer jar, a second checkout and JDK setup, and a second approval
+# of the gate below. The images are built once and pinned through FUSION_IMAGE/FUSION_SPARK_IMAGE,
+# so the run only tags them.
+#
+# The run starts only after a maintainer approves it: the job is gated on the `integration-tests`
+# environment, whose required reviewers GitHub asks for before the job starts. Set the reviewers
+# in Settings > Environments > integration-tests; without them the gate is a no-op and every run
+# starts straight away.
+#
+# The suite prints its own table at the end of each lane (io.olake.fusion.it.Report): every
+# test with its result, duration, table and optimizing processes, and for a failed test its
+# message and the one folder holding every log that covers it. It lands in this job's log, which
+# outlives the artifact below, so a red run can be read without downloading anything. The suite
+# also copies those logs into target/logs/tests/<test>/, so the artifact has one folder per test.
+#
+# The third-party images the stack needs (integration-tests/docker/images.txt) are cached
+# between runs as one `docker save` tarball, keyed on that file, so a run pulls them only when
+# a tag there changes. What this repo builds is never cached (it changes every commit), and
+# neither is the OLake source image, whose default tag floats.
+#
+# TODO: build the images with docker-images.yml once it can build without pushing to Docker
+# Hub, and push the test images to GHCR so later jobs and reruns can pull them. Today they exist
+# only in this job's local Docker.
+
+name: Integration Tests
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches:
+      - master
+      - staging
+  pull_request:
+    branches:
+      - "*"
+    paths:
+      - '**/*.java'
+      - '**/*.scala'
+      - '**/pom.xml'
+      - '**/Dockerfile*'
+      - '**/src/main/resources/**'
+      - 'dist/**'
+      - 'docker/**'
+      - 'integration-tests/**'
+      - '.github/workflows/integration-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  integration-tests:
+    name: Build and run integration tests
+    runs-on: ubuntu-latest
+    # Holds the run until a required reviewer approves it: nothing is built or pulled before.
+    environment: integration-tests
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build distribution, optimizer job and test sources
+        run: make integration-test-build
+
+      # One tarball of every image in integration-tests/docker/images.txt, so the run pulls
+      # them only when that file changes. The two base images the builds start FROM are in it,
+      # so this has to land before the build step.
+      - name: Restore third-party images
+        id: image-cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/fusion-test-images.tar
+          key: test-images-${{ hashFiles('integration-tests/docker/images.txt') }}
+
+      # On a hit the tarball is the images; dropping it afterwards gives the runner back the
+      # several GB it occupies, and costs nothing, because a hit never re-uploads the cache.
+      - name: Load images from the cache
+        if: steps.image-cache.outputs.cache-hit == 'true'
+        run: |
+          docker load -i /tmp/fusion-test-images.tar
+          rm -f /tmp/fusion-test-images.tar
+
+      - name: Pull remaining images
+        run: ./integration-tests/scripts/stack.sh pull
+
+      # Only writes the tarball. actions/cache uploads it in its own post-job step, and only
+      # after a miss, so on a hit there is nothing to write and this is skipped.
+      - name: Pack images for the cache
+        if: steps.image-cache.outputs.cache-hit != 'true'
+        run: ./integration-tests/scripts/stack.sh save /tmp/fusion-test-images.tar
+
+      - name: Build images
+        timeout-minutes: 20
+        run: make integration-test-images
+
+      - name: Run integration tests
+        env:
+          FUSION_IMAGE: fusion:test
+          FUSION_SPARK_IMAGE: fusion-spark:test
+          TEST_RUN_ID: ${{ github.run_id }}
+        run: make integration-test
+
+      - name: Upload logs and test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-logs
+          path: |
+            integration-tests/target/logs
+            integration-tests/target/failsafe-reports
+          retention-days: 7
+
+      - name: Stop stack
+        if: always()
+        run: make integration-test-down
