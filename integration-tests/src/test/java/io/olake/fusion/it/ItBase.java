@@ -32,7 +32,6 @@ import io.olake.fusion.it.harness.Await;
 import io.olake.fusion.it.harness.Env;
 import io.olake.fusion.it.harness.Fusion;
 import io.olake.fusion.it.harness.Olake;
-import io.olake.fusion.it.harness.SizeClass;
 import io.olake.fusion.it.harness.SparkTable;
 import io.olake.fusion.it.harness.SparkTable.FileInfo;
 import org.junit.jupiter.api.BeforeAll;
@@ -40,7 +39,6 @@ import org.junit.jupiter.api.BeforeAll;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.Arrays;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -79,99 +77,73 @@ abstract class ItBase {
     fusion = client;
   }
 
-  /** One test's table and the rows the test expects in it. */
+  /**
+   * One test's table. Every table is written the way a Fusion user's tables are written: OLake
+   * syncs a source Postgres database into the catalog, and OLake creates the namespace and the
+   * table on the first sync. The source is the oracle for the rows the table must hold.
+   */
   static final class TestTable {
+    /** Rows of the first sync. */
+    private static final int SEED_ROWS = 90;
+
+    /** Rows the CDC round inserts. */
+    private static final int CDC_ROWS = 30;
+
     final SparkTable table;
-    /** Null when only Spark writes the table. */
     final Olake olake;
 
-    private final Map<Long, String> sparkRows = new TreeMap<>();
-    private final Set<Long> deleted = new HashSet<>();
-    private long nextSparkId = 1_000_000;
+    private long nextSourceId = SEED_ROWS + 1;
 
     private TestTable(SparkTable table, Olake olake) {
       this.table = table;
       this.olake = olake;
     }
 
-    /** A table OLake creates from a fresh source DB seeded with ids 1..90. */
-    static TestTable olake(String name) {
+    /**
+     * A fresh source database, discovered and synced once: OLake creates the namespace and the
+     * table, Fusion picks it up, and the table gets the settings OLake-UI writes.
+     */
+    static TestTable create(String name) {
       Olake olake = new Olake(name, Paths.get("target", "it-work", Env.RUN_ID, name));
       olake.createSource();
       olake.discover();
-      SparkTable.recreateNamespace(olake.namespace());
-      olake.insert(1, 90);
+      olake.insert(1, SEED_ROWS);
       olake.sync();
       SparkTable table = new SparkTable(olake.namespace(), Olake.TABLE);
       fusion.awaitTableListed(table.namespace(), table.name());
-      table.setProperties(Map.of("write.delete.mode", "merge-on-read"));
-      setTargetSize(table);
-      return new TestTable(table, olake);
-    }
-
-    /** A table only Spark writes, in its own namespace. */
-    static TestTable spark(String name) {
-      String namespace = ("it_" + name + "_" + Env.RUN_ID).toLowerCase();
-      SparkTable.recreateNamespace(namespace);
-      SparkTable table =
-          SparkTable.create(namespace, "t", Map.of("write.delete.mode", "merge-on-read"));
-      fusion.awaitTableListed(namespace, table.name());
-      setTargetSize(table);
-      return new TestTable(table, null);
-    }
-
-    /** OLake-UI's target file size setting, which also enables optimization. */
-    private static void setTargetSize(SparkTable table) {
+      // OLake-UI's target file size setting, which also enables optimization.
       fusion.setTableProperties(
           table.namespace(),
           table.name(),
           Map.of(TableProps.TARGET_SIZE, String.valueOf(TARGET_SIZE), TableProps.ENABLED, "true"));
+      return new TestTable(table, olake);
     }
 
-    /** One CDC round in the source (updates, deletes, inserts) and an OLake sync. */
+    /**
+     * One CDC round in the source (updates, deletes, inserts) and an OLake sync: equality deletes
+     * and one more data file.
+     */
     void cdc() {
       olake.update(List.of(1L, 2L, 3L, 4L, 5L, 6L));
       olake.delete(List.of(7L, 8L, 9L));
-      olake.insert(91, 30);
+      load(CDC_ROWS);
+    }
+
+    /** {@link #SEED_ROWS} new source rows and an OLake sync: one more data file. */
+    void load() {
+      load(SEED_ROWS);
+    }
+
+    /** New source rows and an OLake sync: one more data file. */
+    void load(int rows) {
+      olake.insert(nextSourceId, rows);
+      nextSourceId += rows;
       olake.sync();
     }
 
-    /** Appends {@code files} Spark files of {@code size} to the region and checks their band. */
-    void append(String region, SizeClass size, int files) {
-      for (int i = 0; i < files; i++) {
-        Set<String> before = paths(table.files());
-        long first = nextSparkId;
-        table.append(region, first, size.rows());
-        nextSparkId += size.rows();
-        for (long id = first; id < nextSparkId; id++) {
-          sparkRows.put(id, id + "|" + region + "|" + SparkTable.payloadOf(id));
-        }
-        for (FileInfo file : table.files()) {
-          if (!before.contains(file.path()) && SizeClass.of(file.size(), TARGET_SIZE) != size) {
-            fail("setup error: Spark wrote " + file.size() + " bytes, outside " + size);
-          }
-        }
-      }
-    }
-
-    /** Deletes 3 live rows of the region through Spark (position deletes). */
-    void deleteRows(String region) {
-      List<Long> ids =
-          expectedRows().stream()
-              .filter(r -> r.split("\\|")[1].equals(region))
-              .map(r -> Long.parseLong(r.substring(0, r.indexOf('|'))))
-              .limit(3)
-              .collect(Collectors.toList());
-      table.deleteIds(ids);
-      deleted.addAll(ids);
-    }
-
-    /** Source rows (if OLake writes) + rows Spark appended - rows Spark deleted. */
+    /** The source rows, as sorted {@code id|region|payload} strings. */
     List<String> expectedRows() {
-      TreeSet<String> rows = new TreeSet<>(olake == null ? List.of() : olake.rows());
-      rows.addAll(sparkRows.values());
-      rows.removeIf(r -> deleted.contains(Long.parseLong(r.substring(0, r.indexOf('|')))));
-      return List.copyOf(rows);
+      return List.copyOf(new TreeSet<>(olake.rows()));
     }
   }
 
@@ -240,7 +212,7 @@ abstract class ItBase {
   }
 
   /**
-   * Live rows read through Spark equal the rows the test wrote. Order carries no meaning: both
+   * Live rows read through Spark equal the rows the source holds. Order carries no meaning: both
    * sides are sorted {@code id|region|payload} strings, compared as lists rather than sets so a
    * duplicated row also fails it.
    */
@@ -293,13 +265,18 @@ abstract class ItBase {
     }
   }
 
+  /** Setup precondition: the table holds at least {@code least} data files. */
+  static void requireDataFiles(TestTable t, int least) {
+    List<FileInfo> files = t.table.files();
+    long data = count(files, SparkTable.DATA);
+    if (data < least) {
+      fail("setup error: expected at least " + least + " data files, got " + data + ": " + files);
+    }
+  }
+
   // Helpers
 
   private static long count(List<FileInfo> files, int content) {
     return files.stream().filter(f -> f.content() == content).count();
-  }
-
-  private static Set<String> paths(List<FileInfo> files) {
-    return files.stream().map(FileInfo::path).collect(Collectors.toSet());
   }
 }

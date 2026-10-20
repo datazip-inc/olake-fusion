@@ -104,18 +104,6 @@ public final class Olake {
             + ") g");
   }
 
-  /** Inserts exactly these ids; the region follows the id. */
-  public void insert(Collection<Long> ids) {
-    execute(
-        database,
-        "INSERT INTO "
-            + TABLE
-            + " (id, region, payload) SELECT g, (ARRAY['ap','eu','us'])[(g % 3) + 1],"
-            + " md5(random()::text) || md5(random()::text) FROM unnest(ARRAY["
-            + join(ids)
-            + "]::bigint[]) g");
-  }
-
   public void update(Collection<Long> ids) {
     execute(
         database,
@@ -186,16 +174,6 @@ public final class Olake {
   public String namespace() {
     JsonNode stream = streamOf(readJson(workDir.resolve("streams.json")));
     return Json.text(stream, "destination_database").replace(':', '_');
-  }
-
-  public void dropSource() {
-    execute(
-        "source",
-        "DROP DATABASE IF EXISTS " + database + " WITH (FORCE)",
-        "SELECT pg_drop_replication_slot(slot_name) FROM pg_replication_slots"
-            + " WHERE slot_name = '"
-            + slot
-            + "' AND NOT active");
   }
 
   private void olake(String... args) {

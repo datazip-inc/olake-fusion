@@ -24,20 +24,14 @@ import io.olake.fusion.it.contract.Names;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
 
-import java.math.BigInteger;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
- * One table, reached through the user's query engine (Spark SQL over Spark Connect). Writes are
- * what a user does in Spark; reads are rows and the engine's own metadata tables.
+ * One table, read through the user's query engine (Spark SQL over Spark Connect). Tables and
+ * namespaces are created and written by OLake, never here: Spark only reads rows and the engine's
+ * own metadata tables.
  */
 public final class SparkTable {
   /** Iceberg's {@code content} values in the {@code files} metadata table. */
@@ -117,125 +111,7 @@ public final class SparkTable {
     return session().sql(sql).collectAsList();
   }
 
-  public static void exec(String sql) {
-    sql(sql);
-  }
-
-  public static void recreateNamespace(String namespace) {
-    exec("DROP NAMESPACE IF EXISTS " + Names.CATALOG + ".`" + namespace + "` CASCADE");
-    exec("CREATE NAMESPACE " + Names.CATALOG + ".`" + namespace + "`");
-  }
-
-  /**
-   * Creates a table the way a Spark user would, with the same business columns as the OLake table
-   * plus {@code _olake_id} and {@code _op_type}, so every journey reads rows the same way.
-   */
-  public static SparkTable create(String namespace, String name, Map<String, String> properties) {
-    SparkTable table = new SparkTable(namespace, name);
-    StringBuilder props = new StringBuilder("'format-version' = '2'");
-    properties.forEach(
-        (k, v) -> props.append(", ").append(quote(k)).append(" = ").append(quote(v)));
-    exec(
-        "CREATE TABLE "
-            + table.ident()
-            + " (id BIGINT, region STRING, payload STRING, updated_at TIMESTAMP,"
-            + " _olake_id STRING, _op_type STRING) USING iceberg"
-            + " TBLPROPERTIES ("
-            + props
-            + ")");
-    return table;
-  }
-
-  // Writes
-
-  public void setProperties(Map<String, String> properties) {
-    if (properties.isEmpty()) {
-      return;
-    }
-    String pairs =
-        properties.entrySet().stream()
-            .map(e -> quote(e.getKey()) + " = " + quote(e.getValue()))
-            .collect(Collectors.joining(", "));
-    exec("ALTER TABLE " + ident() + " SET TBLPROPERTIES (" + pairs + ")");
-  }
-
-  /**
-   * Appends {@code count} rows with ids {@code firstId..} as one file, all with {@code region}.
-   * Columns the table has beyond the business columns get the values a user writer would give them:
-   * {@code _olake_id} a unique key, the rest null.
-   */
-  public void append(String region, long firstId, int count) {
-    List<String> select = new ArrayList<>();
-    for (String column : columns()) {
-      switch (column) {
-        case "id":
-          select.add("id");
-          break;
-        case "region":
-          select.add(quote(region));
-          break;
-        case "payload":
-          select.add("sha2(concat('spark-', CAST(id AS STRING)), 512)");
-          break;
-        case "updated_at":
-          select.add("current_timestamp()");
-          break;
-        case "_olake_id":
-          select.add("concat('spark-', CAST(id AS STRING))");
-          break;
-        case "_op_type":
-          select.add("'c'");
-          break;
-        default:
-          select.add("NULL");
-      }
-    }
-    exec(
-        "INSERT INTO "
-            + ident()
-            + " SELECT /*+ REPARTITION(1) */ "
-            + String.join(", ", select)
-            + " FROM range("
-            + firstId
-            + ", "
-            + (firstId + count)
-            + ")");
-  }
-
-  /** The payload {@link #append} writes for a row id, computed the same way in Java. */
-  public static String payloadOf(long id) {
-    try {
-      byte[] digest =
-          MessageDigest.getInstance("SHA-512")
-              .digest(("spark-" + id).getBytes(StandardCharsets.UTF_8));
-      return String.format("%0128x", new BigInteger(1, digest));
-    } catch (NoSuchAlgorithmException e) {
-      throw new IllegalStateException(e);
-    }
-  }
-
-  public void deleteIds(Collection<Long> ids) {
-    String list = ids.stream().map(String::valueOf).collect(Collectors.joining(", "));
-    exec("DELETE FROM " + ident() + " WHERE id IN (" + list + ")");
-  }
-
-  public void drop() {
-    exec("DROP TABLE IF EXISTS " + ident() + " PURGE");
-  }
-
   // Reads
-
-  public List<String> columns() {
-    List<String> columns = new ArrayList<>();
-    for (Row row : sql("DESCRIBE TABLE " + ident())) {
-      String column = row.getString(0);
-      if (column == null || column.isEmpty() || column.startsWith("#")) {
-        break;
-      }
-      columns.add(column);
-    }
-    return columns;
-  }
 
   /** Live rows (tombstones excluded) as sorted {@code id|region|payload} strings. */
   public List<String> rows() {
@@ -265,9 +141,5 @@ public final class SparkTable {
                 + ident()
                 + ".snapshots ORDER BY committed_at DESC LIMIT 1");
     return rows.isEmpty() ? null : rows.get(0).getString(0);
-  }
-
-  private static String quote(String value) {
-    return "'" + value.replace("'", "''") + "'";
   }
 }
