@@ -362,14 +362,18 @@ abstract class ItBase {
     assertEquals(0, count(files, SparkTable.POSITION_DELETES), "position deletes in " + files);
   }
 
-  /** Setup precondition: the table holds exactly {@code expected} equality delete files. */
-  static void requireEqualityDeletes(TestTable t, int expected) {
+  /**
+   * Setup precondition: the table holds at least {@code least} equality delete files. How many of
+   * them one OLake sync writes is OLake's business, not Fusion's contract: one CDC round writes a
+   * single equality delete file today, so the tests ask for what they need and no more.
+   */
+  static void requireEqualityDeletes(TestTable t, int least) {
     List<FileInfo> files = t.files();
     long equality = count(files, SparkTable.EQUALITY_DELETES);
-    if (equality != expected) {
+    if (equality < least) {
       fail(
-          "setup error: expected "
-              + expected
+          "setup error: expected at least "
+              + least
               + " equality delete files before compaction, got "
               + equality
               + ": "

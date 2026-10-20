@@ -66,7 +66,7 @@ class CompactionLifecycleIT extends ItBase {
   }
 
   /**
-   * OLake writes equality deletes for a CDC round. A MINOR converts them to position deletes: no
+   * OLake writes an equality delete for a CDC round. A MINOR converts it to position deletes: no
    * equality delete is left, position deletes are, and the data files are untouched, because Fusion
    * converts the deletes of a segment file instead of rewriting the file.
    */
@@ -77,7 +77,7 @@ class CompactionLifecycleIT extends ItBase {
     table.cdc();
     // Every data file must be a segment file for the conversion to be the planned work.
     useSegmentSizedFiles(table);
-    requireEqualityDeletes(table, 2);
+    requireEqualityDeletes(table, 1);
     ingested = table.currentSnapshotId();
     long dataFiles = dataFiles(table);
 
@@ -119,7 +119,7 @@ class CompactionLifecycleIT extends ItBase {
   void fullClearsTheEqualityDeletesOfTheIngestedSnapshot() {
     assertNotNull(ingested, "the MINOR step must run first");
     table.rollbackTo(ingested);
-    requireEqualityDeletes(table, 2);
+    requireEqualityDeletes(table, 1);
 
     assertProcess(optimize(table, FULL), FULL, SUCCESS);
 
