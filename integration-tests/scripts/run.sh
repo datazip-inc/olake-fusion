@@ -45,7 +45,12 @@ if pgrep -f MavenWrapperMain >/dev/null; then
   exit 1
 fi
 
-# 1. Images under test: pinned when given, otherwise built from the working tree once.
+# 1. Third-party images first: the builds below start FROM two of them.
+t=$(date +%s)
+"$TESTS_DIR/scripts/stack.sh" pull
+timing pull "$t"
+
+# 2. Images under test: pinned when given, otherwise built from the working tree once.
 t=$(date +%s)
 if [[ -n "${FUSION_IMAGE:-}" && -n "${FUSION_SPARK_IMAGE:-}" ]]; then
   docker tag "$FUSION_IMAGE" fusion:test
@@ -54,16 +59,15 @@ else
   "$TESTS_DIR/scripts/build.sh" artifacts
   "$TESTS_DIR/scripts/build.sh" images
 fi
-docker image inspect "$OLAKE_IMAGE" >/dev/null 2>&1 || docker pull "$OLAKE_IMAGE"
 timing images "$t"
 
-# 2. A fresh stack, so nothing from an earlier run leaks in.
+# 3. A fresh stack, so nothing from an earlier run leaks in.
 t=$(date +%s)
 "$TESTS_DIR/scripts/stack.sh" down
 "$TESTS_DIR/scripts/stack.sh" up
 timing stack-up "$t"
 
-# 3. The suite: parallel tests, then the serial ones.
+# 4. The suite: parallel tests, then the serial ones.
 t=$(date +%s)
 status=0
 mvn_args=(-B -ntp -f "$TESTS_DIR/pom.xml" verify "-Dtest.parallelism=${TEST_PARALLELISM:-2}")
@@ -73,10 +77,10 @@ fi
 ./mvnw "${mvn_args[@]}" || status=$?
 timing verify "$t"
 
-# 4. Logs, always.
+# 5. Logs, always.
 "$TESTS_DIR/scripts/stack.sh" logs "$TESTS_DIR/target/logs"
 
-# 5. Tear down only when the run passed and the data need not be kept.
+# 6. Tear down only when the run passed and the data need not be kept.
 if [[ $status -eq 0 && "${TEST_KEEP_DATA:-0}" != "1" ]]; then
   "$TESTS_DIR/scripts/stack.sh" down
 else

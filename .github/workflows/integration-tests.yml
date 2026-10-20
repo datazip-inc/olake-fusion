@@ -26,6 +26,16 @@
 #                      point developers run. The images are built once: the run gets them pinned
 #                      through FUSION_IMAGE/FUSION_SPARK_IMAGE and only tags them.
 #
+# Both jobs run only after a maintainer approves them: they are gated on the `integration-tests`
+# environment, whose required reviewers GitHub asks for before the first job starts. Set the
+# reviewers in Settings > Environments > integration-tests; without them the gate is a no-op and
+# every run starts straight away.
+#
+# The third-party images the stack needs (integration-tests/docker/images.txt) are cached
+# between runs as one `docker save` tarball, keyed on that file, so a run pulls them only when
+# a tag there changes. What this repo builds is never cached (it changes every commit), and
+# neither is the OLake source image, whose default tag floats.
+#
 # TODO: build the images with docker-images.yml once it can build without pushing to Docker
 # Hub, and push the test images to GHCR so later jobs and reruns can pull them. Today they exist
 # only in this job's local Docker.
@@ -63,6 +73,8 @@ jobs:
   setup:
     name: Build Fusion, optimizer and tests
     runs-on: ubuntu-latest
+    # Holds the whole workflow until a required reviewer approves it.
+    environment: integration-tests
     timeout-minutes: 45
     steps:
       - name: Checkout code
@@ -92,6 +104,7 @@ jobs:
     name: Run integration tests
     needs: setup
     runs-on: ubuntu-latest
+    environment: integration-tests
     timeout-minutes: 90
     steps:
       - name: Checkout code
@@ -109,6 +122,27 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: fusion-build
+
+      # One tarball of every image in integration-tests/docker/images.txt, so the run pulls
+      # them only when that file changes. The two base images the builds start FROM are in it,
+      # so this has to land before the build step.
+      - name: Restore third-party images
+        id: image-cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/fusion-test-images.tar
+          key: test-images-${{ hashFiles('integration-tests/docker/images.txt') }}
+
+      - name: Load cached images
+        if: steps.image-cache.outputs.cache-hit == 'true'
+        run: docker load -i /tmp/fusion-test-images.tar
+
+      - name: Pull whatever is still missing
+        run: ./integration-tests/scripts/stack.sh pull
+
+      - name: Save images for the next run
+        if: steps.image-cache.outputs.cache-hit != 'true'
+        run: ./integration-tests/scripts/stack.sh save /tmp/fusion-test-images.tar
 
       - name: Build images
         timeout-minutes: 20

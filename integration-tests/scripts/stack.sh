@@ -23,6 +23,8 @@
 #   stack.sh up            Render the config, start everything, wait until it is usable
 #   stack.sh down          Remove the containers, volumes, Kind cluster and network
 #   stack.sh logs [dir]    Collect container and Spark pod logs into dir (default: logs)
+#   stack.sh pull          Pull every third-party image the stack needs, skipping those present
+#   stack.sh save <file>   docker save those images into <file>, for CI to cache
 #
 # Expects fusion:test and fusion-spark:test to exist (scripts/build.sh images).
 
@@ -36,11 +38,39 @@ NETWORK=fusion-test-net
 INIT=fusion-test-init
 AMS=fusion-test-ams
 YQ_IMAGE="${YQ_IMAGE:-mikefarah/yq:4}"
+IMAGE_LIST="${IMAGE_LIST:-$TESTS_DIR/docker/images.txt}"
 
 export TEST_LOG_DIR="${TEST_LOG_DIR:-/tmp/fusion-test-logs}"
 SPARK_CONNECT_PORT="${TEST_SPARK_CONNECT_PORT:-15002}"
 
 compose() { docker compose -f "$COMPOSE_FILE" "$@"; }
+
+# The third-party images of docker/images.txt, comments and blank lines dropped.
+listed_images() { grep -vE '^[[:space:]]*(#|$)' "$IMAGE_LIST"; }
+
+# Pulls what is missing. The OLake source image comes from $OLAKE_IMAGE rather than the list,
+# because the caller may override it; its default tag is floating, so it is pulled every run
+# instead of being frozen into the cache.
+pull() {
+  local image
+  for image in $(listed_images) "${OLAKE_IMAGE:-olakego/source-postgres:latest}"; do
+    if docker image inspect "$image" >/dev/null 2>&1; then
+      echo "present: $image"
+    else
+      echo "pulling: $image"
+      docker pull -q "$image" || return 1
+    fi
+  done
+}
+
+# Saves the listed images, and only those: what this repo builds changes every commit, and the
+# OLake image is deliberately left out (see pull).
+save() {
+  local file="${1:?usage: stack.sh save <file>}"
+  # shellcheck disable=SC2046
+  docker save -o "$file" $(listed_images)
+  echo "Saved $(listed_images | wc -l | tr -d ' ') images to $file ($(du -h "$file" | cut -f1))"
+}
 
 # Renders build/config.yaml, the config.yaml the Fusion container starts with: the shipped AMS
 # config with docker/fusion-config.overlay.yaml merged over it. The overlay holds only what the
@@ -148,5 +178,7 @@ case "${1:-}" in
   up) up ;;
   down) down ;;
   logs) logs "${2:-}" ;;
-  *) echo "usage: $0 up|down|logs [dir]" >&2; exit 2 ;;
+  pull) pull ;;
+  save) save "${2:-}" ;;
+  *) echo "usage: $0 up|down|logs [dir]|pull|save <file>" >&2; exit 2 ;;
 esac
