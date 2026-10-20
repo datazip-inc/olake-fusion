@@ -18,7 +18,7 @@
 
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
-name: fusion-it-cluster
+name: fusion-test-cluster
 networking:
   podSubnet: "10.244.0.0/16"
   serviceSubnet: "10.96.0.0/12"
@@ -42,7 +42,7 @@ nodes:
             - "127.0.0.1"
             - "0.0.0.0"
             - "localhost"
-            - "fusion-it-cluster-control-plane"
+            - "fusion-test-cluster-control-plane"
   - role: worker
     image: kindest/node:v1.28.0
     extraMounts:

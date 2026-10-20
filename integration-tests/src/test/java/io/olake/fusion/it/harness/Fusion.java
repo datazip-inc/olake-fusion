@@ -21,10 +21,10 @@
 package io.olake.fusion.it.harness;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import io.olake.fusion.it.contract.ApiPaths;
-import io.olake.fusion.it.contract.Fields;
-import io.olake.fusion.it.contract.Names;
-import io.olake.fusion.it.contract.ProcessStatus;
+import io.olake.fusion.it.Contract.ApiPaths;
+import io.olake.fusion.it.Contract.Fields;
+import io.olake.fusion.it.Contract.Names;
+import io.olake.fusion.it.Contract.ProcessStatus;
 
 import java.io.IOException;
 import java.math.BigInteger;
@@ -280,18 +280,6 @@ public final class Fusion {
   public long healthScore(String database, String table) {
     JsonNode details = get(String.format(ApiPaths.TABLE_DETAILS, (Object[]) ids(database, table)));
     return Json.number(Json.required(details, Fields.TABLE_SUMMARY), Fields.HEALTH_SCORE);
-  }
-
-  /** Health score of the table on the overview page; null when the overview does not list it. */
-  public Long overviewHealthScore(String database, String table) {
-    String fullName = Names.CATALOG + "." + database + "." + table;
-    String path = ApiPaths.OVERVIEW_TOP + "?order=asc&orderBy=healthScore&limit=100000";
-    for (JsonNode item : Json.elements(get(path), ApiPaths.OVERVIEW_TOP)) {
-      if (fullName.equals(Json.text(item, Fields.TABLE_NAME))) {
-        return Json.number(item, Fields.HEALTH_SCORE);
-      }
-    }
-    return null;
   }
 
   // Optimizing processes

@@ -22,16 +22,16 @@ package io.olake.fusion.it.harness;
 
 /** Where the stack is reached from the test JVM, and the run's settings. */
 public final class Env {
-  public static final String FUSION_URL = get("IT_FUSION_URL", "http://localhost:11630");
+  public static final String FUSION_URL = get("TEST_FUSION_URL", "http://localhost:11630");
   public static final String SPARK_CONNECT_URL =
-      get("IT_SPARK_CONNECT_URL", "sc://localhost:15002");
-  public static final String SOURCE_JDBC_HOST = get("IT_SOURCE_HOST", "localhost:25432");
+      get("TEST_SPARK_CONNECT_URL", "sc://localhost:15002");
+  public static final String SOURCE_JDBC_HOST = get("TEST_SOURCE_HOST", "localhost:25432");
   public static final String OLAKE_IMAGE = get("OLAKE_IMAGE", "olakego/source-postgres:latest");
-  public static final String DOCKER_NETWORK = "fusion-it-net";
-  public static final String AMS_CONTAINER = "fusion-it-ams";
+  public static final String DOCKER_NETWORK = "fusion-test-net";
+
+  /** Suffix of every name a run creates, so parallel runs never collide. */
   public static final String RUN_ID =
-      get("IT_RUN_ID", String.valueOf(System.currentTimeMillis() / 1000 % 1_000_000));
-  public static final boolean KEEP_DATA = "1".equals(get("IT_KEEP_DATA", "0"));
+      get("TEST_RUN_ID", String.valueOf(System.currentTimeMillis() / 1000 % 1_000_000));
 
   private Env() {}
 

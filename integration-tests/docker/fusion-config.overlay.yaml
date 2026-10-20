@@ -16,7 +16,7 @@
 #
 # Modified by Datazip Inc. in 2026
 
-# Only the keys the integration tests change. scripts/render-config.sh merges this
+# Only the keys the integration tests change. scripts/stack.sh merges this
 # file over the shipped dist/src/main/amoro-bin/conf/config.yaml, so every other key
 # keeps its shipped value. Lists (containers) are replaced, not merged.
 
@@ -47,12 +47,12 @@ containers:
     container-impl: org.apache.amoro.server.manager.SparkOptimizerContainer
     properties:
       spark-home: /opt/spark/
-      master: k8s://https://fusion-it-cluster-control-plane:6443
+      master: k8s://https://fusion-test-cluster-control-plane:6443
       deploy-mode: cluster
       job-uri: "local:///opt/spark/usrlib/optimizer-job.jar"
       export.HADOOP_USER_NAME: spark
       export.SPARK_CONF_DIR: /opt/spark/conf/
-      spark-conf.spark.kubernetes.container.image: "fusion-spark:it"
+      spark-conf.spark.kubernetes.container.image: "fusion-spark:test"
       spark-conf.spark.kubernetes.container.image.pullPolicy: "IfNotPresent"
       spark-conf.spark.kubernetes.namespace: spark
       spark-conf.spark.kubernetes.authenticate.driver.serviceAccountName: spark

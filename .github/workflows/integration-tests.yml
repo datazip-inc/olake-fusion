@@ -19,11 +19,12 @@
 # Fusion integration tests (integration-tests/) against images built from this commit.
 # Two jobs, so a failure points at the stage that broke:
 #   setup              Maven builds the Fusion distribution, the Spark optimizer job and the
-#                      test sources (`make it-build`) and hands the artifacts to the next job.
-#   integration-tests  Builds the images from those artifacts (`make it-images`) and runs the
-#                      suite against them (`make it`), the same entry point developers run.
-#                      The images are built once: `make it` gets them pinned through
-#                      FUSION_IMAGE/FUSION_SPARK_IMAGE and only tags them.
+#                      test sources (`make integration-test-build`) and hands the artifacts to
+#                      the next job.
+#   integration-tests  Builds the images from those artifacts (`make integration-test-images`)
+#                      and runs the suite against them (`make integration-test`), the same entry
+#                      point developers run. The images are built once: the run gets them pinned
+#                      through FUSION_IMAGE/FUSION_SPARK_IMAGE and only tags them.
 #
 # TODO: build the images with docker-images.yml once it can build without pushing to Docker
 # Hub, and push the test images to GHCR so later jobs and reruns can pull them. Today they exist
@@ -75,7 +76,7 @@ jobs:
           cache: maven
 
       - name: Build distribution, optimizer job and test sources
-        run: make it-build
+        run: make integration-test-build
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -111,14 +112,14 @@ jobs:
 
       - name: Build images
         timeout-minutes: 20
-        run: make it-images
+        run: make integration-test-images
 
       - name: Run integration tests
         env:
-          FUSION_IMAGE: fusion:it
-          FUSION_SPARK_IMAGE: fusion-spark:it
-          IT_RUN_ID: ${{ github.run_id }}
-        run: make it
+          FUSION_IMAGE: fusion:test
+          FUSION_SPARK_IMAGE: fusion-spark:test
+          TEST_RUN_ID: ${{ github.run_id }}
+        run: make integration-test
 
       - name: Upload logs and test reports
         if: always()
@@ -126,10 +127,10 @@ jobs:
         with:
           name: integration-test-logs
           path: |
-            integration-tests/target/it-logs
+            integration-tests/target/logs
             integration-tests/target/failsafe-reports
           retention-days: 7
 
       - name: Stop stack
         if: always()
-        run: make it-down
+        run: make integration-test-down

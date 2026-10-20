@@ -39,17 +39,27 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
  * The user's ingest path: a source Postgres database and OLake syncing it into the catalog with
- * CDC. Every journey owns one source database, replication slot, publication and working dir.
+ * CDC. Every test owns one source database, replication slot, publication, Iceberg namespace and
+ * working dir, each named after the test and the run id so parallel tests and runs never collide.
  */
 public final class Olake {
+  /** The source table OLake replicates, created by {@code fixtures/source/schema.sql}. */
   public static final String TABLE = "orders";
+
+  /** The schema {@link #TABLE} lives in, the one every Postgres database has. */
+  private static final String SOURCE_SCHEMA = "public";
+
+  /** {@code src_minor_483920}: the source Postgres database of the test. */
+  private static final String SOURCE_DB_PREFIX = "src_";
+
+  /** {@code it_minor_483920}: the Iceberg namespace OLake writes the test's table to. */
+  private static final String NAMESPACE_PREFIX = "it_";
 
   private static final Path FIXTURES = Paths.get("fixtures").toAbsolutePath();
   private static final String SOURCE_USER = "source";
@@ -60,15 +70,23 @@ public final class Olake {
   private static final String SELECTED_STREAMS = "streams.selected.json";
 
   private final String database;
+  private final String namespace;
   private final String slot;
   private final String publication;
   private final Path workDir;
 
-  public Olake(String journey, Path workDir) {
-    this.database = ("src_" + journey + "_" + Env.RUN_ID).toLowerCase();
+  public Olake(String test, Path workDir) {
+    String name = (test + "_" + Env.RUN_ID).toLowerCase();
+    this.database = SOURCE_DB_PREFIX + name;
+    this.namespace = NAMESPACE_PREFIX + name;
     this.slot = database + "_slot";
     this.publication = database + "_pub";
     this.workDir = workDir.resolve("olake").toAbsolutePath();
+  }
+
+  /** The Iceberg namespace OLake creates and writes {@link #TABLE} to. */
+  public String namespace() {
+    return namespace;
   }
 
   // Source database
@@ -102,18 +120,6 @@ public final class Olake {
             + ", "
             + (firstId + count - 1)
             + ") g");
-  }
-
-  /** Inserts exactly these ids; the region follows the id. */
-  public void insert(Collection<Long> ids) {
-    execute(
-        database,
-        "INSERT INTO "
-            + TABLE
-            + " (id, region, payload) SELECT g, (ARRAY['ap','eu','us'])[(g % 3) + 1],"
-            + " md5(random()::text) || md5(random()::text) FROM unnest(ARRAY["
-            + join(ids)
-            + "]::bigint[]) g");
   }
 
   public void update(Collection<Long> ids) {
@@ -182,22 +188,6 @@ public final class Olake {
     olake(args.toArray(new String[0]));
   }
 
-  /** The Iceberg namespace OLake writes to: its {@code destination_database}, ':' -> '_'. */
-  public String namespace() {
-    JsonNode stream = streamOf(readJson(workDir.resolve("streams.json")));
-    return Json.text(stream, "destination_database").replace(':', '_');
-  }
-
-  public void dropSource() {
-    execute(
-        "source",
-        "DROP DATABASE IF EXISTS " + database + " WITH (FORCE)",
-        "SELECT pg_drop_replication_slot(slot_name) FROM pg_replication_slots"
-            + " WHERE slot_name = '"
-            + slot
-            + "' AND NOT active");
-  }
-
   private void olake(String... args) {
     List<String> command =
         new ArrayList<>(
@@ -228,9 +218,12 @@ public final class Olake {
    *
    * <ul>
    *   <li>only {@link #TABLE} stays, in both {@code selected_streams} and {@code streams};
-   *   <li>its selection gets {@code stream-settings.json}'s {@code selected} block (normalization,
-   *       no append mode, equality deletes for updates, no partitioning);
-   *   <li>its stream gets the {@code stream} block (CDC sync mode).
+   *   <li>its selection gets the settings a user picks in OLake-UI: normalization, no append mode,
+   *       equality deletes for updates, no partitioning;
+   *   <li>its stream gets CDC as its sync mode, and the destination a user picks in OLake-UI,
+   *       {@link #namespace} and {@link #TABLE}, which is what decides the Iceberg namespace and
+   *       table OLake creates. Left to {@code discover}, the namespace would be the source database
+   *       and the schema joined with a colon.
    * </ul>
    */
   private void patchStreams() {
@@ -239,27 +232,31 @@ public final class Olake {
     // writable by the test; the selection goes into a file the test owns.
     Path target = workDir.resolve(SELECTED_STREAMS);
     ObjectNode catalog = (ObjectNode) readJson(path);
-    JsonNode settings = readJson(FIXTURES.resolve("olake/stream-settings.json"));
-
     ArrayNode selected = Json.MAPPER.createArrayNode();
-    for (JsonNode entry : Json.array(Json.required(catalog, "selected_streams"), "public")) {
+    for (JsonNode entry : Json.array(Json.required(catalog, "selected_streams"), SOURCE_SCHEMA)) {
       if (TABLE.equals(Json.text(entry, "stream_name"))) {
         ObjectNode copy = ((ObjectNode) entry).deepCopy();
-        copy.setAll((ObjectNode) Json.required(settings, "selected"));
+        copy.put("normalization", true);
+        copy.put("append_mode", false);
+        copy.put("update_type", "eq");
+        copy.put("partition_regex", "");
         selected.add(copy);
       }
     }
     if (selected.size() != 1) {
-      throw new IllegalStateException("discover did not find public." + TABLE + ": " + catalog);
+      throw new IllegalStateException(
+          "discover did not find " + SOURCE_SCHEMA + "." + TABLE + ": " + catalog);
     }
     ((ObjectNode) catalog.get("selected_streams")).removeAll();
-    ((ObjectNode) catalog.get("selected_streams")).set("public", selected);
+    ((ObjectNode) catalog.get("selected_streams")).set(SOURCE_SCHEMA, selected);
 
     ArrayNode streams = Json.MAPPER.createArrayNode();
     for (JsonNode wrapper : Json.array(catalog, "streams")) {
       ObjectNode stream = (ObjectNode) Json.required(wrapper, "stream");
       if (TABLE.equals(Json.text(stream, "name"))) {
-        stream.setAll((ObjectNode) Json.required(settings, "stream"));
+        stream.put("sync_mode", "cdc");
+        stream.put("destination_database", namespace);
+        stream.put("destination_table", TABLE);
         streams.add(wrapper);
       }
     }
@@ -269,16 +266,6 @@ public final class Olake {
     } catch (IOException e) {
       throw new UncheckedIOException(e);
     }
-  }
-
-  private static JsonNode streamOf(JsonNode catalog) {
-    for (Iterator<JsonNode> it = Json.array(catalog, "streams").iterator(); it.hasNext(); ) {
-      JsonNode stream = Json.required(it.next(), "stream");
-      if (TABLE.equals(Json.text(stream, "name"))) {
-        return stream;
-      }
-    }
-    throw new IllegalStateException("streams.json has no stream " + TABLE);
   }
 
   private void render(String fixture, String target, Map<String, String> values)

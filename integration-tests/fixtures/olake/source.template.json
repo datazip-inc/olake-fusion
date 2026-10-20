@@ -1,5 +1,5 @@
 {
-  "host": "fusion-it-source",
+  "host": "fusion-test-source",
   "port": 5432,
   "database": "${SOURCE_DB}",
   "username": "source",

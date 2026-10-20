@@ -44,7 +44,7 @@
         <slf4j.version>2.0.13</slf4j.version>
         <failsafe.version>3.2.5</failsafe.version>
         <spotless.version>2.27.2</spotless.version>
-        <it.parallelism>2</it.parallelism>
+        <test.parallelism>2</test.parallelism>
     </properties>
 
     <dependencies>
@@ -143,7 +143,7 @@
                     <argLine>--add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED</argLine>
                 </configuration>
                 <executions>
-                    <!-- Journeys without the serial tag, run concurrently. -->
+                    <!-- Tests without the serial tag, run concurrently. -->
                     <execution>
                         <id>parallel</id>
                         <goals>
@@ -157,11 +157,11 @@
                                 <configurationParameters>junit.jupiter.execution.parallel.enabled = true
                                     junit.jupiter.execution.parallel.mode.default = concurrent
                                     junit.jupiter.execution.parallel.config.strategy = fixed
-                                    junit.jupiter.execution.parallel.config.fixed.parallelism = ${it.parallelism}</configurationParameters>
+                                    junit.jupiter.execution.parallel.config.fixed.parallelism = ${test.parallelism}</configurationParameters>
                             </properties>
                         </configuration>
                     </execution>
-                    <!-- Timing-sensitive journeys, one at a time, after the parallel ones. -->
+                    <!-- Timing-sensitive tests, one at a time, after the parallel ones. -->
                     <execution>
                         <id>serial</id>
                         <goals>

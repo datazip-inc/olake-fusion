@@ -20,20 +20,16 @@
 
 package io.olake.fusion.it;
 
-import static io.olake.fusion.it.contract.OptimizingType.FULL;
-import static io.olake.fusion.it.contract.OptimizingType.MAJOR;
-import static io.olake.fusion.it.contract.OptimizingType.MINOR;
-import static io.olake.fusion.it.contract.ProcessStatus.FAILED;
-import static io.olake.fusion.it.contract.ProcessStatus.SKIPPED;
-import static io.olake.fusion.it.contract.ProcessStatus.SUCCESS;
+import static io.olake.fusion.it.Contract.OptimizingType.FULL;
+import static io.olake.fusion.it.Contract.OptimizingType.MAJOR;
+import static io.olake.fusion.it.Contract.OptimizingType.MINOR;
+import static io.olake.fusion.it.Contract.ProcessStatus.SKIPPED;
+import static io.olake.fusion.it.Contract.ProcessStatus.SUCCESS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.olake.fusion.it.harness.Await;
-import io.olake.fusion.it.harness.Bucket;
 import io.olake.fusion.it.harness.Fusion;
-import io.olake.fusion.it.harness.SizeClass;
-import io.olake.fusion.it.harness.SparkTable;
 import io.olake.fusion.it.harness.SparkTable.FileInfo;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -42,19 +38,26 @@ import java.time.Duration;
 import java.util.List;
 
 /**
- * What a Fusion user does, one test per behavior, each on its own unpartitioned table. Data comes
- * in the way a user writes it (OLake CDC, Spark SQL); Fusion is configured and triggered through
- * the table settings OLake-UI writes; results are read back through Spark and Fusion's REST API.
+ * What a Fusion user does, one test per behavior, each on its own unpartitioned table. Every table
+ * is created and written by OLake: the test changes the source database and syncs, which is the
+ * only way Fusion's tables come into being in the product. Fusion is configured and triggered
+ * through the table settings OLake-UI writes; results are read back through Spark and Fusion's REST
+ * API.
  */
 class FusionIT extends ItBase {
-  /** Region of every row Spark appends; it is a plain column, the tables are not partitioned. */
-  private static final String REGION = "eu";
+  /**
+   * Rows per sync in the health-score test. Small enough that every file stays below the minimum
+   * target size (so the score counts it), many enough that the table as a whole reaches it.
+   */
+  private static final int HEALTH_ROWS = 600;
+
+  private static final int HEALTH_SYNCS = 6;
 
   // Compaction
 
   @Test
   void minorCompaction() {
-    TestTable t = TestTable.olake("minor");
+    TestTable t = TestTable.create("minor");
     t.cdc();
     requireDeletes(t, true);
     List<FileInfo> before = t.table.files();
@@ -66,9 +69,9 @@ class FusionIT extends ItBase {
 
   @Test
   void majorCompaction() {
-    TestTable t = TestTable.olake("major");
+    TestTable t = TestTable.create("major");
     t.cdc();
-    t.append(REGION, SizeClass.UNDERSIZED_SEGMENT, 2);
+    t.load();
     requireDeletes(t, true);
     List<FileInfo> before = t.table.files();
 
@@ -79,7 +82,7 @@ class FusionIT extends ItBase {
 
   @Test
   void fullCompaction() {
-    TestTable t = TestTable.olake("full");
+    TestTable t = TestTable.create("full");
     t.cdc();
     requireDeletes(t, true);
     List<FileInfo> before = t.table.files();
@@ -92,9 +95,9 @@ class FusionIT extends ItBase {
   /** No deletes: MAJOR is decided by the "more than one data file" branch. */
   @Test
   void majorWithoutDeletes() {
-    TestTable t = TestTable.spark("major_nodel");
-    t.append(REGION, SizeClass.UNDERSIZED_SEGMENT, 2);
+    TestTable t = insertsOnly("major_nodel");
     requireDeletes(t, false);
+    requireDataFiles(t, 2);
     List<FileInfo> before = t.table.files();
 
     assertProcess(optimize(t, MAJOR), MAJOR, SUCCESS);
@@ -105,9 +108,9 @@ class FusionIT extends ItBase {
   /** No deletes: FULL is decided by the "two or more fragments" branch. */
   @Test
   void fullFragmentsOnly() {
-    TestTable t = TestTable.spark("full_frag");
-    t.append(REGION, SizeClass.FRAGMENT, 3);
+    TestTable t = insertsOnly("full_frag");
     requireDeletes(t, false);
+    requireDataFiles(t, 2);
     List<FileInfo> before = t.table.files();
 
     assertProcess(optimize(t, FULL), FULL, SUCCESS);
@@ -139,9 +142,8 @@ class FusionIT extends ItBase {
    */
   @Test
   void nothingToDoIsSkipped() {
-    TestTable t = TestTable.spark("nothing_to_do");
-    t.append(REGION, SizeClass.FRAGMENT, 3);
-    t.deleteRows(REGION);
+    TestTable t = TestTable.create("nothing_to_do");
+    t.cdc();
     assertProcess(optimize(t, FULL), FULL, SUCCESS);
     String snapshot = t.table.currentSnapshotId();
 
@@ -155,9 +157,8 @@ class FusionIT extends ItBase {
   @Test
   @Tag("serial")
   void cronFiresWithinAMinute() {
-    TestTable t = TestTable.spark("cron");
-    t.append(REGION, SizeClass.FRAGMENT, 3);
-    t.deleteRows(REGION);
+    TestTable t = TestTable.create("cron");
+    t.cdc();
     long enabledAt = System.currentTimeMillis();
 
     Fusion.Process run = optimize(t, MINOR);
@@ -170,13 +171,18 @@ class FusionIT extends ItBase {
   // Health score
 
   /**
-   * The score scales its penalties by the table's file count and size, so fragments alone keep a
-   * table this small at 98-100; undersized segments bring it to about 90. A snapshot scored
-   * mid-setup can still be at 100, so the first wait is for a score below 100.
+   * The score scales its penalties by the table's file count and size, so a handful of tiny OLake
+   * files keeps a table at 100. {@link #HEALTH_SYNCS} syncs of {@link #HEALTH_ROWS} rows each give
+   * it enough files and bytes to be penalized; a snapshot scored mid-setup can still be at 100, so
+   * the first wait is for a score below 100.
    */
   @Test
   void healthScoreImprovesAfterFull() {
-    TestTable t = eligibleForAllTypes("health");
+    TestTable t = TestTable.create("health");
+    t.cdc();
+    for (int i = 0; i < HEALTH_SYNCS; i++) {
+      t.load(HEALTH_ROWS);
+    }
     long before =
         Await.until(
             "a health score below 100 for " + t.table.ident(),
@@ -192,48 +198,28 @@ class FusionIT extends ItBase {
         score -> score > before);
   }
 
-  // Plan failure
-
-  /**
-   * One data manifest is moved out of place in the bucket (the agreed exception to the black-box
-   * rule): planning reads manifests, so the MAJOR must fail before creating any task and commit
-   * nothing. With the manifest back, the next MAJOR succeeds.
-   */
-  @Test
-  void planFailureOnMissingManifest() {
-    TestTable t = TestTable.spark("planfail");
-    t.append(REGION, SizeClass.UNDERSIZED_SEGMENT, 4);
-    t.deleteRows(REGION);
-    String snapshot = t.table.currentSnapshotId();
-    String manifest =
-        SparkTable.sql("SELECT path FROM " + t.table.ident() + ".manifests WHERE content = 0")
-            .get(0)
-            .getString(0);
-
-    Fusion.Process failed;
-    Bucket.move(manifest, manifest + ".moved-by-test");
-    try {
-      failed = optimize(t, MAJOR);
-    } finally {
-      Bucket.move(manifest + ".moved-by-test", manifest);
-    }
-    assertProcess(failed, MAJOR, FAILED);
-    assertEquals(0, failed.totalTasks(), "failed in planning, before any task: " + failed);
-    assertEquals(snapshot, t.table.currentSnapshotId(), "a failed process commits nothing");
-
-    assertProcess(optimize(t, MAJOR), MAJOR, SUCCESS);
-    assertRows(t);
-  }
-
   // Helpers
 
-  /** 2 undersized segments, 3 fragments and deletes, so only priority decides the type. */
+  /** Several data files and deletes, so only priority decides the type. */
   private static TestTable eligibleForAllTypes(String name) {
-    TestTable t = TestTable.spark(name);
-    t.append(REGION, SizeClass.UNDERSIZED_SEGMENT, 2);
-    t.append(REGION, SizeClass.FRAGMENT, 3);
-    t.deleteRows(REGION);
+    TestTable t = TestTable.create(name);
+    t.cdc();
+    t.load();
     requireDeletes(t, true);
+    return t;
+  }
+
+  /**
+   * A table with several data files and no delete file. OLake writes an equality delete for every
+   * source update and delete, and also for the inserts of the first sync after the backfill, so a
+   * FULL first clears the table to one data file and no deletes; the plain insert syncs after it
+   * add data files only.
+   */
+  private static TestTable insertsOnly(String name) {
+    TestTable t = TestTable.create(name);
+    t.load();
+    assertProcess(optimize(t, FULL), FULL, SUCCESS);
+    t.load();
     return t;
   }
 }

@@ -20,9 +20,9 @@
 # Builds what the integration tests run against. Two phases, so CI can run them in separate
 # jobs and a failure points at the phase that broke:
 #
-#   build.sh artifacts  Maven: Fusion distribution, Spark optimizer job, and the IT test sources
+#   build.sh artifacts  Maven: Fusion distribution, Spark optimizer job, and the test sources
 #                       (a compile error in the tests fails here, before any stack starts)
-#   build.sh images     Docker: fusion:it and fusion-spark:it from those artifacts
+#   build.sh images     Docker: fusion:test and fusion-spark:test from those artifacts
 #
 #   SPARK_VERSION, SCALA_VERSION  optimizer build (default 3.5.8 / 2.13.18)
 #
@@ -49,8 +49,8 @@ artifacts() {
 images() {
   local optimizer_jar
   optimizer_jar="$(ls amoro-optimizer/amoro-optimizer-spark/target/*-jar-with-dependencies.jar | head -1)"
-  docker build -f docker/amoro/Dockerfile -t fusion:it .
-  docker build -f docker/optimizer-spark/Dockerfile -t fusion-spark:it \
+  docker build -f docker/amoro/Dockerfile -t fusion:test .
+  docker build -f docker/optimizer-spark/Dockerfile -t fusion-spark:test \
     --build-arg SPARK_VERSION="$SPARK_VERSION" \
     --build-arg SPARK_JAVA_TAG="$SPARK_VERSION-java17" \
     --build-arg OPTIMIZER_JOB="$optimizer_jar" .
