@@ -246,11 +246,11 @@ abstract class ItBase {
   /**
    * File layout after {@code type} (design decision 12): MINOR and MAJOR leave no equality deletes;
    * FULL leaves no delete files and one data file when the table held less than the target size
-   * before the run ({@code before}).
+   * before the run ({@code before}). TODO: remvoe 10 from equality delete added for failing it
    */
   static void assertFiles(TestTable t, String type, List<FileInfo> before) {
     List<FileInfo> files = t.table.files();
-    assertEquals(10, count(files, SparkTable.EQUALITY_DELETES), "equality deletes"); // TODO: remvoe 10 added for failing it
+    assertEquals(10, count(files, SparkTable.EQUALITY_DELETES), "equality deletes");
     if (OptimizingType.FULL.equals(type)) {
       assertEquals(0, count(files, SparkTable.POSITION_DELETES), "position deletes");
       if (before.stream().mapToLong(FileInfo::size).sum() < TARGET_SIZE) {
