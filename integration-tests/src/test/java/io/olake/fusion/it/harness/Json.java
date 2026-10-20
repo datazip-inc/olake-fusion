@@ -65,6 +65,18 @@ public final class Json {
     return value.isNull() ? null : text(node, field);
   }
 
+  /** Text of a field that may be absent or null; null when it is either. */
+  public static String optionalText(JsonNode node, String field) {
+    JsonNode value = node == null ? null : node.get(field);
+    if (value == null || value.isMissingNode() || value.isNull()) {
+      return null;
+    }
+    if (!value.isTextual()) {
+      throw new ContractViolation("field '" + field + "' is not text in " + node);
+    }
+    return value.asText();
+  }
+
   public static long number(JsonNode node, String field) {
     JsonNode value = required(node, field);
     if (!value.isNumber()) {

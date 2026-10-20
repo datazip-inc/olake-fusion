@@ -88,9 +88,18 @@ public final class Report
       if (processes.isEmpty()) {
         return "-";
       }
-      return processes.stream()
-          .map(p -> p.type() + "/" + p.status() + " " + p.totalTasks() + "t")
-          .collect(Collectors.joining(", "));
+      return processes.stream().map(Entry::describe).collect(Collectors.joining(", "));
+    }
+
+    /** {@code MINOR SUCCESS (1 task)}: what Fusion did, in the words its API uses. */
+    private static String describe(Fusion.Process process) {
+      long tasks = process.totalTasks();
+      return process.type()
+          + " "
+          + process.status()
+          + " ("
+          + tasks
+          + (tasks == 1 ? " task)" : " tasks)");
     }
   }
 

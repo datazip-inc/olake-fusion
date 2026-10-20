@@ -26,7 +26,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 import io.olake.fusion.it.Contract.Names;
-import io.olake.fusion.it.Contract.OptimizingType;
 import io.olake.fusion.it.Contract.TableProps;
 import io.olake.fusion.it.harness.Await;
 import io.olake.fusion.it.harness.Env;
@@ -39,6 +38,7 @@ import org.junit.jupiter.api.BeforeAll;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -90,14 +90,25 @@ abstract class ItBase {
     /** Rows the CDC round inserts. */
     private static final int CDC_ROWS = 30;
 
+    /**
+     * Source rows the CDC round updates and deletes. Together they are more than {@code
+     * self-optimizing.major.trigger.duplicate-ratio} (0.1) of the seed sync's rows, which is what
+     * makes a MAJOR rewrite the seed data file and its position deletes instead of leaving them.
+     */
+    private static final int CDC_UPDATES = SEED_ROWS / 2;
+
+    private static final int CDC_DELETES = 3;
+
     final SparkTable table;
     final Olake olake;
 
+    private final Path olakeLogs;
     private long nextSourceId = SEED_ROWS + 1;
 
-    private TestTable(SparkTable table, Olake olake) {
+    private TestTable(SparkTable table, Olake olake, Path olakeLogs) {
       this.table = table;
       this.olake = olake;
+      this.olakeLogs = olakeLogs;
     }
 
     /**
@@ -118,8 +129,25 @@ abstract class ItBase {
           table.namespace(),
           table.name(),
           Map.of(TableProps.TARGET_SIZE, String.valueOf(TARGET_SIZE), TableProps.ENABLED, "true"));
-      Report.table(table.namespace() + "." + table.name(), workDir.resolve("olake"));
-      return new TestTable(table, olake);
+      TestTable test = new TestTable(table, olake, workDir.resolve("olake"));
+      test.report();
+      return test;
+    }
+
+    /** Names this table as the one the running test drives, for the run's report. */
+    void report() {
+      Report.table(table.namespace() + "." + table.name(), olakeLogs);
+    }
+
+    /**
+     * Changes the target file size, as a user does in OLake-UI's table settings. Optimization stays
+     * enabled.
+     */
+    void setTargetSize(long bytes) {
+      fusion.setTableProperties(
+          table.namespace(),
+          table.name(),
+          Map.of(TableProps.TARGET_SIZE, String.valueOf(bytes), TableProps.ENABLED, "true"));
     }
 
     /**
@@ -127,9 +155,17 @@ abstract class ItBase {
      * and one more data file.
      */
     void cdc() {
-      olake.update(List.of(1L, 2L, 3L, 4L, 5L, 6L));
-      olake.delete(List.of(7L, 8L, 9L));
+      olake.update(ids(1, CDC_UPDATES));
+      olake.delete(ids(CDC_UPDATES + 1, CDC_DELETES));
       load(CDC_ROWS);
+    }
+
+    private static List<Long> ids(long first, int count) {
+      List<Long> ids = new ArrayList<>(count);
+      for (long id = first; id < first + count; id++) {
+        ids.add(id);
+      }
+      return ids;
     }
 
     /** {@link #SEED_ROWS} new source rows and an OLake sync: one more data file. */
@@ -156,6 +192,18 @@ abstract class ItBase {
    * once Spark sees Fusion's newest snapshot.
    */
   static Fusion.Process optimize(TestTable t, String... types) {
+    return optimize(t, null, types);
+  }
+
+  /**
+   * As {@link #optimize}, and every process the crons produced in the meantime must be of {@code
+   * onlyType}: what proves that a lower-priority cron that also fired did not run.
+   */
+  static Fusion.Process optimizeOnly(TestTable t, String onlyType, String... types) {
+    return optimize(t, onlyType, types);
+  }
+
+  private static Fusion.Process optimize(TestTable t, String onlyType, String... types) {
     SparkTable table = t.table;
     Set<String> known = fusion.processIds(table.namespace(), table.name());
     setCrons(table, types);
@@ -166,6 +214,12 @@ abstract class ItBase {
       setCrons(table);
     }
     Report.process(run);
+    if (onlyType != null) {
+      List<Fusion.Process> all = fusion.newProcesses(table.namespace(), table.name(), known);
+      for (Fusion.Process process : all) {
+        assertEquals(onlyType, process.type(), "only " + onlyType + " may run, got " + all);
+      }
+    }
     Await.until(
         "Spark sees Fusion's newest snapshot of " + table.ident(),
         Duration.ofMinutes(2),
@@ -244,41 +298,66 @@ abstract class ItBase {
   }
 
   /**
-   * File layout after {@code type} (design decision 12): MINOR and MAJOR leave no equality deletes;
-   * FULL leaves no delete files and one data file when the table held less than the target size
-   * before the run ({@code before}). TODO: remvoe 10 from equality delete added for failing it
+   * Live files of {@code content} kind, as the engine's {@code files} metadata table lists them.
    */
-  static void assertFiles(TestTable t, String type, List<FileInfo> before) {
-    List<FileInfo> files = t.table.files();
-    assertEquals(10, count(files, SparkTable.EQUALITY_DELETES), "equality deletes");
-    if (OptimizingType.FULL.equals(type)) {
-      assertEquals(0, count(files, SparkTable.POSITION_DELETES), "position deletes");
-      if (before.stream().mapToLong(FileInfo::size).sum() < TARGET_SIZE) {
-        assertEquals(1, count(files, SparkTable.DATA), "data files");
-      }
-    }
+  static long countFiles(TestTable t, int content) {
+    return count(t.table.files(), content);
   }
 
-  /** Setup precondition: the table holds at least one delete file / no delete file. */
-  static void requireDeletes(TestTable t, boolean present) {
+  /** No equality delete is left: every one of them was applied or converted. */
+  static void assertNoEqualityDeletes(TestTable t) {
+    assertEquals(0, countFiles(t, SparkTable.EQUALITY_DELETES), "equality deletes");
+  }
+
+  /** No delete file of either kind is left: every delete was merged into the data files. */
+  static void assertNoDeleteFiles(TestTable t) {
     List<FileInfo> files = t.table.files();
-    boolean has = count(files, SparkTable.DATA) < files.size();
-    if (has != present) {
+    assertEquals(0, count(files, SparkTable.EQUALITY_DELETES), "equality deletes in " + files);
+    assertEquals(0, count(files, SparkTable.POSITION_DELETES), "position deletes in " + files);
+  }
+
+  /** Setup precondition: the table holds exactly {@code expected} equality delete files. */
+  static void requireEqualityDeletes(TestTable t, int expected) {
+    List<FileInfo> files = t.table.files();
+    long equality = count(files, SparkTable.EQUALITY_DELETES);
+    if (equality != expected) {
       fail(
           "setup error: expected "
-              + (present ? "" : "no ")
-              + "delete files before compaction: "
+              + expected
+              + " equality delete files before compaction, got "
+              + equality
+              + ": "
               + files);
     }
   }
 
-  /** Setup precondition: the table holds at least {@code least} data files. */
-  static void requireDataFiles(TestTable t, int least) {
+  /** Setup precondition: the table holds at least one delete file. */
+  static void requireDeleteFiles(TestTable t) {
     List<FileInfo> files = t.table.files();
-    long data = count(files, SparkTable.DATA);
-    if (data < least) {
-      fail("setup error: expected at least " + least + " data files, got " + data + ": " + files);
+    if (count(files, SparkTable.DATA) == files.size()) {
+      fail("setup error: expected delete files before compaction: " + files);
     }
+  }
+
+  /**
+   * Gives the table a target size under which every one of its data files is a full segment file,
+   * so a MINOR converts their equality deletes to position deletes instead of rewriting the files
+   * whole.
+   *
+   * <p>Fusion calls a data file a fragment below {@code target / fragment-ratio} and an undersized
+   * segment up to {@code target * min-target-size-ratio}; only what is above that is a segment
+   * file, and {@code segmentShouldRewritePos} (the conversion) is reached for segment files alone.
+   * The smallest data file of the table is therefore target enough: it puts every file above {@code
+   * target * 0.75} and far above {@code target / 8}.
+   */
+  static void useSegmentSizedFiles(TestTable t) {
+    long smallest =
+        t.table.files().stream()
+            .filter(f -> f.content() == SparkTable.DATA)
+            .mapToLong(FileInfo::size)
+            .min()
+            .orElseThrow(() -> new IllegalStateException("no data files in " + t.table.ident()));
+    t.setTargetSize(smallest);
   }
 
   // Helpers
