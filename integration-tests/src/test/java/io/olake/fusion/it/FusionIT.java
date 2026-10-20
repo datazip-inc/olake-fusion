@@ -33,6 +33,7 @@ import io.olake.fusion.it.harness.Fusion;
 import io.olake.fusion.it.harness.SparkTable.FileInfo;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.time.Duration;
 import java.util.List;
@@ -44,6 +45,7 @@ import java.util.List;
  * through the table settings OLake-UI writes; results are read back through Spark and Fusion's REST
  * API.
  */
+@ExtendWith(Report.class)
 class FusionIT extends ItBase {
   /**
    * Rows per sync in the health-score test. Small enough that every file stays below the minimum

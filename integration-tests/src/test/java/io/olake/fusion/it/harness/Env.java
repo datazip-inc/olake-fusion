@@ -29,6 +29,12 @@ public final class Env {
   public static final String OLAKE_IMAGE = get("OLAKE_IMAGE", "olakego/source-postgres:latest");
   public static final String DOCKER_NETWORK = "fusion-test-net";
 
+  /**
+   * Host directory the Fusion container's /mnt/amoro-logs is mounted from. The optimizer writes one
+   * directory of logs per optimizing process under its {@code compaction} subdirectory.
+   */
+  public static final String LOG_DIR = get("TEST_LOG_DIR", "/tmp/fusion-test-logs");
+
   /** Suffix of every name a run creates, so parallel runs never collide. */
   public static final String RUN_ID =
       get("TEST_RUN_ID", String.valueOf(System.currentTimeMillis() / 1000 % 1_000_000));

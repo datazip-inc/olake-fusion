@@ -36,6 +36,7 @@ import io.olake.fusion.it.harness.SparkTable;
 import io.olake.fusion.it.harness.SparkTable.FileInfo;
 import org.junit.jupiter.api.BeforeAll;
 
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.Arrays;
@@ -70,7 +71,7 @@ abstract class ItBase {
     assertTrue(client.catalogs().contains(Names.CATALOG), "catalogs contain " + Names.CATALOG);
     Await.until(
         "a live optimizer in " + Names.OPTIMIZER_GROUP,
-        Duration.ofMinutes(10),
+        Duration.ofMinutes(3),
         client::liveOptimizers,
         optimizers -> !optimizers.isEmpty());
     SparkTable.sql("SHOW NAMESPACES IN " + Names.CATALOG);
@@ -104,7 +105,8 @@ abstract class ItBase {
      * table, Fusion picks it up, and the table gets the settings OLake-UI writes.
      */
     static TestTable create(String name) {
-      Olake olake = new Olake(name, Paths.get("target", "work", Env.RUN_ID, name));
+      Path workDir = Paths.get("target", "work", Env.RUN_ID, name);
+      Olake olake = new Olake(name, workDir);
       olake.createSource();
       olake.discover();
       olake.insert(1, SEED_ROWS);
@@ -116,6 +118,7 @@ abstract class ItBase {
           table.namespace(),
           table.name(),
           Map.of(TableProps.TARGET_SIZE, String.valueOf(TARGET_SIZE), TableProps.ENABLED, "true"));
+      Report.table(table.namespace() + "." + table.name(), workDir.resolve("olake"));
       return new TestTable(table, olake);
     }
 
@@ -162,6 +165,7 @@ abstract class ItBase {
     } finally {
       setCrons(table);
     }
+    Report.process(run);
     Await.until(
         "Spark sees Fusion's newest snapshot of " + table.ident(),
         Duration.ofMinutes(2),
@@ -182,8 +186,11 @@ abstract class ItBase {
     Set<String> known = fusion.processIds(table.namespace(), table.name());
     setCrons(table, type);
     try {
-      return fusion.awaitProcess(
-          table.namespace(), table.name(), known, PROCESS_TIMEOUT, Fusion.Process::terminal);
+      Fusion.Process run =
+          fusion.awaitProcess(
+              table.namespace(), table.name(), known, PROCESS_TIMEOUT, Fusion.Process::terminal);
+      Report.process(run);
+      return run;
     } finally {
       setCrons(table);
     }
