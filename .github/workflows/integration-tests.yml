@@ -105,14 +105,20 @@ jobs:
           path: /tmp/fusion-test-images.tar
           key: test-images-${{ hashFiles('integration-tests/docker/images.txt') }}
 
-      - name: Load cached images
+      # On a hit the tarball is the images; dropping it afterwards gives the runner back the
+      # several GB it occupies, and costs nothing, because a hit never re-uploads the cache.
+      - name: Load images from the cache
         if: steps.image-cache.outputs.cache-hit == 'true'
-        run: docker load -i /tmp/fusion-test-images.tar
+        run: |
+          docker load -i /tmp/fusion-test-images.tar
+          rm -f /tmp/fusion-test-images.tar
 
-      - name: Pull whatever is still missing
+      - name: Pull remaining images
         run: ./integration-tests/scripts/stack.sh pull
 
-      - name: Save images for the next run
+      # Only writes the tarball. actions/cache uploads it in its own post-job step, and only
+      # after a miss, so on a hit there is nothing to write and this is skipped.
+      - name: Pack images for the cache
         if: steps.image-cache.outputs.cache-hit != 'true'
         run: ./integration-tests/scripts/stack.sh save /tmp/fusion-test-images.tar
 

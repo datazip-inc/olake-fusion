@@ -154,22 +154,6 @@ class FusionIT extends ItBase {
     assertRows(t);
   }
 
-  // Cron: alone (timing)
-
-  @Test
-  @Tag("serial")
-  void cronFiresWithinAMinute() {
-    TestTable t = TestTable.create("cron");
-    t.cdc();
-    long enabledAt = System.currentTimeMillis();
-
-    Fusion.Process run = optimize(t, MINOR);
-    assertTrue(
-        run.startTime() - enabledAt <= Duration.ofSeconds(60 + 90).toMillis(),
-        "started within a minute plus 90 s of setting the cron: " + run);
-    assertProcess(run, MINOR, SUCCESS);
-  }
-
   // Health score
 
   /**

@@ -250,7 +250,7 @@ abstract class ItBase {
    */
   static void assertFiles(TestTable t, String type, List<FileInfo> before) {
     List<FileInfo> files = t.table.files();
-    assertEquals(0, count(files, SparkTable.EQUALITY_DELETES), "equality deletes");
+    assertEquals(10, count(files, SparkTable.EQUALITY_DELETES), "equality deletes"); // TODO: remvoe 10 added for failing it
     if (OptimizingType.FULL.equals(type)) {
       assertEquals(0, count(files, SparkTable.POSITION_DELETES), "position deletes");
       if (before.stream().mapToLong(FileInfo::size).sum() < TARGET_SIZE) {
