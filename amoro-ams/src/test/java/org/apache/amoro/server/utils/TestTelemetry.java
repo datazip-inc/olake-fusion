@@ -52,7 +52,9 @@ public class TestTelemetry {
         Map.of(
             "command", "create_catalog",
             "error_source", "rest",
-            "category", "dns_resolution_failed"),
+            "category", "dns_resolution_failed",
+            "fusion_version", "NA",
+            "optimizer_version", "NA"),
         props);
   }
 
@@ -86,6 +88,8 @@ public class TestTelemetry {
             "command", "create_catalog",
             "error_source", "rest",
             "category", "unclassified",
+            "fusion_version", "NA",
+            "optimizer_version", "NA",
             "error_type", "java.lang.IllegalStateException"),
         props);
   }
