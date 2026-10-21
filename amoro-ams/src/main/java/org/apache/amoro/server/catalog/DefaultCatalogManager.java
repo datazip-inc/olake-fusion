@@ -97,6 +97,8 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
                     c.getCatalogName(),
                     c.getCatalogType(),
                     e);
+                Telemetry.getInstance()
+                    .trackFailure(Telemetry.Command.LOAD_CATALOG, c.getCatalogType(), e);
               }
             });
     LOG.info("DefaultCatalogManager initialized, total catalogs: {}", serverCatalogMap.size());
@@ -227,23 +229,30 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
 
   @Override
   public void dropCatalog(String catalogName) {
-    doAs(
-        CatalogMetaMapper.class,
-        mapper -> {
-          CatalogMeta meta = mapper.getCatalog(catalogName);
-          if (isInternal(meta)) {
-            int dbCount = mapper.selectDatabaseCount(catalogName);
-            int tblCount = mapper.selectTableCount(catalogName);
-            if (dbCount > 0 || tblCount > 0) {
-              throw new IllegalMetadataException(
-                  "Cannot drop internal catalog with databases or tables");
+    ServerCatalog existing = serverCatalogMap.get(catalogName);
+    try {
+      doAs(
+          CatalogMetaMapper.class,
+          mapper -> {
+            CatalogMeta meta = mapper.getCatalog(catalogName);
+            if (isInternal(meta)) {
+              int dbCount = mapper.selectDatabaseCount(catalogName);
+              int tblCount = mapper.selectTableCount(catalogName);
+              if (dbCount > 0 || tblCount > 0) {
+                throw new IllegalMetadataException(
+                    "Cannot drop internal catalog with databases or tables");
+              }
             }
-          }
-          mapper.deleteCatalog(catalogName);
-          metaCache.invalidate(catalogName);
-        });
+            mapper.deleteCatalog(catalogName);
+            metaCache.invalidate(catalogName);
+          });
 
-    disposeCatalog(catalogName);
+      disposeCatalog(catalogName);
+    } catch (Throwable t) {
+      String catalogType = existing == null ? null : existing.getMetadata().getCatalogType();
+      Telemetry.getInstance().trackFailure(Telemetry.Command.DROP_CATALOG, catalogType, t);
+      throw t;
+    }
   }
 
   @Override
@@ -260,6 +269,10 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
       metaCache.invalidate(catalogMeta.getCatalogName());
       LOG.info("Update catalog metadata: {}", catalogMeta.getCatalogName());
       updated = true;
+    } catch (Throwable t) {
+      Telemetry.getInstance()
+          .trackFailure(Telemetry.Command.UPDATE_CATALOG, catalogMeta.getCatalogType(), t);
+      throw t;
     } finally {
       Telemetry.getInstance()
           .trackCatalogUpdated(catalogMeta.getCatalogType(), isOlakeCreated(catalogMeta), updated);

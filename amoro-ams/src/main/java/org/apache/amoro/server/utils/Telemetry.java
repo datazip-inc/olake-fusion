@@ -31,14 +31,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.URI;
-import java.net.UnknownHostException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -100,24 +98,111 @@ public class Telemetry {
    * lower-cased: CREATE_CATALOG -> create_catalog.
    */
   public enum Command {
-    CREATE_CATALOG
-  }
-
-  enum Category {
-    DNS_RESOLUTION_FAILED,
-    /** Fallback for failures not yet in FAILURE_CATEGORIES, as olake errs.Unclassified. */
-    UNCLASSIFIED
+    CREATE_CATALOG,
+    UPDATE_CATALOG,
+    DROP_CATALOG,
+    // Building a stored catalog when AMS starts.
+    LOAD_CATALOG,
+    // Table sync, run every explore interval.
+    EXPLORE_CATALOG,
+    LIST_TABLES,
+    SYNC_TABLE,
+    DISPOSE_TABLE
   }
 
   /**
-   * Exception type to category, as olake destination/iceberg/errors.go. Checked in insertion order,
-   * so a more specific type must be put before a broader one it extends.
+   * Each category lists the exception simple class names it covers, as olake
+   * destination/iceberg/errors.go. Names, not classes: most come from catalog clients that are not
+   * on the AMS classpath.
    */
-  private static final Map<Class<? extends Throwable>, Category> FAILURE_CATEGORIES =
-      new LinkedHashMap<>();
+  enum Category {
+    DNS_RESOLUTION_FAILED("UnknownHostException"),
+    NETWORK_UNREACHABLE(
+        "ConnectException",
+        "NoRouteToHostException",
+        "HttpHostConnectException",
+        "NoHttpResponseException",
+        "ConnectionClosedException",
+        "SocketException",
+        "TTransportException",
+        "MetaException",
+        "RuntimeMetaException",
+        "ServiceUnavailableException",
+        "InternalServiceException",
+        "SQLTransientConnectionException",
+        "SQLNonTransientConnectionException"),
+    TIMEOUT(
+        "SocketTimeoutException",
+        "ConnectTimeoutException",
+        "OperationTimeoutException",
+        "SQLTimeoutException"),
+    TLS_FAILED("SSLHandshakeException", "CertificateException", "SSLPeerUnverifiedException"),
+    AUTH_FAILED(
+        "NotAuthorizedException",
+        "SaslException",
+        "LoginException",
+        "GSSException",
+        "GoogleAuthException",
+        "TokenResponseException",
+        "SQLInvalidAuthorizationSpecException"),
+    PERMISSION_DENIED(
+        "ForbiddenException",
+        "AccessDeniedException",
+        "AccessControlException",
+        "GlueEncryptionException"),
+    OBJECT_NOT_FOUND(
+        "NoSuchTableException",
+        "NoSuchNamespaceException",
+        "NoSuchViewException",
+        "EntityNotFoundException",
+        "NoSuchKeyException",
+        "NoSuchWarehouseException",
+        "NoSuchObjectException",
+        "UnknownDBException",
+        "NotFoundException",
+        "NoSuchIcebergTableException",
+        "NoSuchIcebergViewException"),
+    CONFIG_INVALID("BadRequestException", "UnprocessableEntityException", "InvalidInputException"),
+    CATALOG_ERROR(
+        "AlreadyExistsException",
+        "CommitStateUnknownException",
+        "ServiceFailureException",
+        "RESTException",
+        "NamespaceNotEmptyException",
+        "InvalidObjectException",
+        "InvalidOperationException",
+        "TException",
+        "TApplicationException",
+        "UncheckedSQLException",
+        "GoogleJsonResponseException",
+        "SQLIntegrityConstraintViolationException"),
+    UNSUPPORTED_FEATURE("UnsupportedOperationException", "SQLFeatureNotSupportedException"),
+    INTERNAL_ERROR(
+        "NoClassDefFoundError",
+        "ClassNotFoundException",
+        "NullPointerException",
+        "AssertionError",
+        "IllegalArgumentException",
+        "IllegalStateException"),
+    /** Fallback for failures not mapped above, as olake errs.Unclassified. */
+    UNCLASSIFIED;
+
+    private final String[] exceptions;
+
+    Category(String... exceptions) {
+      this.exceptions = exceptions;
+    }
+  }
+
+  /** Exception simple class name to category. */
+  private static final Map<String, Category> FAILURE_CATEGORIES = new HashMap<>();
 
   static {
-    FAILURE_CATEGORIES.put(UnknownHostException.class, Category.DNS_RESOLUTION_FAILED);
+    for (Category category : Category.values()) {
+      for (String exception : category.exceptions) {
+        FAILURE_CATEGORIES.put(exception, category);
+      }
+    }
   }
 
   /** Set from the AMS configuration; {@code null} means "not configured, fall back to the env". */
@@ -492,10 +577,12 @@ public class Telemetry {
     return props;
   }
 
+  /** The category of the exception's class, or of the nearest superclass that has one. */
   private static Category categoryOf(Throwable t) {
-    for (Map.Entry<Class<? extends Throwable>, Category> e : FAILURE_CATEGORIES.entrySet()) {
-      if (e.getKey().isInstance(t)) {
-        return e.getValue();
+    for (Class<?> c = t.getClass(); c != null; c = c.getSuperclass()) {
+      Category category = FAILURE_CATEGORIES.get(c.getSimpleName());
+      if (category != null) {
+        return category;
       }
     }
     return null;
