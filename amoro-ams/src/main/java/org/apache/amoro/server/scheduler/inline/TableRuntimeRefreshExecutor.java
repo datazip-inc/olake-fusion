@@ -31,6 +31,7 @@ import org.apache.amoro.server.optimizing.OptimizingStatus;
 import org.apache.amoro.server.scheduler.PeriodicTableScheduler;
 import org.apache.amoro.server.table.DefaultTableRuntime;
 import org.apache.amoro.server.table.TableService;
+import org.apache.amoro.server.utils.Telemetry;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
 import org.apache.amoro.table.MixedTable;
 import org.apache.amoro.utils.CronUtils;
@@ -109,6 +110,11 @@ public class TableRuntimeRefreshExecutor extends PeriodicTableScheduler {
       evaluateCronTriggers(defaultTableRuntime, mixedTable);
     } catch (Throwable throwable) {
       logger.error("Refreshing table {} failed.", tableRuntime.getTableIdentifier(), throwable);
+      Telemetry.getInstance()
+          .trackFailure(
+              Telemetry.Command.REFRESH_TABLE,
+              Telemetry.errorSource(tableRuntime.getFormat()),
+              throwable);
     }
   }
 
