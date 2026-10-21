@@ -55,7 +55,16 @@ on:
   push:
     branches:
       - master
-      - staging
+    paths:
+      - '**/*.java'
+      - '**/*.scala'
+      - '**/pom.xml'
+      - '**/Dockerfile*'
+      - '**/src/main/resources/**'
+      - 'dist/**'
+      - 'docker/**'
+      - 'integration-tests/**'
+      - '.github/workflows/integration-tests.yml'
   pull_request:
     branches:
       - "*"
