@@ -23,6 +23,7 @@ package org.apache.amoro.server.dashboard.controller;
 import io.javalin.http.Context;
 import io.javalin.http.HttpCode;
 import org.apache.amoro.server.dashboard.response.OkResponse;
+import org.apache.amoro.server.optimizing.OptimizingLogStore;
 import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.databind.JsonNode;
 import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
@@ -34,6 +35,7 @@ import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -45,15 +47,8 @@ import java.util.Map;
 
 public class LogController {
   private static final Logger LOG = LoggerFactory.getLogger(LogController.class);
-  private static final String LOG_BASE_DIR;
-
-  static {
-    String envLogDir = System.getenv("LOG_DIR");
-    LOG_BASE_DIR =
-        (envLogDir != null && !envLogDir.isEmpty()) ? envLogDir : "/mnt/amoro-logs/compaction";
-  }
-
-  private static final String DRIVER_LOG_FILE = "driver.log";
+  private static final String LOG_BASE_DIR = OptimizingLogStore.getLogBaseDir();
+  private static final String DRIVER_LOG_FILE = OptimizingLogStore.DRIVER_LOG_FILE;
   private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
   /**
@@ -64,11 +59,11 @@ public class LogController {
    * preceding log entry so the API can deliver them to the UI.
    *
    * @param logPath Path to the log file
-   * @return List of parsed log entry objects (as Maps)
+   * @param logInfo receives the parsed entries as {@code content}
    */
-  private List<Map<String, Object>> parseNDJSONLogFile(Path logPath) {
+  private void parseNDJSONLogFile(Path logPath, Map<String, Object> logInfo) {
     List<Map<String, Object>> logEntries = new ArrayList<>();
-    try (BufferedReader reader = Files.newBufferedReader(logPath)) {
+    try (BufferedReader reader = Files.newBufferedReader(logPath, StandardCharsets.UTF_8)) {
       String line;
       int lineNumber = 0;
       Map<String, Object> lastJsonEntry = null;
@@ -125,7 +120,7 @@ public class LogController {
     } catch (IOException e) {
       LOG.error("Failed to read log file: {}", logPath, e);
     }
-    return logEntries;
+    logInfo.put("content", logEntries);
   }
 
   public void getProcessLogs(Context ctx) {
@@ -152,7 +147,7 @@ public class LogController {
     if (Files.exists(driverLogPath)) {
       try {
         driverLog.put("exists", true);
-        driverLog.put("content", parseNDJSONLogFile(driverLogPath));
+        parseNDJSONLogFile(driverLogPath, driverLog);
       } catch (Exception e) {
         LOG.error("Failed to read driver log: {}", driverLogPath, e);
         driverLog.put("exists", true);
@@ -178,7 +173,7 @@ public class LogController {
 
         try {
           taskLog.put("exists", true);
-          taskLog.put("content", parseNDJSONLogFile(taskLogPath));
+          parseNDJSONLogFile(taskLogPath, taskLog);
           taskLogs.add(taskLog);
         } catch (Exception e) {
           LOG.error("Failed to read task log: {}", taskLogPath, e);

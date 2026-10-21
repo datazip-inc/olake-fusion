@@ -22,8 +22,10 @@ package org.apache.amoro.optimizer.spark;
 
 import org.apache.amoro.api.OptimizingTask;
 import org.apache.amoro.api.OptimizingTaskResult;
+import org.apache.amoro.log.OptimizingTaskLogContext;
 import org.apache.amoro.optimizer.common.OptimizerConfig;
 import org.apache.amoro.optimizer.common.OptimizerExecutor;
+import org.apache.amoro.optimizer.common.OptimizingLogBatcher;
 import org.apache.amoro.optimizing.RewriteFilesInput;
 import org.apache.amoro.optimizing.TableOptimizing;
 import org.apache.amoro.shade.guava32.com.google.common.collect.ImmutableList;
@@ -32,7 +34,6 @@ import org.apache.amoro.utils.SerializationUtil;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.slf4j.MDC;
 
 import java.util.List;
 
@@ -58,13 +59,9 @@ public class SparkOptimizerExecutor extends OptimizerExecutor {
     long startTime = System.currentTimeMillis();
 
     long processId = task.getTaskId().getProcessId();
-    int taskId = task.getTaskId().getTaskId();
-    String driverFilePath = processId + "/driver";
 
-    // Set MDC context for Log4j2 routing
-    // Driver logs go to: <LOG_DIR>/<processId>/driver.log
-    MDC.put("processId", String.valueOf(processId));
-    MDC.put("logFilePath", driverFilePath);
+    // Ships this thread's logs to AMS as driver lines (AMS writes <processId>/driver.log).
+    OptimizingTaskLogContext.setDriverContext(processId);
 
     try {
       ImmutableList<OptimizingTask> of = ImmutableList.of(task);
@@ -90,8 +87,12 @@ public class SparkOptimizerExecutor extends OptimizerExecutor {
       result.setErrorMessage(ExceptionUtil.getErrorMessage(r, ERROR_MESSAGE_MAX_LENGTH));
       return result;
     } finally {
-      MDC.remove("processId");
-      MDC.remove("logFilePath");
+      // The driver's own lines (above) are still buffered for up to FLUSH_INTERVAL_MS; flush them
+      // now so a failure's summary line reaches AMS before the result does, not after.
+      if (OptimizingLogBatcher.isInitialized()) {
+        OptimizingLogBatcher.get().flush();
+      }
+      OptimizingTaskLogContext.clearContext();
     }
   }
 
