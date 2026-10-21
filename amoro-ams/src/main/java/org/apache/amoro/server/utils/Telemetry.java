@@ -20,6 +20,7 @@
 
 package org.apache.amoro.server.utils;
 
+import org.apache.amoro.OptimizerProperties;
 import org.apache.amoro.optimizing.OptimizingType;
 import org.apache.amoro.server.AmoroServiceContainer;
 import org.apache.amoro.server.persistence.PlatformPropertyStore;
@@ -72,6 +73,14 @@ public class Telemetry {
   private static final String NOT_FOUND_PLACEHOLDER = "NA";
 
   private static final String TELEMETRY_DISABLED_ENV = "TELEMETRY_DISABLED";
+  /** Set in the Fusion and Spark optimizer images to the release tag they were built for. */
+  private static final String FUSION_VERSION_ENV = "FUSION_VERSION";
+
+  /** The release this AMS was built for, NA outside a release image. */
+  private static final String FUSION_VERSION = orPlaceholder(System.getenv(FUSION_VERSION_ENV));
+
+  /** The release the optimizer reported when it registered, NA until one has. */
+  private static volatile String optimizerVersion = NOT_FOUND_PLACEHOLDER;
 
   private static final long TIMEOUT_SECONDS = 10L;
   /** Bounded so that a slow or unreachable collector can never accumulate work. */
@@ -434,6 +443,14 @@ public class Telemetry {
     return props;
   }
 
+  /** Keeps the version a registering optimizer reports, for the failures reported after it. */
+  public static void updateOptimizerVersion(Map<String, String> optimizerProperties) {
+    if (optimizerProperties != null) {
+      optimizerVersion =
+          orPlaceholder(optimizerProperties.get(OptimizerProperties.OPTIMIZER_VERSION));
+    }
+  }
+
   /**
    * Reports why an operation failed as a classification, never a message, like the connector's
    * TrackFailure. Unmapped failures are sent with the UNCLASSIFIED category.
@@ -467,6 +484,8 @@ public class Telemetry {
     props.put("command", wire(command));
     props.put("error_source", errorSource);
     props.put("category", wire(category));
+    props.put("fusion_version", FUSION_VERSION);
+    props.put("optimizer_version", optimizerVersion);
     if (category == Category.UNCLASSIFIED) {
       props.put("error_type", chain.get(0).getClass().getName());
     }

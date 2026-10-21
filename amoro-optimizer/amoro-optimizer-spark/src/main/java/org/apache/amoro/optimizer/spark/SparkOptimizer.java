@@ -78,6 +78,10 @@ public class SparkOptimizer extends Optimizer {
     toucher.withRegisterProperty(
         OptimizerProperties.SPARK_EXECUTOR_CORES,
         jsc.getConf().get(OptimizerProperties.SPARK_EXECUTOR_CORES, ""));
+    // Baked into the fusion-spark image at build time, so a release pulled as latest still reports
+    // its version; sent empty outside a release image.
+    toucher.withRegisterProperty(
+        OptimizerProperties.OPTIMIZER_VERSION, System.getenv().getOrDefault("FUSION_VERSION", ""));
 
     LOG.info("Starting the spark optimizer with configuration:{}", config);
     optimizer.startOptimizing();
