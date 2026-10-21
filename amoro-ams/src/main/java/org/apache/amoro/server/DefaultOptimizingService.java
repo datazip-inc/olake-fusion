@@ -272,30 +272,37 @@ public class DefaultOptimizingService extends StatedPersistentBase
   @Override
   public String authenticate(OptimizerRegisterInfo registerInfo) {
     LOG.info("Register optimizer {}.", registerInfo);
-    Optional.ofNullable(
-            registerInfo.getProperties().get(OptimizerProperties.OPTIMIZER_HEART_BEAT_INTERVAL))
-        .ifPresent(
-            interval -> {
-              if (Long.parseLong(interval) >= optimizerTouchTimeout) {
-                throw new ForbiddenException(
-                    String.format(
-                        "The %s:%s configuration should be less than AMS's %s:%s",
-                        OptimizerProperties.OPTIMIZER_HEART_BEAT_INTERVAL,
-                        interval,
-                        AmoroManagementConf.OPTIMIZER_HB_TIMEOUT.key(),
-                        optimizerTouchTimeout));
-              }
-            });
+    try {
+      Optional.ofNullable(
+              registerInfo.getProperties().get(OptimizerProperties.OPTIMIZER_HEART_BEAT_INTERVAL))
+          .ifPresent(
+              interval -> {
+                if (Long.parseLong(interval) >= optimizerTouchTimeout) {
+                  throw new ForbiddenException(
+                      String.format(
+                          "The %s:%s configuration should be less than AMS's %s:%s",
+                          OptimizerProperties.OPTIMIZER_HEART_BEAT_INTERVAL,
+                          interval,
+                          AmoroManagementConf.OPTIMIZER_HB_TIMEOUT.key(),
+                          optimizerTouchTimeout));
+                }
+              });
 
-    OptimizingQueue queue = getQueueByGroup(registerInfo.getGroupName());
-    retireUntaggedRegistrations(registerInfo);
-    // An optimizer that Kubernetes restarted registers again under the same resource id. Retire
-    // the registration of the process it replaces, so that one optimizer never holds two entries.
-    // NOTE: For multioptimizers we might need to remove it
-    retirePreviousRegistrations(registerInfo.getResourceId());
-    OptimizerInstance optimizer = new OptimizerInstance(registerInfo, queue.getContainerName());
-    registerOptimizer(optimizer, true);
-    return optimizer.getToken();
+      OptimizingQueue queue = getQueueByGroup(registerInfo.getGroupName());
+      retireUntaggedRegistrations(registerInfo);
+      // An optimizer that Kubernetes restarted registers again under the same resource id. Retire
+      // the registration of the process it replaces, so that one optimizer never holds two
+      // entries.
+      // NOTE: For multioptimizers we might need to remove it
+      retirePreviousRegistrations(registerInfo.getResourceId());
+      OptimizerInstance optimizer = new OptimizerInstance(registerInfo, queue.getContainerName());
+      registerOptimizer(optimizer, true);
+      return optimizer.getToken();
+    } catch (Throwable t) {
+      // A started optimizer that AMS turns away, e.g. for an unknown group or a bad heartbeat.
+      Telemetry.getInstance().trackFailure(Telemetry.Command.REGISTER_OPTIMIZER, null, t);
+      throw t;
+    }
   }
 
   // tagged optimizer :
@@ -597,6 +604,7 @@ public class DefaultOptimizingService extends StatedPersistentBase
         } catch (InterruptedException ignored) {
         } catch (Throwable t) {
           LOG.error("OptimizerKeeper has encountered a problem.", t);
+          Telemetry.getInstance().trackFailure(Telemetry.Command.KEEP_OPTIMIZERS, null, t);
         }
       }
     }
@@ -623,6 +631,7 @@ public class DefaultOptimizingService extends StatedPersistentBase
             "Retry task {} failed due to {}, will check it in next round",
             task.getTaskId(),
             e.getMessage());
+        Telemetry.getInstance().trackFailure(Telemetry.Command.RETRY_OPTIMIZING_TASK, null, e);
       }
     }
 
@@ -682,6 +691,7 @@ public class DefaultOptimizingService extends StatedPersistentBase
             });
       } catch (Throwable t) {
         LOG.error("Sync optimizer groups failed, will retry later.", t);
+        Telemetry.getInstance().trackFailure(Telemetry.Command.SYNC_OPTIMIZER_GROUPS, null, t);
       }
     }
 
