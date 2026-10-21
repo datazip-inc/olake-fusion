@@ -41,6 +41,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
@@ -455,22 +456,20 @@ public class Telemetry {
     // Root first, so the most specific mapped cause wins over a broader wrapper above it.
     List<Throwable> chain = ExceptionUtils.getThrowableList(error);
     Collections.reverse(chain);
-    for (Throwable t : chain) {
-      Category category = categoryOf(t);
-      if (category != null) {
-        return failureProps(command, errorSource, category, t);
-      }
-    }
-    return failureProps(command, errorSource, Category.UNCLASSIFIED, chain.get(0));
-  }
+    Category category =
+        chain.stream()
+            .map(Telemetry::categoryOf)
+            .filter(Objects::nonNull)
+            .findFirst()
+            .orElse(Category.UNCLASSIFIED);
 
-  private static Map<String, Object> failureProps(
-      Command command, String errorSource, Category category, Throwable exception) {
     Map<String, Object> props = new HashMap<>();
     props.put("command", wire(command));
     props.put("error_source", errorSource);
     props.put("category", wire(category));
-    props.put("code", exception.getClass().getSimpleName());
+    if (category == Category.UNCLASSIFIED) {
+      props.put("error_type", chain.get(0).getClass().getName());
+    }
     return props;
   }
 

@@ -32,6 +32,10 @@ public class TestTelemetry {
 
   private static final String HOST = "secret-host.internal";
 
+  private static Map<String, Object> failureProps(Throwable error) {
+    return Telemetry.failureProps(Telemetry.Command.CREATE_CATALOG, "rest", error);
+  }
+
   /** The chain a Generic REST catalog with an unknown host produces in createCatalog. */
   private static Throwable unknownHostFailure() {
     RESTException rest =
@@ -42,22 +46,19 @@ public class TestTelemetry {
 
   @Test
   public void unknownHostIsReportedAsTheConnectorReportsIt() {
-    Map<String, Object> props =
-        Telemetry.failureProps(Telemetry.Command.CREATE_CATALOG, "rest", unknownHostFailure());
+    Map<String, Object> props = failureProps(unknownHostFailure());
 
     Assertions.assertEquals(
         Map.of(
             "command", "create_catalog",
             "error_source", "rest",
-            "category", "dns_resolution_failed",
-            "code", "UnknownHostException"),
+            "category", "dns_resolution_failed"),
         props);
   }
 
   @Test
   public void unknownHostNeverLeaksTheHostName() {
-    Map<String, Object> props =
-        Telemetry.failureProps(Telemetry.Command.CREATE_CATALOG, "rest", unknownHostFailure());
+    Map<String, Object> props = failureProps(unknownHostFailure());
 
     props.values().forEach(v -> Assertions.assertFalse(String.valueOf(v).contains(HOST)));
   }
@@ -66,25 +67,26 @@ public class TestTelemetry {
   public void unknownHostIsFoundMidChain() {
     Throwable failure =
         new RuntimeException(new UnknownHostException(HOST).initCause(new IOException(HOST)));
-    Map<String, Object> props =
-        Telemetry.failureProps(Telemetry.Command.CREATE_CATALOG, "rest", failure);
+    Map<String, Object> props = failureProps(failure);
 
     Assertions.assertEquals("dns_resolution_failed", props.get("category"));
-    Assertions.assertEquals("UnknownHostException", props.get("code"));
   }
 
   @Test
   public void noFailureSendsNothing() {
-    Assertions.assertNull(Telemetry.failureProps(Telemetry.Command.CREATE_CATALOG, "rest", null));
+    Assertions.assertNull(failureProps(null));
   }
 
   @Test
   public void unmappedFailureIsReportedAsUnclassified() {
-    Map<String, Object> props =
-        Telemetry.failureProps(
-            Telemetry.Command.CREATE_CATALOG, "rest", new IllegalStateException(HOST));
+    Map<String, Object> props = failureProps(new IllegalStateException(HOST));
 
-    Assertions.assertEquals("unclassified", props.get("category"));
-    Assertions.assertEquals("IllegalStateException", props.get("code"));
+    Assertions.assertEquals(
+        Map.of(
+            "command", "create_catalog",
+            "error_source", "rest",
+            "category", "unclassified",
+            "error_type", "java.lang.IllegalStateException"),
+        props);
   }
 }
