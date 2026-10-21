@@ -1,0 +1,15 @@
+{
+  "host": "fusion-test-source",
+  "port": 5432,
+  "database": "${SOURCE_DB}",
+  "username": "source",
+  "password": "password",
+  "ssl": { "mode": "disable" },
+  "update_method": {
+    "replication_slot": "${SLOT}",
+    "publication": "${PUBLICATION}",
+    "initial_wait_time": 120
+  },
+  "max_threads": 1,
+  "retry_count": 3
+}

@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.table;
@@ -103,6 +105,11 @@ public class DefaultTableRuntimeStore extends PersistentBase implements TableRun
   }
 
   @Override
+  public TableSummary getTableSummary() {
+    return this.meta.getTableSummary().copy();
+  }
+
+  @Override
   public <T> T getState(StateKey<T> key) {
     Preconditions.checkNotNull(key, "TableRuntime state key cannot be null");
     Preconditions.checkNotNull(
@@ -177,6 +184,7 @@ public class DefaultTableRuntimeStore extends PersistentBase implements TableRun
     private final Set<String> stateKeys = Sets.newHashSet();
     private final Map<String, String> oldStates = new ConcurrentHashMap<>();
     private boolean metaOperation = false;
+    private boolean summaryOperation = false;
 
     private final List<Consumer<TableRuntimeHandler>> handlerCallback = Lists.newArrayList();
 
@@ -248,7 +256,9 @@ public class DefaultTableRuntimeStore extends PersistentBase implements TableRun
             updater.accept(summary);
             oldMeta.setTableSummary(summary);
           });
-      metaOperation = true;
+      // when the summary is all an operation updates, only the summary is written, so the group,
+      // status or configurations another operation changed meanwhile are never overwritten
+      summaryOperation = true;
       return this;
     }
 
@@ -277,6 +287,8 @@ public class DefaultTableRuntimeStore extends PersistentBase implements TableRun
           mapper -> {
             if (metaOperation) {
               mapper.updateRuntime(oldMeta);
+            } else if (summaryOperation) {
+              mapper.updateTableSummary(oldMeta);
             }
             stateKeys.forEach(
                 key -> {
@@ -293,6 +305,8 @@ public class DefaultTableRuntimeStore extends PersistentBase implements TableRun
         meta.setStatusCodeUpdateTime(oldMeta.getStatusCodeUpdateTime());
         meta.setTableSummary(oldMeta.getTableSummary());
         meta.setTableConfig(oldMeta.getTableConfig());
+      } else if (summaryOperation) {
+        meta.setTableSummary(oldMeta.getTableSummary());
       }
       stateKeys.forEach(
           key -> {
