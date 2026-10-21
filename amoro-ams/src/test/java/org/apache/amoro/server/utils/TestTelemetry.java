@@ -74,23 +74,17 @@ public class TestTelemetry {
   }
 
   @Test
-  public void failureEventIsNamedAfterTheCommand() {
-    Assertions.assertEquals(
-        "Create Catalog Failed - Fusion", Telemetry.Command.CREATE_CATALOG.failureEvent());
-  }
-
-  @Test
   public void noFailureSendsNothing() {
     Assertions.assertNull(Telemetry.failureProps(Telemetry.Command.CREATE_CATALOG, "rest", null));
   }
 
   @Test
-  public void unmappedFailureIsReportedAsUnknown() {
+  public void unmappedFailureIsReportedAsUnclassified() {
     Map<String, Object> props =
         Telemetry.failureProps(
             Telemetry.Command.CREATE_CATALOG, "rest", new IllegalStateException(HOST));
 
-    Assertions.assertEquals("unknown", props.get("category"));
+    Assertions.assertEquals("unclassified", props.get("category"));
     Assertions.assertEquals("IllegalStateException", props.get("code"));
   }
 }

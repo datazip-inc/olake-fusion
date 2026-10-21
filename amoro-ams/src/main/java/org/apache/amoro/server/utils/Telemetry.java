@@ -79,27 +79,24 @@ public class Telemetry {
   private static final double BYTES_PER_GB = 1024d * 1024d * 1024d;
 
   /**
-   * An operation whose failures are reported; its failure event is named after it. Failure
-   * telemetry follows the OLake connector's TrackFailure (olake utils/telemetry) and its categories
-   * (olake utils/errs). Enum names are sent lower-cased: CREATE_CATALOG -> create_catalog.
+   * Every failure is sent as this one event, with the operation in its {@code command} property, as
+   * the connector sends "Failure - CLI".
+   */
+  static final String FAILURE_EVENT = "Failure - Fusion";
+
+  /**
+   * An operation whose failures are reported. Failure telemetry follows the OLake connector's
+   * TrackFailure (olake utils/telemetry) and its categories (olake utils/errs). Enum names are sent
+   * lower-cased: CREATE_CATALOG -> create_catalog.
    */
   public enum Command {
-    CREATE_CATALOG;
-
-    /** CREATE_CATALOG -> "Create Catalog Failed - Fusion". */
-    String failureEvent() {
-      StringBuilder event = new StringBuilder();
-      for (String word : name().split("_")) {
-        event.append(word.charAt(0)).append(word.substring(1).toLowerCase(Locale.ROOT)).append(' ');
-      }
-      return event.append("Failed - Fusion").toString();
-    }
+    CREATE_CATALOG
   }
 
   enum Category {
     DNS_RESOLUTION_FAILED,
-    /** Fallback for failures not yet in FAILURE_CATEGORIES; the code still names the exception. */
-    UNKNOWN
+    /** Fallback for failures not yet in FAILURE_CATEGORIES, as olake errs.Unclassified. */
+    UNCLASSIFIED
   }
 
   /**
@@ -438,13 +435,13 @@ public class Telemetry {
 
   /**
    * Reports why an operation failed as a classification, never a message, like the connector's
-   * TrackFailure. Unmapped failures are sent with the UNKNOWN category.
+   * TrackFailure. Unmapped failures are sent with the UNCLASSIFIED category.
    */
   public void trackFailure(Command command, String errorSource, Throwable error) {
     try {
       Map<String, Object> props = failureProps(command, errorSource, error);
       if (props != null) {
-        sendEvent(command.failureEvent(), () -> props);
+        sendEvent(FAILURE_EVENT, () -> props);
       }
     } catch (Throwable t) {
       LOG.debug("Failed to report failure for {}: {}", command, t.getMessage());
@@ -464,7 +461,7 @@ public class Telemetry {
         return failureProps(command, errorSource, category, t);
       }
     }
-    return failureProps(command, errorSource, Category.UNKNOWN, chain.get(0));
+    return failureProps(command, errorSource, Category.UNCLASSIFIED, chain.get(0));
   }
 
   private static Map<String, Object> failureProps(
