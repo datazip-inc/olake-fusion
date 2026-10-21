@@ -28,6 +28,8 @@ import org.apache.amoro.server.persistence.mapper.TableProcessMapper;
 import org.apache.amoro.server.scheduler.PeriodicTableScheduler;
 import org.apache.amoro.server.table.TableService;
 import org.apache.amoro.server.utils.SnowflakeIdGenerator;
+import org.apache.amoro.server.utils.Command;
+import org.apache.amoro.server.utils.Telemetry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -66,6 +68,11 @@ public class OptimizingExpiringExecutor extends PeriodicTableScheduler {
     } catch (Throwable throwable) {
       LOG.error(
           "Expiring table runtimes of {} failed.", tableRuntime.getTableIdentifier(), throwable);
+      Telemetry.getInstance()
+          .trackFailure(
+              Command.EXPIRE_OPTIMIZING_HISTORY,
+              Telemetry.errorSource(tableRuntime.getFormat()),
+              throwable);
     }
   }
 

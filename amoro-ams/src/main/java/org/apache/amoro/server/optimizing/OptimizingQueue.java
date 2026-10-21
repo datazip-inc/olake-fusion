@@ -53,6 +53,7 @@ import org.apache.amoro.server.resource.QuotaProvider;
 import org.apache.amoro.server.table.DefaultTableRuntime;
 import org.apache.amoro.server.table.blocker.TableBlocker;
 import org.apache.amoro.server.utils.IcebergTableUtil;
+import org.apache.amoro.server.utils.Command;
 import org.apache.amoro.server.utils.Telemetry;
 import org.apache.amoro.shade.guava32.com.google.common.annotations.VisibleForTesting;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
@@ -365,6 +366,11 @@ public class OptimizingQueue extends PersistentBase {
     } catch (Throwable throwable) {
       tableRuntime.planFailed(ExceptionUtil.getErrorMessage(throwable, 4000), throwable);
       LOG.error("Planning table {} failed", tableRuntime.getTableIdentifier(), throwable);
+      Telemetry.getInstance()
+          .trackFailure(
+              Command.PLAN_OPTIMIZING,
+              Telemetry.errorSource(tableRuntime.getFormat()),
+              throwable);
       throw throwable;
     }
   }
@@ -648,6 +654,11 @@ public class OptimizingQueue extends PersistentBase {
                 taskRuntime.getFailReason());
             retryTask(taskRuntime);
           } else {
+            Telemetry.getInstance()
+                .trackFailure(
+                    Command.EXECUTE_OPTIMIZING,
+                    Telemetry.errorSource(tableRuntime.getFormat()),
+                    taskRuntime.getFailReason());
             if (tableRuntime.isAllowPartialCommit()
                 && tableRuntime.getOptimizingStatus().isProcessing()
                 && tableRuntime.getOptimizingStatus() != OptimizingStatus.COMMITTING) {
@@ -800,6 +811,11 @@ public class OptimizingQueue extends PersistentBase {
               e);
         } catch (Throwable t) {
           LOG.error("{} Commit optimizing failed ", tableRuntime.getTableIdentifier(), t);
+          Telemetry.getInstance()
+              .trackFailure(
+                  Command.COMMIT_OPTIMIZING,
+                  Telemetry.errorSource(tableRuntime.getFormat()),
+                  t);
           status = ProcessStatus.FAILED;
           failedReason = ExceptionUtil.getErrorMessage(t, 4000);
           endTime = System.currentTimeMillis();

@@ -48,5 +48,21 @@ public enum Command {
   // An optimizer that stopped heart-beating, e.g. after a crash or an OOM kill.
   OPTIMIZER_EXPIRED,
   // No optimizer registered within a few minutes of AMS starting, e.g. a pod that never started.
-  OPTIMIZER_NOT_REGISTERED
+  OPTIMIZER_NOT_REGISTERED,
+  // Compaction. Planning is retried on every scheduling round.
+  PLAN_OPTIMIZING,
+  // A task that failed on the optimizer and used up its retries.
+  EXECUTE_OPTIMIZING,
+  COMMIT_OPTIMIZING,
+  // Table maintenance, run on a schedule per table.
+  EXPIRE_SNAPSHOTS,
+  EXPIRE_DATA,
+  CLEAN_ORPHAN_FILES,
+  CLEAN_DANGLING_DELETE_FILES,
+  CREATE_TAGS,
+  SYNC_HIVE_COMMIT,
+  EXPIRE_BLOCKERS,
+  EXPIRE_OPTIMIZING_HISTORY,
+  REFRESH_TABLE,
+  EVALUATE_TABLE_HEALTH
 }

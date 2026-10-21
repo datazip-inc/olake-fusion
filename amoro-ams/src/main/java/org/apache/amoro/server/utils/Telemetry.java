@@ -21,6 +21,7 @@
 package org.apache.amoro.server.utils;
 
 import org.apache.amoro.OptimizerProperties;
+import org.apache.amoro.TableFormat;
 import org.apache.amoro.optimizing.OptimizingType;
 import org.apache.amoro.server.AmoroServiceContainer;
 import org.apache.amoro.server.persistence.PlatformPropertyStore;
@@ -35,6 +36,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -47,6 +49,8 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Fire-and-forget usage telemetry.
@@ -91,6 +95,12 @@ public class Telemetry {
    * the connector sends "Failure - CLI".
    */
   static final String FAILURE_EVENT = "Failure - Fusion";
+
+  /** An exception class starting a stack-trace line: "Caused by: a.b.SomeException: ...". */
+  private static final Pattern TRACE_EXCEPTION =
+      Pattern.compile(
+          "^(?:Caused by: )?((?:[\\w$]+\\.)+[A-Z][\\w$]*(?:Exception|Error))\\b",
+          Pattern.MULTILINE);
 
   /** Set from the AMS configuration; {@code null} means "not configured, fall back to the env". */
   private static volatile Boolean configuredDisabled;
@@ -456,8 +466,17 @@ public class Telemetry {
    * TrackFailure. Unmapped failures are sent with the UNCLASSIFIED category.
    */
   public void trackFailure(Command command, String errorSource, Throwable error) {
+    send(command, () -> failureProps(command, errorSource, error));
+  }
+
+  /** For a failure that reaches AMS only as a printed stack trace, like an optimizer task's. */
+  public void trackFailure(Command command, String errorSource, String stackTrace) {
+    send(command, () -> traceFailureProps(command, errorSource, stackTrace));
+  }
+
+  private void send(Command command, Supplier<Map<String, Object>> failure) {
     try {
-      Map<String, Object> props = failureProps(command, errorSource, error);
+      Map<String, Object> props = failure.get();
       if (props != null) {
         sendEvent(FAILURE_EVENT, () -> props);
       }
@@ -479,7 +498,47 @@ public class Telemetry {
             .filter(Objects::nonNull)
             .findFirst()
             .orElse(FailureCategory.UNCLASSIFIED);
+    return failureProps(command, errorSource, category, chain.get(0).getClass().getName());
+  }
 
+  /** As failureProps, from the exception class names in a printed stack trace. */
+  static Map<String, Object> traceFailureProps(
+      Command command, String errorSource, String stackTrace) {
+    List<String> chain = exceptionNames(stackTrace);
+    if (chain.isEmpty()) {
+      return null;
+    }
+    // Root first, as failureProps. Only names are known here, so no superclass lookup.
+    Collections.reverse(chain);
+    FailureCategory category =
+        chain.stream()
+            .map(name -> FailureCategory.forName(simpleName(name)))
+            .filter(Objects::nonNull)
+            .findFirst()
+            .orElse(FailureCategory.UNCLASSIFIED);
+    return failureProps(command, errorSource, category, chain.get(0));
+  }
+
+  /** The fully qualified exception class names in a printed stack trace, outermost first. */
+  static List<String> exceptionNames(String stackTrace) {
+    List<String> names = new ArrayList<>();
+    if (stackTrace != null) {
+      Matcher matcher = TRACE_EXCEPTION.matcher(stackTrace);
+      while (matcher.find()) {
+        names.add(matcher.group(1));
+      }
+    }
+    return names;
+  }
+
+  /** a.b.Outer$SomeException -> SomeException, as Class.getSimpleName. */
+  private static String simpleName(String className) {
+    return className.substring(
+        Math.max(className.lastIndexOf('.'), className.lastIndexOf('$')) + 1);
+  }
+
+  private static Map<String, Object> failureProps(
+      Command command, String errorSource, FailureCategory category, String rootType) {
     Map<String, Object> props = new HashMap<>();
     props.put("command", wire(command));
     props.put("error_source", errorSource);
@@ -487,13 +546,18 @@ public class Telemetry {
     props.put("fusion_version", FUSION_VERSION);
     props.put("optimizer_version", optimizerVersion);
     if (category == FailureCategory.UNCLASSIFIED) {
-      props.put("error_type", chain.get(0).getClass().getName());
+      props.put("error_type", rootType);
     }
     return props;
   }
 
   private static String wire(Enum<?> value) {
     return value.name().toLowerCase(Locale.ROOT);
+  }
+
+  /** A table format as an error source: ICEBERG -> iceberg. */
+  public static String errorSource(TableFormat format) {
+    return format == null ? null : format.name().toLowerCase(Locale.ROOT);
   }
 
   public void trackInstalledFusion(int optimizerParallelism) {
