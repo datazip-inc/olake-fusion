@@ -25,16 +25,23 @@ import org.apache.amoro.server.AmoroServiceContainer;
 import org.apache.amoro.server.persistence.PlatformPropertyStore;
 import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.URI;
+import java.net.UnknownHostException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
@@ -71,6 +78,38 @@ public class Telemetry {
   private static final int MAX_PENDING_EVENTS = 256;
 
   private static final double BYTES_PER_GB = 1024d * 1024d * 1024d;
+
+  /**
+   * Every failure is sent as this one event, with the operation in its {@code command} property, as
+   * the connector sends "Failure - CLI".
+   */
+  static final String FAILURE_EVENT = "Failure - Fusion";
+
+  /**
+   * An operation whose failures are reported. Failure telemetry follows the OLake connector's
+   * TrackFailure (olake utils/telemetry) and its categories (olake utils/errs). Enum names are sent
+   * lower-cased: CREATE_CATALOG -> create_catalog.
+   */
+  public enum Command {
+    CREATE_CATALOG
+  }
+
+  enum Category {
+    DNS_RESOLUTION_FAILED,
+    /** Fallback for failures not yet in FAILURE_CATEGORIES, as olake errs.Unclassified. */
+    UNCLASSIFIED
+  }
+
+  /**
+   * Exception type to category, as olake destination/iceberg/errors.go. Checked in insertion order,
+   * so a more specific type must be put before a broader one it extends.
+   */
+  private static final Map<Class<? extends Throwable>, Category> FAILURE_CATEGORIES =
+      new LinkedHashMap<>();
+
+  static {
+    FAILURE_CATEGORIES.put(UnknownHostException.class, Category.DNS_RESOLUTION_FAILED);
+  }
 
   /** Set from the AMS configuration; {@code null} means "not configured, fall back to the env". */
   private static volatile Boolean configuredDisabled;
@@ -393,6 +432,58 @@ public class Telemetry {
     props.put("imported_from_destination", imported);
     props.put("success", success);
     return props;
+  }
+
+  /**
+   * Reports why an operation failed as a classification, never a message, like the connector's
+   * TrackFailure. Unmapped failures are sent with the UNCLASSIFIED category.
+   */
+  public void trackFailure(Command command, String errorSource, Throwable error) {
+    try {
+      Map<String, Object> props = failureProps(command, errorSource, error);
+      if (props != null) {
+        sendEvent(FAILURE_EVENT, () -> props);
+      }
+    } catch (Throwable t) {
+      LOG.debug("Failed to report failure for {}: {}", command, t.getMessage());
+    }
+  }
+
+  static Map<String, Object> failureProps(Command command, String errorSource, Throwable error) {
+    if (error == null) {
+      return null;
+    }
+    // Root first, so the most specific mapped cause wins over a broader wrapper above it.
+    List<Throwable> chain = ExceptionUtils.getThrowableList(error);
+    Collections.reverse(chain);
+    Category category =
+        chain.stream()
+            .map(Telemetry::categoryOf)
+            .filter(Objects::nonNull)
+            .findFirst()
+            .orElse(Category.UNCLASSIFIED);
+
+    Map<String, Object> props = new HashMap<>();
+    props.put("command", wire(command));
+    props.put("error_source", errorSource);
+    props.put("category", wire(category));
+    if (category == Category.UNCLASSIFIED) {
+      props.put("error_type", chain.get(0).getClass().getName());
+    }
+    return props;
+  }
+
+  private static Category categoryOf(Throwable t) {
+    for (Map.Entry<Class<? extends Throwable>, Category> e : FAILURE_CATEGORIES.entrySet()) {
+      if (e.getKey().isInstance(t)) {
+        return e.getValue();
+      }
+    }
+    return null;
+  }
+
+  private static String wire(Enum<?> value) {
+    return value.name().toLowerCase(Locale.ROOT);
   }
 
   public void trackInstalledFusion(int optimizerParallelism) {
