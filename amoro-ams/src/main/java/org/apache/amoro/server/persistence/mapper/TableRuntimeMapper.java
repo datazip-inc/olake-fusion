@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.persistence.mapper;
@@ -58,6 +60,13 @@ public interface TableRuntimeMapper {
           + "     bucket_id        = #{bucketId, jdbcType=VARCHAR} "
           + " WHERE table_id = #{tableId}")
   int updateRuntime(TableRuntimeMeta meta);
+
+  @Update(
+      "UPDATE "
+          + TABLE_NAME
+          + " SET table_summary = #{tableSummary,typeHandler=org.apache.amoro.server.persistence.converter.JsonObjectConverter} "
+          + " WHERE table_id = #{tableId}")
+  int updateTableSummary(TableRuntimeMeta meta);
 
   /* ---------- delete ---------- */
   @Delete("DELETE FROM " + TABLE_NAME + " WHERE table_id = #{tableId}")
