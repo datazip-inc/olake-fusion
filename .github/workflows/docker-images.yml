@@ -26,12 +26,24 @@
 name: Publish Docker Image
 
 on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Version tag for the image (e.g. v1.0.0).'
+        type: string
+        required: true
+
   workflow_call:
     inputs:
       tag:
         description: 'Version tag for the image (e.g. v1.0.0).'
         type: string
         required: true
+      called_by_releaser:
+        description: 'Set by the Fusion Releaser wrapper. Do not set by hand.'
+        type: boolean
+        required: false
+        default: false
     # Use org-level or repo-level secrets; caller must pass with secrets: inherit
     secrets:
       DOCKER_USERNAME:
@@ -47,10 +59,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Manual runs of THIS workflow must not target master: master publishes
+  # :latest, which should only ever come from a release event.
+  #
+  # github.event_name and github.ref describe the triggering event, so when
+  # this workflow is reached through workflow_call they still read
+  # workflow_dispatch / refs/heads/master for a Fusion Releaser run. The
+  # called_by_releaser input is the discriminator: only a workflow_call can
+  # set it.
+  guard-manual-master:
+    name: Reject manual runs from master
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reject manual run on master
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.called_by_releaser != true && github.ref == 'refs/heads/master' }}
+        run: |
+          echo "::error::Manual runs of 'Publish Docker Image' are not allowed from master. Publish master images by creating a release, or re-run this workflow from a non-master branch."
+          exit 1
+
   docker-fusion:
     name: Push Fusion Docker Image
     runs-on: ubuntu-latest
     environment: docker publish
+    needs: guard-manual-master
     if: ${{ startsWith(github.repository, 'datazip-inc/') }}
     steps:
       - uses: actions/checkout@v3
@@ -107,6 +138,7 @@ jobs:
     name: Push Fusion Spark Optimizer Docker Image to olakego/fusion-spark
     runs-on: ubuntu-latest
     environment: docker publish
+    needs: guard-manual-master
     if: ${{ startsWith(github.repository, 'datazip-inc/') }}
     strategy:
       matrix:

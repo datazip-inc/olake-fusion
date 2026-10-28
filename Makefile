@@ -44,7 +44,8 @@ MVN := JAVA_HOME="$(JAVA_HOME_17)" PATH="$(JAVA_HOME_17)/bin:$(PATH)" ./mvnw
 
 .PHONY: help build sync-libs setup-debug-mode clean-debug-mode \
         start-deps stop-deps start-fusion-docker clean-fusion-docker \
-        sync-frontend spotless-fix
+        sync-frontend spotless-fix integration-test integration-test-build \
+        integration-test-images integration-test-down
 
 help:
 	@echo "Fusion (Amoro) Development Makefile"
@@ -62,6 +63,12 @@ help:
 	@echo "  make stop-deps             Stop Postgres and Minio"
 	@echo "  make start-fusion-docker   Start Kind cluster + all services + optimizer"
 	@echo "  make clean-fusion-docker   Remove Kind cluster + services + volumes"
+	@echo ""
+	@echo "Integration tests (integration-tests/):"
+	@echo "  make integration-test          Build, start the stack, run the suite (TEST_ONLY=<test> runs one test)"
+	@echo "  make integration-test-build    Maven: distribution, Spark optimizer job, test sources"
+	@echo "  make integration-test-images   Docker: fusion:test and fusion-spark:test from those artifacts"
+	@echo "  make integration-test-down     Remove the test stack"
 	@echo ""
 	@echo "Access:"
 	@echo "  Fusion Web UI : http://localhost:1630  (admin / password)"
@@ -146,3 +153,22 @@ sync-frontend:
 	mkdir -p "$$DST"; \
 	cp -r "$$SRC"/. "$$DST"/
 	@echo "Frontend synced. Refresh http://localhost:1630"
+
+# ---------------------------------------------------------------------------
+# Integration tests (integration-tests/)
+# ---------------------------------------------------------------------------
+
+# Single entry point, locally and in CI. `make integration-test` builds artifacts and images
+# itself unless FUSION_IMAGE and FUSION_SPARK_IMAGE pin them.
+integration-test:
+	./integration-tests/scripts/run.sh
+
+# Build phases, run as separate CI steps (see integration-tests/scripts/build.sh).
+integration-test-build:
+	./integration-tests/scripts/build.sh artifacts
+
+integration-test-images:
+	./integration-tests/scripts/build.sh images
+
+integration-test-down:
+	./integration-tests/scripts/stack.sh down

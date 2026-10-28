@@ -33,6 +33,7 @@ import org.apache.amoro.catalog.BasicCatalogTestHelper;
 import org.apache.amoro.catalog.CatalogTestHelper;
 import org.apache.amoro.io.MixedDataTestHelpers;
 import org.apache.amoro.server.dashboard.model.OverviewTopTableItem;
+import org.apache.amoro.server.scheduler.inline.TableHealthScoreExecutor;
 import org.apache.amoro.server.scheduler.inline.TableRuntimeRefreshExecutor;
 import org.apache.amoro.server.table.AMSTableTestBase;
 import org.apache.amoro.server.table.DefaultTableRuntime;
@@ -113,6 +114,10 @@ public class TestOverviewManager extends AMSTableTestBase {
         new TableRuntimeRefreshExecutor(tableService(), 1, Integer.MAX_VALUE);
     refresher.execute(getDefaultTableRuntime(serverTableIdentifier().getId()));
     refresher.dispose();
+    TableHealthScoreExecutor healthScorer =
+        new TableHealthScoreExecutor(tableService(), 1, Integer.MAX_VALUE);
+    healthScorer.execute(getDefaultTableRuntime(serverTableIdentifier().getId()));
+    healthScorer.dispose();
   }
 
   @Test

@@ -20,7 +20,9 @@
 
 package org.apache.amoro.server.scheduler.inline;
 
+import org.apache.amoro.TableFormat;
 import org.apache.amoro.TableRuntime;
+import org.apache.amoro.iceberg.Constants;
 import org.apache.amoro.optimizing.plan.AbstractOptimizingEvaluator;
 import org.apache.amoro.server.persistence.TableOptimizingConfigurationsMeta;
 import org.apache.amoro.server.scheduler.PeriodicTableScheduler;
@@ -34,18 +36,30 @@ import org.apache.amoro.table.MixedTable;
 import java.util.Objects;
 
 /**
- * Independently calculates the health score of iceberg tables on its own schedule. A failure here
- * cannot affect planning, evaluation or any other process or work.
+ * Calculates the health score of Iceberg tables on its own schedule and threads. A failure here
+ * never affects any of the happy paths.
  *
- * <p>Keeps track of the last snapshot_id it calculated the health score upon.
+ * <p>The score is stored both in the table summary and in the AMS database, each together with the
+ * snapshot it was calculated on, and is calculated again only once the table's current snapshot
+ * changes.
+ *
+ * <p>TODO: Store timestamp when the last healthscore was calculated.
  */
 public class TableHealthScoreExecutor extends PeriodicTableScheduler {
 
   private final long interval;
 
-  protected TableHealthScoreExecutor(TableService tableService, int poolSize, long interval) {
+  public TableHealthScoreExecutor(TableService tableService, int poolSize, long interval) {
     super(tableService, poolSize);
     this.interval = interval;
+  }
+
+  // Iceberg tables only. Whether optimizing is enabled is read from the db on each run instead, so
+  // a table enabled later needs no rescheduling and the scheduling itself never depends on the db.
+  @Override
+  protected boolean enabled(TableRuntime tableRuntime) {
+    return tableRuntime instanceof DefaultTableRuntime
+        && TableFormat.ICEBERG.equals(tableRuntime.getFormat());
   }
 
   @Override
@@ -53,20 +67,14 @@ public class TableHealthScoreExecutor extends PeriodicTableScheduler {
     return interval;
   }
 
-  // every table stays scheduled, whether its optimizing is enabled is read from the db on each run,
-  // so the scheduling itself never depends on the db
-  @Override
-  protected boolean enabled(TableRuntime tableRuntime) {
-    return true;
-  }
-
+  // first runs one interval after the table refreshes that start with Fusion
   @Override
   protected long getExecutorDelay() {
     return interval;
   }
 
   @Override
-  protected void execute(TableRuntime tableRuntime) {
+  public void execute(TableRuntime tableRuntime) {
     try {
       DefaultTableRuntime runtime = (DefaultTableRuntime) tableRuntime;
       TableConfigurationsService configurations = TableConfigurationsService.getInstance();
@@ -75,23 +83,27 @@ public class TableHealthScoreExecutor extends PeriodicTableScheduler {
         return;
       }
 
-      // the table is loaded fresh, so a snapshot committed since its last refresh is scored too
+      // loaded fresh, so a snapshot committed since the table's last refresh is scored too
       MixedTable table = (MixedTable) loadTable(tableRuntime).originalTable();
       long snapshotId = IcebergTableUtil.getSnapshotId(table.asUnkeyedTable(), false);
-      if (Objects.equals(snapshotId, stored.getHealthScoreSnapshotId())) {
+      // nothing to score without a snapshot, nor when both stores scored this snapshot already
+      if (snapshotId == Constants.INVALID_SNAPSHOT_ID
+          || (snapshotId == runtime.getHealthScoreSnapshotId()
+              && Objects.equals(snapshotId, stored.getHealthScoreSnapshotId()))) {
         return;
       }
 
+      // the score covers every partition, the limit only caps the ones picked for optimizing
       AbstractOptimizingEvaluator.PendingInput pendingInput =
           IcebergTableUtil.createOptimizingEvaluator(
                   runtime, table, new BasicTableSnapshot(snapshotId), Integer.MAX_VALUE)
               .getPendingInput();
-      runtime.setTableSummary(pendingInput);
+      runtime.setTableSummary(pendingInput, snapshotId);
       configurations.storeHealthScore(
           runtime.getTableIdentifier(), pendingInput.getHealthScore(), snapshotId);
     } catch (Throwable t) {
       logger.warn(
-          "Failed to evaluate health score for table {}", tableRuntime.getTableIdentifier(), t);
+          "Failed to calculate health score for table {}", tableRuntime.getTableIdentifier(), t);
     }
   }
 }

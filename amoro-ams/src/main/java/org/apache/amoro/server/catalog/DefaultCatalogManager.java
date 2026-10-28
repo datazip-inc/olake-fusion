@@ -180,8 +180,8 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
 
   @Override
   public void createCatalog(CatalogMeta catalogMeta) {
-    // Telemetry is reported in a finally block so that it observes the outcome without taking part
-    // in the control flow: every failure keeps propagating to the caller unchanged.
+    // Telemetry observes the outcome without taking part in the control flow: every failure keeps
+    // propagating to the caller unchanged.
     boolean created = false;
     try {
       if (catalogExist(catalogMeta.getCatalogName())) {
@@ -197,6 +197,10 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
       LOG.info(
           "Create catalog {}, type:{}", catalogMeta.getCatalogName(), catalogMeta.getCatalogType());
       created = true;
+    } catch (Throwable t) {
+      Telemetry.getInstance()
+          .trackFailure(Telemetry.Command.CREATE_CATALOG, catalogMeta.getCatalogType(), t);
+      throw t;
     } finally {
       Telemetry.getInstance()
           .trackCatalogCreated(catalogMeta.getCatalogType(), isOlakeCreated(catalogMeta), created);

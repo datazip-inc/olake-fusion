@@ -137,12 +137,12 @@ public class InlineTableExecutors {
     return hiveCommitSyncExecutor;
   }
 
-  public TableHealthScoreExecutor getTableHealthScoreExecutor() {
-    return tableHealthScoreExecutor;
-  }
-
   public TagsAutoCreatingExecutor getTagsAutoCreatingExecutor() {
     return tagsAutoCreatingExecutor;
+  }
+
+  public TableHealthScoreExecutor getTableHealthScoreExecutor() {
+    return tableHealthScoreExecutor;
   }
 
   public DataExpiringExecutor getDataExpiringExecutor() {

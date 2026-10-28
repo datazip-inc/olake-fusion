@@ -49,6 +49,7 @@ import org.apache.amoro.metrics.MetricDefine;
 import org.apache.amoro.metrics.MetricKey;
 import org.apache.amoro.server.manager.MetricManager;
 import org.apache.amoro.server.optimizing.OptimizingTestHelpers;
+import org.apache.amoro.server.scheduler.inline.TableHealthScoreExecutor;
 import org.apache.amoro.server.scheduler.inline.TableRuntimeRefreshExecutor;
 import org.apache.amoro.shade.guava32.com.google.common.collect.ImmutableMap;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Lists;
@@ -147,6 +148,10 @@ public class TestTableSummaryMetrics extends AMSTableTestBase {
         new TableRuntimeRefreshExecutor(tableService(), 1, Integer.MAX_VALUE);
     refresher.execute(getDefaultTableRuntime(serverTableIdentifier().getId()));
     refresher.dispose();
+    TableHealthScoreExecutor healthScorer =
+        new TableHealthScoreExecutor(tableService(), 1, Integer.MAX_VALUE);
+    healthScorer.execute(getDefaultTableRuntime(serverTableIdentifier().getId()));
+    healthScorer.dispose();
   }
 
   @Test

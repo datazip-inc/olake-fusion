@@ -34,6 +34,7 @@ import org.apache.amoro.config.ConfigurationException;
 import org.apache.amoro.config.Configurations;
 import org.apache.amoro.config.shade.utils.ConfigShadeUtils;
 import org.apache.amoro.exception.AmoroRuntimeException;
+import org.apache.amoro.server.bootstrap.OptimizerBootstrap;
 import org.apache.amoro.server.catalog.CatalogManager;
 import org.apache.amoro.server.catalog.DefaultCatalogManager;
 import org.apache.amoro.server.dashboard.DashboardServer;
@@ -273,6 +274,7 @@ public class AmoroServiceContainer {
 
     tableManager.setTableService(tableService);
 
+    new OptimizerBootstrap(serviceConfig, optimizerManager, optimizingService).run();
     initThriftService();
     startThriftService();
   }
@@ -351,20 +353,33 @@ public class AmoroServiceContainer {
     return SPARK_CONFIG;
   }
 
+  // A Spark optimizer reports its Spark settings when it registers. They replace those of a
+  // configured Spark optimizer container, and are the only source when Kubernetes deploys the
+  // optimizer.
+  static void updateSparkConfig(Map<String, String> optimizerProperties) {
+    if (optimizerProperties != null
+        && optimizerProperties.containsKey(OptimizerProperties.SPARK_DRIVER_MEMORY)) {
+      SPARK_CONFIG = resolveSparkConfig(optimizerProperties, "");
+    }
+  }
+
   private static Map<String, Object> resolveSparkConfig(
-      Map<String, String> sparkContainerProperties) {
+      Map<String, String> sparkProperties, String keyPrefix) {
     Map<String, String> properties =
-        sparkContainerProperties == null ? Collections.emptyMap() : sparkContainerProperties;
+        sparkProperties == null ? Collections.emptyMap() : sparkProperties;
     Map<String, Object> sparkConfigMap = new HashMap<>();
     sparkConfigMap.put(
         "spark_driver_memory",
-        properties.getOrDefault("spark-conf.spark.driver.memory", NOT_AVAILABLE));
+        properties.getOrDefault(
+            keyPrefix + OptimizerProperties.SPARK_DRIVER_MEMORY, NOT_AVAILABLE));
     sparkConfigMap.put(
         "spark_executor_memory",
-        properties.getOrDefault("spark-conf.spark.executor.memory", NOT_AVAILABLE));
+        properties.getOrDefault(
+            keyPrefix + OptimizerProperties.SPARK_EXECUTOR_MEMORY, NOT_AVAILABLE));
     sparkConfigMap.put(
         "spark_executor_cores",
-        properties.getOrDefault("spark-conf.spark.executor.cores", NOT_AVAILABLE));
+        properties.getOrDefault(
+            keyPrefix + OptimizerProperties.SPARK_EXECUTOR_CORES, NOT_AVAILABLE));
     return Collections.unmodifiableMap(sparkConfigMap);
   }
 
@@ -659,7 +674,8 @@ public class AmoroServiceContainer {
         }
       }
       if (sparkContainerProperties != null) {
-        AmoroServiceContainer.SPARK_CONFIG = resolveSparkConfig(sparkContainerProperties);
+        AmoroServiceContainer.SPARK_CONFIG =
+            resolveSparkConfig(sparkContainerProperties, "spark-conf.");
       }
       Containers.init(containerList);
     }
