@@ -28,8 +28,9 @@
 # A run on a pull request starts only after a maintainer approves it: the job is gated on the
 # `integration-tests` environment, whose required reviewers GitHub asks for before the job starts.
 # Set the reviewers in Settings > Environments > integration-tests; without them the gate is a
-# no-op and every run starts straight away. Runs on master (a push, or a manual run from master)
-# skip the gate: that code is already merged, and only people with write access can start them.
+# no-op and every run starts straight away. Runs on master and staging (a commit pushed there, or
+# a manual run from there) skip the gate: only people with write access can put commits on those
+# branches. Every other run, pull requests included, is gated.
 #
 # The suite prints its own table at the end of each lane (io.olake.fusion.it.Report): every
 # test with its result, duration, table and optimizing processes, and for a failed test its
@@ -56,6 +57,7 @@ on:
   push:
     branches:
       - master
+      - staging
     paths:
       - '**/*.java'
       - '**/*.scala'
@@ -91,8 +93,9 @@ jobs:
     name: Build and run integration tests
     runs-on: ubuntu-latest
     # Holds the run until a required reviewer approves it: nothing is built or pulled before.
-    # An empty environment name means no environment, so runs on master start straight away.
-    environment: ${{ github.ref != 'refs/heads/master' && 'integration-tests' || '' }}
+    # An empty environment name means no environment, so runs on master and staging start
+    # straight away.
+    environment: ${{ (github.ref != 'refs/heads/master' && github.ref != 'refs/heads/staging') && 'integration-tests' || '' }}
     timeout-minutes: 20
     steps:
       - name: Checkout code
