@@ -69,6 +69,11 @@
       "postcss@<8.5.18": "^8.5.28",
       "source-map-js": "^1.2.2",
       "follow-redirects": "^1.16.1"
-    }
+    },
+    "neverBuiltDependencies": [
+      "tree-sitter",
+      "tree-sitter-json",
+      "tree-sitter-yaml"
+    ]
   }
 }
