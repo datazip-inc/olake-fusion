@@ -1673,6 +1673,8 @@
                             <!-- Administrative files in the main trunk. -->
                             <exclude>**/README.md</exclude>
                             <exclude>**/CODE_OF_CONDUCT.md</exclude>
+                            <exclude>dev/sop/**</exclude>
+                            <exclude>dev/design-docs/**</exclude>
                             <exclude>.github/**</exclude>
                             <exclude>**/NOTICE-binary*</exclude>
                             <!-- IDE files. -->

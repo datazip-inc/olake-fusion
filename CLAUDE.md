@@ -180,6 +180,16 @@ Note: the token authentication logic for Fusion used by OLake-UI can be found he
 Do not add unit or integration tests to the final change unless asked. You may write temporary
 tests to check your work; delete them before finishing and report what they showed.
 
+Exception: work that follows the feature SOP (`dev/sop/README.md`) counts as asked. Tests written by
+`/fusion-write-tests` from the design doc stay in the change.
+
+### Feature SOP
+
+Features, improvements and non-trivial bug fixes follow `dev/sop/README.md`: developer design doc,
+then the skills `/fusion-design-check`, `/fusion-write-tests`, `/fusion-implement`, `/fusion-verify`,
+developer review, PR, and `/fusion-pr-review`. Each feature's files live in
+`dev/design-docs/<issue>-<slug>/`. Every change is checked against `dev/sop/fusion-invariants.md`.
+
 ### Pick the optimal check that proves the change
 
 1. **Compile** the touched modules (step 3 of "Run the server from source" below). Always do this.
