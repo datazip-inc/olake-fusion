@@ -41,7 +41,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * AMS disk store for optimizing logs, and the only writer of them. Layout matches what {@code
+ * Writes optimizing logs to the AMS disk, and is their only writer. Layout matches what {@code
  * LogController} reads: {@code LOG_DIR/<processId>/driver.log} and {@code
  * LOG_DIR/<processId>/<taskId>.log}.
  *
@@ -54,7 +54,7 @@ import java.util.Map;
  *
  * <p>AMS does not delete these logs; retention is handled by olake-worker.
  */
-public class OptimizingLogStore {
+public class LogWriter {
 
   private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
   // Same time format as the optimizer's JSON log lines.
@@ -62,21 +62,20 @@ public class OptimizingLogStore {
       DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC);
 
   public static final String DRIVER_LOG_FILE = "driver.log";
-  public static final String DEFAULT_LOG_DIR = "/mnt/amoro-logs/compaction";
+  private static final String DEFAULT_LOG_DIR = "/mnt/amoro-logs/compaction";
 
-  private static final OptimizingLogStore INSTANCE =
-      new OptimizingLogStore(envOrDefault("LOG_DIR", DEFAULT_LOG_DIR));
+  private static final LogWriter INSTANCE = new LogWriter(envOrDefault("LOG_DIR", DEFAULT_LOG_DIR));
 
   private final String logBaseDir;
   // driver.log is the only file with more than one writer (the optimizer and AMS itself both
   // append to it); every other file has a single writer. One lock is enough for either case.
   private final Object lock = new Object();
 
-  private OptimizingLogStore(String logBaseDir) {
+  private LogWriter(String logBaseDir) {
     this.logBaseDir = logBaseDir;
   }
 
-  public static OptimizingLogStore get() {
+  public static LogWriter get() {
     return INSTANCE;
   }
 
@@ -84,22 +83,28 @@ public class OptimizingLogStore {
     return INSTANCE.logBaseDir;
   }
 
+  /**
+   * Creates the log directory at startup, so the dashboard finds it before the first optimizing
+   * run.
+   *
+   * @throws UncheckedIOException if the directory cannot be created
+   */
+  public void createLogDir() {
+    try {
+      Files.createDirectories(Paths.get(logBaseDir));
+    } catch (IOException e) {
+      throw new UncheckedIOException("Failed to create optimizing log directory " + logBaseDir, e);
+    }
+  }
+
   /** Appends lines, grouped so each target file is opened once per call. */
   public void append(List<OptimizingLogLine> lines) {
-    if (lines == null || lines.isEmpty()) {
-      return;
-    }
     Map<Path, StringBuilder> contentByPath = new LinkedHashMap<>();
     for (OptimizingLogLine line : lines) {
-      if (line == null || line.getNdjson() == null || line.getNdjson().isEmpty()) {
-        continue;
-      }
-      StringBuilder content =
-          contentByPath.computeIfAbsent(resolvePath(line), p -> new StringBuilder());
-      content.append(line.getNdjson());
-      if (!line.getNdjson().endsWith("\n")) {
-        content.append(System.lineSeparator());
-      }
+      contentByPath
+          .computeIfAbsent(resolvePath(line.getTaskId()), path -> new StringBuilder())
+          .append(line.getNdjson())
+          .append('\n');
     }
     contentByPath.forEach(this::write);
   }
@@ -149,19 +154,10 @@ public class OptimizingLogStore {
     }
   }
 
-  private Path resolvePath(OptimizingLogLine line) {
-    OptimizingTaskId taskId = line.getTaskId();
+  private Path resolvePath(OptimizingTaskId taskId) {
     Path processDir = Paths.get(logBaseDir, String.valueOf(taskId.getProcessId()));
-    if (isDriverLine(line)) {
-      return processDir.resolve(DRIVER_LOG_FILE);
-    }
-    return processDir.resolve(taskId.getTaskId() + ".log");
-  }
-
-  // Task ids start at 1 (see OptimizingQueue); taskId is never null, 0 always means a
-  // process-level line.
-  private static boolean isDriverLine(OptimizingLogLine line) {
-    return line.getTaskId().getTaskId() == 0;
+    return processDir.resolve(
+        taskId.getTaskId() == 0 ? DRIVER_LOG_FILE : taskId.getTaskId() + ".log");
   }
 
   private static String envOrDefault(String key, String defaultValue) {

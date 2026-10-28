@@ -37,7 +37,7 @@ import org.apache.amoro.process.ProcessFactory;
 import org.apache.amoro.process.ProcessStatus;
 import org.apache.amoro.process.TableProcessStore;
 import org.apache.amoro.server.AmoroServiceConstants;
-import org.apache.amoro.server.optimizing.OptimizingLogStore;
+import org.apache.amoro.server.optimizing.LogWriter;
 import org.apache.amoro.server.optimizing.OptimizingProcess;
 import org.apache.amoro.server.optimizing.OptimizingStatus;
 import org.apache.amoro.server.optimizing.TaskRuntime;
@@ -408,7 +408,8 @@ public class DefaultTableRuntime extends AbstractTableRuntime
   }
 
   public void planFailed(String reason, Throwable throwable) {
-    finalizePlanningProcess(ProcessStatus.FAILED, reason, throwable);
+    long processId = getProcessId();
+    boolean failed = finalizePlanningProcess(ProcessStatus.FAILED, reason);
 
     store()
         .begin()
@@ -416,6 +417,10 @@ public class DefaultTableRuntime extends AbstractTableRuntime
         .updateState(PROCESS_ID_KEY, any -> 0L)
         .commit();
     this.pendingCronType = null;
+    // Written once the table is IDLE again, so a failed write throws without leaving it PLANNING.
+    if (failed) {
+      appendDriverLogEntry(processId, "ERROR", describeThrowable(throwable, reason), throwable);
+    }
   }
 
   public void beginProcess(OptimizingProcess optimizingProcess) {
@@ -520,7 +525,7 @@ public class DefaultTableRuntime extends AbstractTableRuntime
             "cron fired for %s but planner evaluated and found no data to process",
             triggeredTypeName(getProcessId()));
 
-    finalizePlanningProcess(ProcessStatus.SKIPPED, reason, null);
+    finalizePlanningProcess(ProcessStatus.SKIPPED, reason);
 
     store()
         .begin()
@@ -531,12 +536,12 @@ public class DefaultTableRuntime extends AbstractTableRuntime
     this.pendingCronType = null;
   }
 
-  // mark the process as failed in the database
-  private void finalizePlanningProcess(ProcessStatus status, String reason, Throwable throwable) {
+  // mark the planning process as failed or skipped in the database; false if none was planning
+  private boolean finalizePlanningProcess(ProcessStatus status, String reason) {
 
     long processId = getProcessId();
     if (getOptimizingStatus() != OptimizingStatus.PLANNING || processId == 0) {
-      return;
+      return false;
     }
 
     long now = System.currentTimeMillis();
@@ -568,15 +573,12 @@ public class DefaultTableRuntime extends AbstractTableRuntime
           processId,
           e);
     }
-
-    if (status == ProcessStatus.FAILED) {
-      appendDriverLogEntry(processId, "ERROR", describeThrowable(throwable, reason), throwable);
-    }
+    return true;
   }
 
   public void appendDriverLogEntry(
       long processId, String level, String message, Throwable throwable) {
-    OptimizingLogStore.get()
+    LogWriter.get()
         .appendDriverEntry(
             processId,
             level,

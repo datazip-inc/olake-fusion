@@ -55,10 +55,6 @@ spec:
       serviceAccountName: spark
       # The driver is the pod, so a restart must not wait on a graceful Spark shutdown.
       terminationGracePeriodSeconds: 30
-      volumes:
-        - name: amoro-logs
-          hostPath:
-            path: /mnt/amoro-logs
       containers:
         - name: optimizer
           image: olakego/fusion-spark:latest
@@ -84,9 +80,6 @@ spec:
                 secretKeyRef:
                   name: fusion-s3-credentials
                   key: secret-access-key
-          volumeMounts:
-            - name: amoro-logs
-              mountPath: /mnt/amoro-logs
           resources:
             requests:
               cpu: "1"
@@ -150,12 +143,6 @@ spec:
             - spark.executor.failuresValidityInterval=10ms
             - --conf
             - spark.task.maxFailures=4
-            - --conf
-            - spark.kubernetes.executor.volumes.hostPath.amoro-logs.mount.path=/mnt/amoro-logs
-            - --conf
-            - spark.kubernetes.executor.volumes.hostPath.amoro-logs.mount.readOnly=false
-            - --conf
-            - spark.kubernetes.executor.volumes.hostPath.amoro-logs.options.path=/mnt/amoro-logs
             # the driver exits on its first OutOfMemoryError, so that Kubernetes restarts the optimizer.
             - --conf
             - spark.driver.extraJavaOptions=-Dlog4j2.configurationFile=file:///opt/spark/conf/log4j2.xml -XX:+ExitOnOutOfMemoryError

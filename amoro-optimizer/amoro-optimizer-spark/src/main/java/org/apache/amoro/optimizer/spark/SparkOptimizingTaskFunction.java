@@ -47,29 +47,18 @@ public class SparkOptimizingTaskFunction implements Function<OptimizingTask, Opt
   public OptimizingTaskResult call(OptimizingTask task) {
     long processId = task.getTaskId().getProcessId();
     int taskId = task.getTaskId().getTaskId();
-    try {
-      OptimizingTaskRpcLogAppender.install();
-      SparkOptimizingLogRpcClient.get().bindDriverEndpoint();
-    } catch (Exception e) {
-      // Lines stay buffered (capped) and the next task retries the bind.
-      LOG.warn("Failed to bind optimizing log RPC client to driver", e);
-    }
 
-    // Ships this thread's logs to AMS as task lines (AMS writes <processId>/<taskId>.log).
+    SparkOptimizingLogSupport.beforeTask();
+    // AMS writes this thread's lines to <processId>/<taskId>.log.
     OptimizingTaskLogContext.setExecutorContext(processId, taskId);
 
+    OptimizingTaskResult result;
     try {
-      OptimizingTaskResult result = OptimizerExecutor.executeTask(config, threadId, task, LOG);
-      return result;
-    } catch (Exception e) {
-      LOG.error("Task execution failed on executor", e);
-      throw e;
+      result = OptimizerExecutor.executeTask(config, threadId, task, LOG);
     } finally {
-      // Wait (bounded) for this task's lines to be acknowledged by the driver before returning.
-      if (!SparkOptimizingLogRpcClient.get().drain(SparkOptimizingLogRpcClient.DRAIN_TIMEOUT_MS)) {
-        LOG.warn("Optimizing logs of task {} not yet delivered to driver", taskId);
-      }
       OptimizingTaskLogContext.clearContext();
     }
+    // The task's lines reach the driver before its result does.
+    return SparkOptimizingLogSupport.afterTask(result);
   }
 }

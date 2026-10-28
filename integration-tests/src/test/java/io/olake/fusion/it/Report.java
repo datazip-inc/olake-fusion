@@ -53,7 +53,7 @@ import java.util.stream.Collectors;
 public final class Report
     implements BeforeEachCallback, TestWatcher, ExtensionContext.Store.CloseableResource {
 
-  /** Where the optimizer's per-process logs land on the host, mounted at /mnt/amoro-logs. */
+  /** Where AMS writes the per-process optimizing logs, mounted from the host at /mnt/amoro-logs. */
   private static final Path COMPACTION_LOGS = Path.of(Env.LOG_DIR, "compaction");
 
   /**
@@ -291,8 +291,8 @@ public final class Report
     if (row.olakeLogs != null && Files.isDirectory(row.olakeLogs)) {
       paths.addAll(listFiles(row.olakeLogs));
     }
-    // The optimizer writes one directory of logs per process, and the driver's log is the one
-    // that explains a failed compaction: see conf/optimize/log4j2-routing.xml.
+    // AMS writes one directory of logs per process, and the driver's log is the one that explains
+    // a failed compaction: see LogWriter.
     for (Fusion.Process process : row.processes) {
       Path dir = COMPACTION_LOGS.resolve(process.id());
       paths.addAll(Files.isDirectory(dir) ? listFiles(dir) : List.of(dir));

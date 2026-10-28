@@ -28,21 +28,6 @@
         <Console name="Console" target="SYSTEM_ERR">
             <PatternLayout pattern="${CONSOLE_PATTERN}"/>
         </Console>
-
-        <!-- Routing appender: keyed by MDC logChannel. Neither driver nor executor writes
-             per-process/task log files; AMS is the only disk writer.
-             executor = Spark executor task logs, driver = Spark driver process logs; both are
-             shipped to AMS by the RPC appender installed in code and printed here once.
-             unset = console only.
-             Amoro loggers reference only this appender (not Console directly) so each line
-             is printed once. -->
-        <Routing name="RoutingAppender">
-            <Routes pattern="$${ctx:logChannel}">
-                <Route key="executor" ref="Console"/>
-                <Route key="driver" ref="Console"/>
-                <Route key="$${ctx:logChannel}" ref="Console"/>
-            </Routes>
-        </Routing>
     </Appenders>
 
     <Loggers>
@@ -50,17 +35,18 @@
             <AppenderRef ref="Console"/>
         </Root>
 
-        <!-- Amoro code: printed via RoutingAppender; the RPC appender attaches to these loggers. -->
+        <!-- Amoro code. The optimizer also ships the lines of compaction threads to AMS, the only
+             place they are stored, through an appender it attaches to these loggers in code. -->
         <Logger name="org.apache.amoro" level="info" additivity="false">
-            <AppenderRef ref="RoutingAppender"/>
+            <AppenderRef ref="Console"/>
         </Logger>
 
         <Logger name="org.apache.amoro.optimizing" level="debug" additivity="false">
-            <AppenderRef ref="RoutingAppender"/>
+            <AppenderRef ref="Console"/>
         </Logger>
 
         <Logger name="org.apache.amoro.optimizer" level="info" additivity="false">
-            <AppenderRef ref="RoutingAppender"/>
+            <AppenderRef ref="Console"/>
         </Logger>
 
         <Logger name="org.apache.hadoop" level="warn" additivity="false">

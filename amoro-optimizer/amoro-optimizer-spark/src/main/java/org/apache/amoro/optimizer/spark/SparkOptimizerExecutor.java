@@ -25,7 +25,6 @@ import org.apache.amoro.api.OptimizingTaskResult;
 import org.apache.amoro.log.OptimizingTaskLogContext;
 import org.apache.amoro.optimizer.common.OptimizerConfig;
 import org.apache.amoro.optimizer.common.OptimizerExecutor;
-import org.apache.amoro.optimizer.common.OptimizingLogBatcher;
 import org.apache.amoro.optimizing.RewriteFilesInput;
 import org.apache.amoro.optimizing.TableOptimizing;
 import org.apache.amoro.shade.guava32.com.google.common.collect.ImmutableList;
@@ -58,10 +57,9 @@ public class SparkOptimizerExecutor extends OptimizerExecutor {
     String threadName = Thread.currentThread().getName();
     long startTime = System.currentTimeMillis();
 
-    long processId = task.getTaskId().getProcessId();
-
-    // Ships this thread's logs to AMS as driver lines (AMS writes <processId>/driver.log).
-    OptimizingTaskLogContext.setDriverContext(processId);
+    SparkOptimizingLogSupport.beforeTask();
+    // AMS writes this thread's lines to <processId>/driver.log.
+    OptimizingTaskLogContext.setDriverContext(task.getTaskId().getProcessId());
 
     try {
       ImmutableList<OptimizingTask> of = ImmutableList.of(task);
@@ -75,7 +73,6 @@ public class SparkOptimizerExecutor extends OptimizerExecutor {
           threadName,
           task.getTaskId(),
           System.currentTimeMillis() - startTime);
-      return result;
     } catch (Throwable r) {
       LOG.error(
           "Optimizer executor[{}] executed task[{}] failed, and cost {} ms",
@@ -85,15 +82,11 @@ public class SparkOptimizerExecutor extends OptimizerExecutor {
           r);
       result = new OptimizingTaskResult(task.getTaskId(), threadId);
       result.setErrorMessage(ExceptionUtil.getErrorMessage(r, ERROR_MESSAGE_MAX_LENGTH));
-      return result;
     } finally {
-      // The driver's own lines (above) are still buffered for up to FLUSH_INTERVAL_MS; flush them
-      // now so a failure's summary line reaches AMS before the result does, not after.
-      if (OptimizingLogBatcher.isInitialized()) {
-        OptimizingLogBatcher.get().flush();
-      }
       OptimizingTaskLogContext.clearContext();
     }
+    // The task's lines, the executor's included, reach AMS before its result does.
+    return SparkOptimizingLogSupport.afterTask(result);
   }
 
   private String jobDescription(OptimizingTask task) {
