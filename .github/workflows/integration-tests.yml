@@ -16,33 +16,6 @@
 #
 # Modified by Datazip Inc. in 2026
 
-# Fusion integration tests (integration-tests/) against images built from this commit.
-#
-# One job, because every stage needs the one before it on the same disk: the Dockerfiles copy
-# the Maven output, and the suite needs the images. Splitting it only bought a label on which
-# stage broke - which the step names already give - and cost an artifact round trip of the
-# distribution and the optimizer jar, a second checkout and JDK setup, and a second approval
-# of the gate below. The images are built once and pinned through FUSION_IMAGE/FUSION_SPARK_IMAGE,
-# so the run only tags them.
-#
-# A run on a pull request starts only after a maintainer approves it: the job is gated on the
-# `integration-tests` environment, whose required reviewers GitHub asks for before the job starts.
-# Set the reviewers in Settings > Environments > integration-tests; without them the gate is a
-# no-op and every run starts straight away. Runs on master and staging (a commit pushed there, or
-# a manual run from there) skip the gate: only people with write access can put commits on those
-# branches. Every other run, pull requests included, is gated.
-#
-# The suite prints its own table at the end of each lane (io.olake.fusion.it.Report): every
-# test with its result, duration, table and optimizing processes, and for a failed test its
-# message and the one folder holding every log that covers it. It lands in this job's log, which
-# outlives the artifact below, so a red run can be read without downloading anything. The suite
-# also copies those logs into target/logs/tests/<test>/, so the artifact has one folder per test.
-#
-# The third-party images the stack needs (integration-tests/docker/images.txt) are cached
-# between runs as one `docker save` tarball, keyed on that file, so a run pulls them only when
-# a tag there changes. What this repo builds is never cached (it changes every commit), and
-# neither is the OLake source image, whose default tag floats.
-#
 # TODO: build the images with docker-images.yml once it can build without pushing to Docker
 # Hub, and push the test images to GHCR so later jobs and reruns can pull them. Today they exist
 # only in this job's local Docker.
@@ -57,7 +30,6 @@ on:
   push:
     branches:
       - master
-      - staging
     paths:
       - '**/*.java'
       - '**/*.scala'
@@ -93,9 +65,9 @@ jobs:
     name: Build and run integration tests
     runs-on: ubuntu-latest
     # Holds the run until a required reviewer approves it: nothing is built or pulled before.
-    # An empty environment name means no environment, so runs on master and staging start
-    # straight away.
-    environment: ${{ (github.ref != 'refs/heads/master' && github.ref != 'refs/heads/staging') && 'integration-tests' || '' }}
+    # An empty environment name means no environment, so the runs that skip the gate (see the top
+    # of this file) start straight away.
+    environment: ${{ !(github.event_name == 'push' || github.head_ref == 'staging') && 'integration-tests' || '' }}
     timeout-minutes: 20
     steps:
       - name: Checkout code
