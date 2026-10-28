@@ -196,6 +196,9 @@ public final class Olake {
                 "--rm",
                 "--network",
                 Env.DOCKER_NETWORK,
+                // OLake reports every discover and sync to its analytics unless this is set.
+                "-e",
+                "TELEMETRY_DISABLED=true",
                 "-v",
                 workDir + ":/mnt/config",
                 Env.OLAKE_IMAGE));
