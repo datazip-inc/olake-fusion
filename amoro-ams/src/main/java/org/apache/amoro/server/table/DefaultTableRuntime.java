@@ -331,30 +331,6 @@ public class DefaultTableRuntime extends AbstractTableRuntime
         .commit();
   }
 
-  /** Returns the snapshot the stored health score was calculated on, -1 if not calculated. */
-  public long getHealthScoreSnapshotId() {
-    return store().getTableSummary().getHealthScoreSnapshotId();
-  }
-
-  /** Stores the table summary along with the snapshot it was calculated on. */
-  public void setTableSummary(
-      AbstractOptimizingEvaluator.PendingInput tableSummary, long snapshotId) {
-    store()
-        .begin()
-        .updateTableSummary(
-            summary -> {
-              summary.setHealthScore(tableSummary.getHealthScore());
-              summary.setSmallFileScore(tableSummary.getSmallFileScore());
-              summary.setEqualityDeleteScore(tableSummary.getEqualityDeleteScore());
-              summary.setPositionalDeleteScore(tableSummary.getPositionalDeleteScore());
-              summary.setTotalFileCount(tableSummary.getTotalFileCount());
-              summary.setTotalFileSize(tableSummary.getTotalFileSize());
-              summary.setHealthScoreSnapshotId(snapshotId);
-            })
-        .commit();
-    tableSummaryMetrics.refresh(tableSummary);
-  }
-
   public DefaultTableRuntime refresh(AmoroTable<?> table) {
     // Configurations stored in the AMS database get priority over the table's own properties.
     Map<String, String> tableConfig =

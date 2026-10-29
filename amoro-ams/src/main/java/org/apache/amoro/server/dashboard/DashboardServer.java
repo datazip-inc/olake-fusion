@@ -251,9 +251,11 @@ public class DashboardServer {
     return () -> {
       // new fusion apis
       get("/{catalog}/{db}/tables", tableConfigurations::getIcebergTables);
+      put("/{catalog}/{db}/tables/config", tableConfigurations::updateConfigurations);
+      // these two are separate apis because getTableConfig reads totalsize from metadata.json
+      // something unnecessary and costly for per-table enable/disable
       get("/{catalog}/{db}/{table}/config", tableConfigurations::getTableConfig);
       get("/{catalog}/{db}/{table}/optimizing", tableConfigurations::getOptimizing);
-      put("/{catalog}/{db}/tables/config", tableConfigurations::updateConfigurations);
 
       // table apis
       path(

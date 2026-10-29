@@ -158,6 +158,9 @@ public class TableConfigurationDetails {
     TableOptimizingConfigurationsMeta meta = configurations.get(tableOf(ctx));
     Map<String, Object> optimizing = new HashMap<>();
     optimizing.put("enabled", meta.getSelfOptimizingEnabled());
+    // the reason to send these 3 cron values is: when enabling an iceberg table on for compaction,
+    // olake-ui decides whether to put the default cron values set at olake-ui (first time user has
+    // enabled it), or to keep the one configured earlier.
     optimizing.put("minorTriggerCron", meta.getMinorTriggerCron());
     optimizing.put("majorTriggerCron", meta.getMajorTriggerCron());
     optimizing.put("fullTriggerCron", meta.getFullTriggerCron());
