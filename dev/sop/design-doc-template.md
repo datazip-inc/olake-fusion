@@ -1,200 +1,123 @@
 # <Feature title>
 
-| | |
-| --- | --- |
-| Issue | #<number> |
-| Author | <developer> |
-| Reviewers | <names> |
-| Doc type | Full / Lite |
-| Status | Draft / In review / Approved / Implemented / Superseded |
-| Last updated | <YYYY-MM-DD> |
+| Issue | Owner | Reviewers | Doc type | Status | Updated |
+| --- | --- | --- | --- | --- | --- |
+| #<number> | <developer> | <names> | Full / Lite | Draft / Approved / Done | <YYYY-MM-DD> |
 
-**SOP progress** (ticked by the developer and the `/fusion-*` skills)
-
-- [ ] 1 Design approved (`/fusion-design-check`: READY)
-- [ ] 2 Test plan approved, tests red (`/fusion-write-tests`)
-- [ ] 3 Implemented, tests green (`/fusion-implement`)
-- [ ] 4 AI review: Open P0/P1 = 0 (`/fusion-verify`)
-- [ ] 5 Developer review and manual test done
-- [ ] 6 PR raised: <link>
-- [ ] 7 Second review approved (`/fusion-pr-review`)
-- [ ] 8 Merged
+SOP progress (tick as each stage passes): [ ] 1 Design approved · [ ] 2 Tests red · [ ] 3 Implemented ·
+[ ] 4 Verified · [ ] 5 PRs raised · [ ] 6 AI review clean · [ ] 7 Developer review · [ ] 8 Human review ·
+[ ] 9 Merged
 
 <!--
-
-How to use this template:
-
-- **Lite or Full.** Use **Lite** (sections marked [Lite]) for a change that is unambiguous, touches
-  one area and changes no contract (no REST, property, config, schema or thrift change). Use **Full**
-  otherwise. If you are unsure, use Full. A doc with no trade-offs to discuss is a sign the change
-  may need only an issue, not a doc.
-- **Every section of your doc type is filled in.** Write `N/A - <reason>` where it does not apply.
-- **IDs.** Give stable IDs to user stories (US1), requirements (R1), success criteria (SC1), edge
-  cases (E1) and risks (K1). The test plan, code review and PR refer to them. Never renumber; mark
-  removed items ~~struck through~~.
-- **Unknowns.** Mark anything undecided inline with `[NEEDS CLARIFICATION: <question>]`. The doc is
-  not approved while one remains.
-- **Terms.** Use OLake-UI terms (Lite, Medium, Full, Run) for what users see, and code terms (Minor,
-  Major, Full, optimizing process) for the implementation.
-
-Keep or delete this comment; dev/sop/check-sop.sh ignores HTML comments.
+Rules (this comment can stay; dev/sop/check-sop.sh ignores comments):
+- Lite = no contract change and one area; fill sections marked [Lite]. Otherwise Full.
+- Be short: tables and one-line answers. No section is skipped; write "N/A - <reason>".
+- IDs (R1, E1, ...) are stable; never renumber, strike removed rows through (~~R3~~).
+- Undecided: write [NEEDS CLARIFICATION: <question>]. The doc is approved only when none remain
+  and every edge case row has an answer.
+- Section 3 is written for users: product docs are made from it. No class names there.
 -->
-
 
 ## 1. Summary [Lite]
 
-One paragraph: what changes and why, readable by someone who reads nothing else.
+Two or three sentences: what changes, for whom, why.
 
-## 2. Context and problem [Lite]
+## 2. Problem and goals [Lite]
 
-The current behaviour and why it is a problem: who is affected, how it shows up (OLake-UI, API,
-table state, logs, metrics), how often, and the evidence (issue, logs, measurements). Background a
-reviewer needs; not the solution.
+- **Problem:** what is wrong today and the evidence (issue, logs, numbers).
+- **Goals:** what is true when done.
+- **Non-goals:** what this deliberately does not do.
 
-## 3. Goals and non-goals [Lite]
+## 3. User-facing behaviour [Lite]
 
-**Goals:** outcomes that will be true when this is done.
+Written for users and product docs, in OLake-UI terms (Lite, Medium, Full, Run).
 
-**Non-goals:** things a reasonable reader might expect this change to do, which it deliberately
-does not. Say why.
+- **What users see or do:** one short paragraph per scenario, before and after.
+- **Settings:**
 
-## 4. User stories and acceptance scenarios
+| Setting (UI name) | Property / config key | Default | Allowed values | Effect |
+| --- | --- | --- | --- | --- |
 
-| ID | Priority | As a ... I want ... so that ... |
+- **Limits and caveats users must know:**
+- **Errors and messages users can see:** message, cause, what the user should do.
+- **How users learn it worked or failed:** the screen and field for each outcome, and how soon.
+- **Docs and UI changes needed:** olake-docs pages, release notes, UI copy, OLake-UI changes.
+
+## 4. Requirements [Lite]
+
+| ID | Requirement (Fusion MUST ...) | Acceptance (Given / When / Then) |
 | --- | --- | --- |
-| US1 | P1 | |
+| R1 | | |
 
-Acceptance scenarios for each story, in Given / When / Then form:
+## 5. Design
 
-- **US1-A1**: Given <state>, when <action>, then <observable outcome>.
+- **Components:** classes and modules changed, each with its row in `dev/sop/architecture.md`
+  section 4; server-side or optimizer-side.
+- **Flow:** trigger to result, as numbered steps.
+- **State and persistence:** states entered or left (with the way back to `IDLE` on failure),
+  Postgres changes (migration), Iceberg metadata written.
+- **Concurrency:** which threads and processes touch the new state, and how they stay consistent.
+- **Core changes:** each change to Fusion core logic (`dev/sop/architecture.md` section 6) with why
+  an extension point or a small hook cannot do it, and how today's behaviour stays unchanged.
+  Write "None" when the feature is built entirely beside the core.
+- **Alternatives rejected:** at least one real alternative (another design, reusing existing code, an
+  Iceberg API), and why the chosen one is better, one line each.
 
-P1 stories alone must deliver a usable change; P2 and P3 can follow later.
+## 6. Compatibility
 
-## 5. Requirements and success criteria [Lite]
-
-**Functional requirements:** each one testable, in MUST language.
-
-| ID | Requirement | Story |
+| Contract | Change (or "No change") | Backward compatible? |
 | --- | --- | --- |
-| R1 | Fusion MUST ... | US1 |
+| REST API / terminal API used by OLake-UI | | |
+| Table and catalog properties | | |
+| Server config keys, env vars | | |
+| Postgres schema | | |
+| Thrift / task properties (server - optimizer) | | |
+| OLake-UI / OLake-Helm changes needed | | |
 
-**Success criteria:** measurable, and observable without reading the code.
+- **Upgrade:** effect on existing deployments, tables and running processes.
+- **Rollback:** effect of redeploying the previous version after this one ran.
+- **Version skew:** server and optimizer image on different versions, both directions.
 
-| ID | Criterion | How it is measured |
+## 7. Edge cases [Lite]
+
+Every row needs the expected behaviour, or `N/A - <reason>`. Add feature-specific rows from E17.
+
+| ID | Case | Expected behaviour |
 | --- | --- | --- |
-| SC1 | | |
+| E1 | Empty table or table with no snapshot | |
+| E2 | Partitioned, unpartitioned, and partition spec evolved | |
+| E3 | Schema evolved since the files were written | |
+| E4 | Equality deletes and position deletes present | |
+| E5 | Very large table (many files or partitions) and very small table | |
+| E6 | OLake commits to the table while this runs (commit conflict) | |
+| E7 | Two crons fire together, or a run is still active when the next fires | |
+| E8 | Optimizer crashes, is evicted, or a task is retried or completes late | |
+| E9 | Server restarts at each state this feature uses | |
+| E10 | Postgres unavailable | |
+| E11 | Object store or catalog errors, throttling, missing files | |
+| E12 | Setting missing, empty, invalid, or changed during a run | |
+| E13 | Optimization disabled, cron set to Never, or table dropped during a run | |
+| E14 | Upgrade or rollback with runs in flight | |
+| E15 | Concurrent API calls from OLake-UI for the same table | |
+| E16 | Permissions or credentials missing or expired | |
 
-## 6. Proposed design
+## 8. Non-functional
 
-Start with an overview a reviewer can hold in their head, then the details.
+- **Security:** credentials, auth on endpoints, input validation, what is logged.
+- **Performance:** cost per table and per file (object-store calls, queries, memory); behaviour at
+  10x the expected size.
+- **Observability:** logs and metrics that show it works or fails.
+- **Operability:** how to turn it off; what an operator does when it misbehaves.
+- **Risks:** risk and mitigation, one line each.
 
-- **Components.** Modules, classes and methods to change or add, and why there. Mark what runs in
-  the **server** (`amoro-ams`; planners and evaluators in `amoro-format-iceberg`) and what runs in
-  the **optimizer** (rewrite executors; `amoro-optimizer-*`).
-- **Flow.** The sequence from trigger to result (cron fires, then evaluate, plan, execute, commit,
-  and so on). A list or a diagram.
-- **State.** Table runtime and optimizing process states that are added, entered or left, and the
-  path back to `IDLE` on every failure.
-- **Data and persistence.** Postgres tables or columns (as a `V<n>__*.sql` migration), Iceberg
-  metadata written, task properties.
-- **Interfaces.** New or changed REST endpoints (with request and response examples), properties,
-  config keys, thrift fields.
-- **Concurrency.** Which threads and processes touch the new state (schedulers, commit executor,
-  REST handlers, optimizer threads, OLake writing the same table, a second AMS replica) and how they
-  stay consistent.
+## 9. Testing and rollout [Lite]
 
-## 7. Alternatives considered and drawbacks
+- **Tests:** which levels prove which R and E rows (unit, AMS service, integration); what is only
+  tested manually.
+- **Demo:** the manual scenario recorded for the PR.
+- **Rollout and rollback:** default on or off, deploy order (server, optimizer image, OLake-UI), how
+  to disable without data loss.
 
-| Option | Pros | Cons | Why not chosen |
-| --- | --- | --- | --- |
-| Do nothing | | | |
-| <alternative> | | | |
+## 10. Open questions [Lite]
 
-**Drawbacks of the chosen design:** why we might not want to do this.
-
-## 8. Contracts and compatibility
-
-Write `No change` in a row where nothing changes.
-
-| Contract | Change | Who is affected | Backward compatible? |
-| --- | --- | --- | --- |
-| REST API (`/api/ams/v1/...`) used by OLake-UI | | | |
-| Terminal API (table settings from OLake-UI) | | | |
-| Table properties (`self-optimizing.*`, ...) | | | |
-| Catalog properties | | | |
-| Server config keys (`config.yaml`) / env vars | | | |
-| Postgres schema | | | |
-| Thrift API between server and optimizer | | | |
-| Iceberg metadata written to tables | | | |
-| Metrics and log lines others depend on | | | |
-| Required OLake-UI / OLake-Helm changes | | | |
-
-**Upgrade:** what happens to an existing deployment, its database, existing tables and in-flight
-optimizing processes when this version rolls out. What an operator must change, if anything.
-
-**Downgrade / rollback:** what happens if the previous version is redeployed after this one ran
-(new columns, new properties, new task fields it does not understand).
-
-**Version skew:** behaviour while the server and the Spark optimizer image run different versions,
-in both directions, and while OLake-UI is older or newer than Fusion.
-
-## 9. Edge cases and failure modes [Lite]
-
-| ID | Scenario | Expected behaviour |
-| --- | --- | --- |
-| E1 | | |
-
-Consider at least the following and list each that applies:
-
-- **Table shape:** empty table, no snapshot, unpartitioned, partition evolution, schema evolution,
-  very wide or very large table, many small files, equality deletes, position deletes.
-- **Concurrency:** OLake commits while the run is in progress (commit conflict); two crons fire
-  together; a run is still active when its next cron fires.
-- **Failure:** optimizer crash or pod eviction mid-task, task retried or completed late, server
-  restart in each state, Postgres unavailable, object store or catalog errors and throttling.
-- **Configuration:** property missing, empty, invalid or changed mid-run; cron "Never"; optimization
-  disabled or table dropped while running.
-
-## 10. Cross-cutting concerns
-
-- **Security:** credentials, auth on new endpoints, input validation, what is logged.
-- **Performance and scale:** cost in object-store calls, Postgres queries, memory, per table and
-  per file; expected numbers (tables, files, partitions) and how the design behaves at 10x.
-- **Observability:** logs (with table identifier), metrics, API fields that show it works or fails.
-- **Operability:** how to enable and disable it, defaults, how an operator troubleshoots it, and what
-  happens when a dependency (Postgres, object store, catalog, Kubernetes) is down.
-
-## 11. Risks and mitigations
-
-| ID | Risk | Likelihood / impact | Mitigation |
-| --- | --- | --- | --- |
-| K1 | | | |
-
-## 12. Test strategy [Lite]
-
-Which levels prove which requirements: unit, AMS service tests, the integration suite
-(`integration-tests/`), and the manual test recorded for the PR demo. Name what cannot be tested
-automatically and how it will be checked instead. Details go in `test-plan.md` (stage 2).
-
-## 13. Rollout and rollback [Lite]
-
-Default on or off, any flag, the order to deploy (server, optimizer image, OLake-UI), how to tell it
-works in production, and how to turn it off without data loss.
-
-## 14. Assumptions and open questions [Lite]
-
-**Assumptions:** defaults chosen where the requirement was silent.
-
-**Open questions:** every `[NEEDS CLARIFICATION]` in the doc, with an owner. Approval needs this list
-empty or every item marked non-blocking.
-
-## 15. Prior art and references
-
-How upstream Amoro, Iceberg (for example its `RewriteDataFiles` and `RewritePositionDeleteFiles`
-actions) or similar systems solve this, and links to issues, PRs and earlier design docs.
-
-## 16. Changelog
-
-| Date | Change | By |
-| --- | --- | --- |
-| | Initial draft | |
+Every `[NEEDS CLARIFICATION]` with an owner. Must be empty to approve.

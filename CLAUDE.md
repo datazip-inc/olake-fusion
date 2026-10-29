@@ -187,9 +187,13 @@ Exception: work that follows the feature SOP (`dev/sop/README.md`) counts as ask
 
 Features, improvements and non-trivial bug fixes follow `dev/sop/README.md`: developer design doc
 (`/fusion-design-check`), then `/fusion-write-tests`, `/fusion-implement`, `/fusion-verify`,
-developer review, PR, `/fusion-pr-review` and `/fusion-address-review`. Each feature's files live in
-`dev/design-docs/<issue>-<slug>/`. Every change is checked against `dev/sop/fusion-invariants.md`
-and `dev/sop/review-guide.md`; `dev/sop/check-sop.sh <folder>` checks the SOP gates.
+`/fusion-raise-pr` (Fusion and companion PRs from the developer's account, as drafts),
+`/fusion-pr-review` (the only AI review, on the PRs), developer review, a human second review
+(the author handles comments with `/fusion-address-review`), merge. `/fusion-user-check`
+checks the feature from the user's side (failure visibility, UX, docs) at stages 1 and 7. Design docs live on
+Confluence and are never committed; the skills work on local, git-ignored copies in
+`dev/design-docs/<issue>-<slug>/`. New code follows `dev/sop/architecture.md`; every change is
+checked against `dev/sop/fusion-invariants.md` and `dev/sop/review-guide.md`; `dev/sop/check-sop.sh <folder>` checks the SOP gates.
 
 ### Pick the optimal check that proves the change
 

@@ -1,169 +1,105 @@
 # Feature Development SOP
 
-Every feature, improvement and non-trivial bug fix in OLake-Fusion follows this procedure. The
-developer owns the intent and the final sign-off; the AI drafts tests and code and gives the first
-review. Each AI step is a Claude Code skill in `.claude/skills/`, so everyone runs it the same way,
-and `check-sop.sh` checks the mechanical gates so nobody has to by hand.
+For every feature, improvement and non-trivial bug fix. Trivial changes (typos, comments, version
+bumps) skip stages 1 to 4.
 
-## Overview
+## Flow
 
-| # | Stage | Owner | How | Output | Gate |
-| --- | --- | --- | --- | --- | --- |
-| 1 | Design doc | Developer | [Template](design-doc-template.md); `/fusion-design-check [interview]` | `design.md` | Check verdict READY; developer approves |
-| 2 | Test cases | AI | `/fusion-write-tests` | `test-plan.md`, tests | Developer approves the plan; every test red for the right reason |
-| 3 | Implementation | AI | `/fusion-implement` | `plan.md`, code | All tests green; full module suites pass |
-| 4 | Test and first review | AI | `/fusion-verify` | `ai-review.md` | `Open P0/P1: 0`; `check-sop.sh --base` passes |
-| 5 | Line-by-line review and manual test | Developer | [Checklist](#stage-5-developer-review-and-manual-test) | Demo video | Developer can explain every line |
-| 6 | Pull request | Developer | PR template | PR to `staging` | CI green |
-| 7 | Second review | Reviewer | `/fusion-pr-review`; author uses `/fusion-address-review` | Approval | All P0/P1 resolved |
-| 8 | Merge | Maintainer | GitHub | - | - |
+| # | Stage | Who | How | Done when |
+| --- | --- | --- | --- | --- |
+| 1 | Design doc | Developer | Confluence page from [the template](design-doc-template.md); `/fusion-design-check`; `/fusion-user-check` | Verdict READY; `User blocking: 0`; approved by a second developer (Full docs) |
+| 2 | Tests | AI | `/fusion-write-tests` | Developer approved the test plan; every test fails for the right reason |
+| 3 | Code | AI | `/fusion-implement` | All tests pass; full module suites pass |
+| 4 | Verify | AI | `/fusion-verify` | `verify.md`: all checks pass, runtime proof done |
+| 5 | Raise PRs | AI, developer's GitHub account | `/fusion-raise-pr` | Draft PRs open: Fusion to `staging`, plus companion PRs (OLake-UI, Helm, docs, ...) with code |
+| 6 | AI review | AI | `/fusion-pr-review` (the only AI review) | `ai-review.md` says `Open P0/P1: 0`; summary comment on the PR |
+| 7 | Developer review | Developer | [Checklist](#stage-7-developer-review) | Every line understood; manual test and demo video; PRs marked ready |
+| 8 | Human review | Second developer | [Checklist](#stage-8-human-review); author answers with `/fusion-address-review` | Approved; all P0/P1 resolved |
+| 9 | Merge | Maintainer | GitHub, in the order the PRs state | Merged; design doc status Done |
 
-A stage that fails its gate goes back, not forward. A design gap found in any later stage goes back
-to stage 1: update `design.md`, then rerun the affected stages. Each stage ticks the "SOP progress"
-list at the top of `design.md`, so anyone can see where a feature is.
+A failed gate goes back, not forward. A design gap found later goes back to stage 1: fix the
+Confluence page, then rerun the affected stages. Pushes and PRs from AI go out under the
+developer's account only after the developer confirms the plan; all PRs start as drafts.
 
-**When to use what:**
+## Design doc input
 
-- **Full design doc:** new behaviour, or any change to a contract (REST, properties, config, schema,
-  thrift, Iceberg metadata written).
-- **Lite design doc** (sections marked [Lite]): unambiguous change in one area with no contract
-  change.
-- **No design doc:** trivial changes (typos, comments, version bumps, one-line config fixes). Skip
-  stages 1 to 4; stages 5 to 8 still apply.
+The design doc lives on Confluence and is never committed. Give any skill one of:
 
-## Feature folder
+- a **Confluence URL**: read through an Atlassian / Confluence MCP tool if one is connected;
+  otherwise the skill asks for Markdown;
+- a **path to a Markdown file** (an export of the page);
+- **Markdown pasted** into the chat.
 
-```
-dev/design-docs/<issue-number>-<short-slug>/
-  design.md       stage 1   developer
-  test-plan.md    stage 2   /fusion-write-tests, approved by the developer
-  plan.md         stage 3   /fusion-implement (resumable task list)
-  ai-review.md    stage 4   /fusion-verify (evidence, manual test script, draft PR text)
-```
+The skill saves it as `dev/design-docs/<issue>-<slug>/design.md` with the first line
+`<!-- source: <URL or file> | version or date: <...> -->`, and works there. That folder is
+git-ignored; it also holds `user-check.md`, `test-plan.md`, `plan.md`, `verify.md` and
+`ai-review.md`. Before each stage the skill
+asks whether the page changed (or compares the version through MCP) and refreshes the snapshot.
+Skills never edit Confluence.
 
-Committed with the change. The design doc is the source of truth: when code, tests and doc
-disagree, the doc wins or is changed on purpose.
+## Gates and severity
 
-## Shared references
+- `dev/sop/check-sop.sh <folder> [--base origin/staging]` checks the mechanical gates: sections,
+  placeholders, open questions, all 16 edge cases answered, every requirement and edge case traced
+  to a test, tests exist, user check and AI review closed, no stubs, no design docs in the diff,
+  Datazip headers.
+- **P0:** data loss or corruption, wrong commit, secret leak, stuck or crashed server or optimizer,
+  broken contract. **P1:** wrong behaviour on a realistic path, missing failure path, serious
+  regression, requirement without a meaningful test, a code smell from `architecture.md` section 7,
+  or a better implementation that already exists. Both block the merge.
 
-| File | Used for |
+## References
+
+| File | Use |
 | --- | --- |
-| [design-doc-template.md](design-doc-template.md) | Stage 1 |
-| [test-plan-template.md](test-plan-template.md) | Stage 2 |
-| [fusion-invariants.md](fusion-invariants.md) | What every change must keep true; read in stages 1 to 7 |
-| [review-guide.md](review-guide.md) | Severity, independent reviewers, lenses, confidence filter, finding format |
-| [check-sop.sh](check-sop.sh) | Deterministic gates: sections, placeholders, open questions, traceability, tests exist, review closed, no stubs, modification headers |
+| [design-doc-template.md](design-doc-template.md) | Design doc (copy to Confluence) |
+| [test-plan-template.md](test-plan-template.md) | Test plan (stage 2) |
+| [architecture.md](architecture.md) | How Fusion is built; where each change goes; touch the core as little as possible |
+| [fusion-invariants.md](fusion-invariants.md) | What every change must keep true |
+| [review-guide.md](review-guide.md) | Review lenses, confidence filter, finding format |
 
-## Commands used by the stages
-
-Maven runs offline on JDK 17 (`JAVA_HOME` from `/usr/libexec/java_home -v 17` on macOS). These
-flags skip the web UI build, the license audit and the format check, which these runs do not
-verify:
+## Commands
 
 ```shell
-FLAGS="-o -Pskip-dashboard-build -Drat.skip=true -Dspotless.check.skip=true"
-
-./mvnw $FLAGS -q test-compile -pl <module> -am                  # compile, with tests
-./mvnw $FLAGS test -pl <module> -am -Dtest=<Class>[#method] \
-  -Dsurefire.failIfNoSpecifiedTests=false                       # run selected tests
-./mvnw $FLAGS test -pl <module>                                 # all tests of one module
-./mvnw -o -q spotless:apply -pl <module>                        # format before handing over
-./mvnw -o -q test-compile -f integration-tests/pom.xml          # compile the integration suite
-make integration-test TEST_ONLY=<Class#method>                  # run integration tests (Docker, slow)
-dev/sop/check-sop.sh dev/design-docs/<folder> [--base origin/staging]   # SOP gates
+FLAGS="-o -Pskip-dashboard-build -Drat.skip=true -Dspotless.check.skip=true"   # JDK 17
+./mvnw $FLAGS -q test-compile -pl <module> -am
+./mvnw $FLAGS test -pl <module> -am -Dtest=<Class>[#method] -Dsurefire.failIfNoSpecifiedTests=false
+./mvnw $FLAGS test -pl <module>
+./mvnw -o -q spotless:apply -pl <module>
+make integration-test TEST_ONLY=<Class#method>        # Docker, slow
+dev/sop/check-sop.sh dev/design-docs/<folder> --base origin/staging
 ```
 
-Running the server and a local optimizer from source is described in `CLAUDE.md` section 5.
+Server and local optimizer from source: `CLAUDE.md` section 5.
 
-## Severity
+## Stage 7: Developer review
 
-Defined in [review-guide.md](review-guide.md). In short: **P0** is data loss or corruption, a wrong
-commit, a secret leak, a stuck or crashed server or optimizer, or a broken contract. **P1** is wrong
-behaviour on a realistic path, a missing failure path, a serious performance regression, or a
-requirement with no meaningful test. Both block the merge. The AI stages report nothing below P1.
+On the draft PRs, after the AI review:
 
-## Stage 1: Design doc
+- [ ] Read every line of the Fusion PR and the companion PRs; remove anything you cannot explain.
+- [ ] Every requirement and edge case maps to code and a test (`verify.md` coverage table).
+- [ ] Each residual risk in `verify.md` and `ai-review.md` is acceptable or covered by your manual
+      test.
+- [ ] No debug code, stubs, temporary tests or unrelated changes.
+- [ ] You can say why each task's approach beats its alternative (`plan.md`), and the code has
+      none of the smells in [architecture.md](architecture.md) section 7.
+- [ ] Ran the manual test script from `verify.md` on your build; demo video added to the PR.
+- [ ] `/fusion-user-check <folder> build`: `User blocking: 0`; every docs and UI change it lists is
+      in a companion PR or a linked issue.
+- [ ] PR description in your words; then mark the PRs ready for review.
 
-Copy the template to `dev/design-docs/<folder>/design.md` and fill it in, or run
-`/fusion-design-check <folder> interview` to be asked one question at a time while you write. Then
-run `/fusion-design-check <folder>`: it reads the code the doc touches and reports blocking gaps.
-You stay the author; the skill never decides expected behaviour for you. Get the doc reviewed by a
-second developer for Full docs before stage 2.
+## Stage 8: Human review
 
-## Stage 2: Test cases (AI)
+- [ ] Reviewer is a senior developer when the author is new to Fusion.
+- [ ] Read the design doc first: is this the right design, and is there a better one?
+- [ ] Gates: `check-sop.sh --base`, title, demo video shows the behaviour, docs section, companion
+      PRs and merge order.
+- [ ] Code against [architecture.md](architecture.md), [fusion-invariants.md](fusion-invariants.md)
+      and the lenses in [review-guide.md](review-guide.md), including code quality (lens 11);
+      report P0/P1 in its format.
+- [ ] Spot-check the AI review comment; it is the author's claim.
 
-`/fusion-write-tests <folder>` writes `test-plan.md` with every requirement, edge case and
-acceptance scenario traced to a test, and **stops for your approval**. Fix missing or wrong cases
-there, before test code exists. It then writes the tests and compile-only stubs and shows each test
-failing for the right reason. These tests stay in the change.
+## Improving the SOP
 
-## Stage 3: Implementation (AI)
-
-`/fusion-implement <folder>` writes `plan.md` (small tasks, each with the tests it makes green), then
-implements task by task in the existing architecture, checking `fusion-invariants.md`. It never
-weakens an approved test; if it thinks one is wrong, it stops and you decide. A new session can
-resume from `plan.md`.
-
-## Stage 4: Test and first review (AI)
-
-`/fusion-verify <folder>` runs the full module suites, red-green proofs for fixes, and the server or
-optimizer from source when the behaviour needs it. Fresh reviewer subagents, which see only the
-design doc, invariants and diff, review it for P0/P1; confirmed findings are fixed with a test and
-the loop repeats until none are left. It writes `ai-review.md`: checks run, coverage, findings,
-residual risks, a **manual test script for stage 5**, and a draft PR description.
-
-## Stage 5: Developer review and manual test
-
-The AI has reviewed its own work; you now own it.
-
-- [ ] Read every line of `git diff origin/staging...HEAD`. Anything you cannot explain is removed
-      or rewritten.
-- [ ] Every requirement and edge case in `design.md` maps to code and a test (`ai-review.md`
-      coverage table); spot-check that the key tests really assert the behaviour.
-- [ ] Each fix in `ai-review.md` is really fixed; each residual risk is acceptable or covered by
-      your manual test.
-- [ ] No leftover debug code, stubs, temporary tests or unrelated changes.
-- [ ] Contract changes were checked in OLake-UI and OLake-Helm and are in the PR description.
-- [ ] Run the manual test script from `ai-review.md` on your own build (`make setup-debug-mode`, or
-      `make start-fusion-docker` for the full stack) and record the demo video while doing it.
-- [ ] `dev/sop/check-sop.sh <folder> --base origin/staging` passes.
-
-## Stage 6: Pull request
-
-Target `staging`, Conventional Commits title (for example `feat(ams): add cron jitter`). Start from
-the draft in `ai-review.md`, rewrite it in your own words, fill in the template including the demo
-video and documentation section, and link the issue and `design.md`.
-
-## Stage 7: Second review
-
-The reviewer reads `design.md` first, then runs `/fusion-pr-review <PR>` for an independent P0/P1
-review and the SOP gates. It is a second opinion, not a repeat: it does not trust `ai-review.md`. The
-reviewer posts the findings they agree with and judges what the AI cannot: whether this is the right
-design, and whether the demo video shows the behaviour.
-
-The author handles comments with `/fusion-address-review <PR>`: each comment is checked against the
-code and design before acting; valid ones are fixed with a test, wrong ones get an evidence-based
-reply, and behaviour changes go back through the design doc.
-
-## Stage 8: Merge
-
-Merge when CI is green, all P0/P1 are resolved and the reviewer approves. Tick the last box in
-`design.md`. The feature folder stays as the record of the decision.
-
-## Improving this SOP
-
-When a bug escapes to review or production, ask which stage should have caught it and fix that
-stage: add the invariant to `fusion-invariants.md`, the scenario to the template's edge-case
-prompts, or the check to `check-sop.sh` or a skill, in the same PR as the fix.
-
-## What this is based on
-
-| Practice | Source | Where it is used |
-| --- | --- | --- |
-| Context, goals and non-goals, alternatives, cross-cutting concerns; mini doc for small changes | [Design docs at Google](https://www.industrialempathy.com/posts/design-docs-at-google/) | Template sections 2, 3, 7, 10; Lite doc |
-| Risks and mitigations, test plan by level, upgrade/downgrade, version skew, production readiness | [Kubernetes KEP template](https://github.com/kubernetes/enhancements/tree/master/keps/NNNN-kep-template) | Template sections 8, 10, 11, 13 |
-| Summary, drawbacks, prior art, unresolved questions | [Rust RFC template](https://github.com/rust-lang/rfcs/blob/master/0000-template.md) | Template sections 1, 7, 14, 15 |
-| Prioritised user stories, Given/When/Then, FR and SC IDs, `[NEEDS CLARIFICATION]` | [GitHub spec-kit](https://github.com/github/spec-kit) | Template sections 4, 5, 14; `check-sop.sh` |
-| Scope, approach, environment, entry and exit criteria | IEEE 829 / ISO/IEC/IEEE 29119-3 test documentation | `test-plan-template.md` |
-| Failing test first, red flags, verification before claims, written plans, review with crafted context, receiving review | [obra/superpowers](https://github.com/obra/superpowers) | All skills |
-| Concise skills, third-person descriptions, one-level references, checklists, feedback loops, scripts for deterministic checks | [Anthropic skill authoring best practices](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices) | Skill structure; `check-sop.sh` |
+When a bug escapes, add what would have caught it, in the same PR as the fix: an edge case row in
+the template, an invariant, an architecture rule, or a `check-sop.sh` check.

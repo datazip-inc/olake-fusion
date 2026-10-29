@@ -4,13 +4,14 @@ description: Works through review comments on a Fusion pull request - verifies e
 argument-hint: <PR number>
 ---
 
-# Fusion address review (SOP stage 7, author side)
+# Fusion address review (SOP stage 8, author side)
 
 **Iron law: verify before implementing.** A review comment is a claim to check, not an order. Fix
 what is right, push back on what is wrong, ask about what is unclear, and never change behaviour the
 design doc defines without updating the doc first.
 
-Read first: the feature's `design.md` and `test-plan.md`, `dev/sop/review-guide.md`,
+Read first: the feature's design doc (local `design.md` snapshot, fetched and kept fresh as
+`dev/sop/README.md` "Design doc input" says) and `test-plan.md`, `dev/sop/review-guide.md`,
 `dev/sop/fusion-invariants.md`.
 
 ## Input
@@ -26,7 +27,7 @@ and the invariants. Classify it:
 | Class | Meaning | Action |
 | --- | --- | --- |
 | Valid | Real defect or gap in this change | Fix (step 2) |
-| Design | Asks for behaviour different from `design.md` | Developer decides; update the doc, then rerun the affected stages |
+| Design | Asks for behaviour different from the design doc | Developer decides and updates Confluence; refresh the snapshot, rerun the affected stages |
 | Wrong | Contradicted by code, tests or the design | Push back with evidence |
 | Unclear | Cannot tell what is asked | Ask one specific question |
 | Out of scope | Valid, but not this change | Propose a follow-up issue |
@@ -39,7 +40,9 @@ implement nothing that depends on it until it is answered.
 For each: write or extend a test that fails without the fix, make the smallest fix, run the test and
 the module's tests, and record the red-green proof. After all fixes, run
 `dev/sop/check-sop.sh <folder> --base origin/staging` and the full suites of the touched modules. If
-the fixes are more than trivial, rerun `/fusion-verify` so `ai-review.md` stays true.
+the fixes are more than trivial, rerun `/fusion-verify` and `/fusion-pr-review` so `verify.md` and
+`ai-review.md` stay true. Fixes go on the PR's branch (or the companion PR's branch in its repo):
+show the developer the commits, push after their go-ahead, never force-push.
 
 ## 3. Draft replies
 

@@ -5,7 +5,7 @@
 #   dev/sop/check-sop.sh <feature folder> [--base <git ref>]
 #
 # Prints PASS / FAIL / SKIP per check and exits 1 if any check fails. Checks whose input does not
-# exist yet (for example ai-review.md before stage 4) are skipped, so the script can run at any
+# exist yet (for example ai-review.md before stage 6) are skipped, so the script can run at any
 # stage. With --base, it also checks the diff against that ref (stubs, modification headers).
 # It only reads; it never changes files or git state.
 
@@ -44,10 +44,11 @@ fail() { printf 'FAIL  %s\n' "$1"; failures=$((failures + 1)); }
 skip() { printf 'SKIP  %s\n' "$1"; }
 detail() { printf '        %s\n' "$@"; }
 
-# Design doc IDs: R1, E1, SC1, K1 and acceptance scenarios US1-A1. Strikethrough (~~R3~~) marks
-# removed items, which need no test.
+# Design doc IDs that need a test: requirement rows (| R1 |) and edge case rows (| E1 |). Rows struck
+# through (~~R3~~) were removed; edge cases answered "N/A - <reason>" do not apply.
 design_ids() {
-  grep -v '~~' "$doc" | grep -oE '\b(R|E|SC|K)[0-9]+\b|\bUS[0-9]+-A[0-9]+\b' | sort -u
+  grep -E '^\| *(R|E)[0-9]+ *\|' "$doc" | grep -v '~~' | grep -vE '\| *N/A[^|]*\| *$' |
+    sed -E 's/^\| *((R|E)[0-9]+).*/\1/' | sort -u
 }
 
 # 1. Design doc present and complete.
@@ -57,15 +58,14 @@ else
   pass "design.md exists"
 
   lite=0
-  grep -qiE '^\| *Doc type *\| *Lite *\|' "$doc" && lite=1
+  # Doc type is the fourth cell of the header row.
+  grep -qE '^\|[^|]*\|[^|]*\|[^|]*\| *Lite *\|' "$doc" && lite=1
   if [[ $lite -eq 1 ]]; then
-    required=("Summary" "Context and problem" "Goals and non-goals" "Requirements and success criteria"
-      "Edge cases and failure modes" "Test strategy" "Rollout and rollback" "Assumptions and open questions")
+    required=("Summary" "Problem and goals" "User-facing behaviour" "Requirements" "Edge cases"
+      "Testing and rollout" "Open questions")
   else
-    required=("Summary" "Context and problem" "Goals and non-goals" "User stories and acceptance scenarios"
-      "Requirements and success criteria" "Proposed design" "Alternatives considered and drawbacks"
-      "Contracts and compatibility" "Edge cases and failure modes" "Cross-cutting concerns"
-      "Risks and mitigations" "Test strategy" "Rollout and rollback" "Assumptions and open questions")
+    required=("Summary" "Problem and goals" "User-facing behaviour" "Requirements" "Design"
+      "Compatibility" "Edge cases" "Non-functional" "Testing and rollout" "Open questions")
   fi
   missing=()
   for section in "${required[@]}"; do
@@ -79,7 +79,7 @@ else
   fi
 
   # Template placeholders left in the doc.
-  placeholders="$(grep -nE '<(Feature title|number|developer|names|YYYY-MM-DD)>|^\| (R|E|K|US|SC)1 \|( *\|)+ *$' "$doc")"
+  placeholders="$(grep -nE '<(Feature title|number|developer|names|YYYY-MM-DD)>|\| *Full / Lite *\||^\| *R1 *\|( *\|)+ *$' "$doc")"
   if [[ -z "$placeholders" ]]; then
     pass "design.md has no template placeholders"
   else
@@ -93,6 +93,25 @@ else
   else
     fail "design.md has no open [NEEDS CLARIFICATION]"
     detail "$(echo "$clarifications" | head -5)"
+  fi
+
+  # Edge cases: the 16 standard rows must all be there, and no row may be left unanswered.
+  missing_edges=()
+  for i in $(seq 1 16); do
+    grep -qE "^\| *(~~)?E${i}(~~)? *\|" "$doc" || missing_edges+=("E$i")
+  done
+  if [[ ${#missing_edges[@]} -eq 0 ]]; then
+    pass "design.md keeps the 16 standard edge cases"
+  else
+    fail "design.md keeps the 16 standard edge cases"
+    detail "missing: ${missing_edges[*]}"
+  fi
+  unanswered="$(grep -nE '^\| *E[0-9]+ *\|[^|]*\| *\| *$' "$doc")"
+  if [[ -z "$unanswered" ]]; then
+    pass "every edge case has an expected behaviour or N/A"
+  else
+    fail "every edge case has an expected behaviour or N/A"
+    detail "$(echo "$unanswered" | head -8)"
   fi
 
   if [[ -n "$(design_ids | grep -E '^R[0-9]+$')" ]]; then
@@ -110,13 +129,13 @@ elif [[ ! -f "$design" ]]; then
 else
   untraced=()
   while read -r id; do
-    [[ -z "$id" || "$id" =~ ^SC|^K ]] && continue  # success criteria and risks may be covered manually
+    [[ -z "$id" ]] && continue
     grep -qE "\b${id}\b" "$plan" || untraced+=("$id")
   done < <(design_ids)
   if [[ ${#untraced[@]} -eq 0 ]]; then
-    pass "test-plan.md traces every R, E and acceptance scenario"
+    pass "test-plan.md traces every requirement and applicable edge case"
   else
-    fail "test-plan.md traces every R, E and acceptance scenario"
+    fail "test-plan.md traces every requirement and applicable edge case"
     detail "not in test-plan.md: ${untraced[*]}"
   fi
 
@@ -139,9 +158,20 @@ else
   fi
 fi
 
+# User check closed.
+user_check="$folder/user-check.md"
+if [[ ! -f "$user_check" ]]; then
+  skip "user-check.md (run /fusion-user-check)"
+elif grep -qE '^User blocking: *0 *$' "$user_check"; then
+  pass "user-check.md reports User blocking: 0"
+else
+  fail "user-check.md reports User blocking: 0"
+  detail "$(grep -E '^User blocking' "$user_check" || echo 'no "User blocking:" line')"
+fi
+
 # 3. AI review closed.
 if [[ ! -f "$review" ]]; then
-  skip "ai-review.md (stage 4 not done)"
+  skip "ai-review.md (stage 6 not done)"
 elif grep -qE '^Open P0/P1: *0 *$' "$review"; then
   pass "ai-review.md reports Open P0/P1: 0"
 else
@@ -170,6 +200,15 @@ else
     else
       fail "no stage 2 stubs left in the diff"
       detail "$(echo "$stubs" | head -5)"
+    fi
+
+    # Design docs and AI working files are internal (Confluence) and never committed.
+    committed="$(git diff --name-only "$merge_base" -- dev/design-docs | grep -v '^dev/design-docs/README.md$')"
+    if [[ -z "$committed" ]]; then
+      pass "no design-doc working files in the diff"
+    else
+      fail "no design-doc working files in the diff (they belong on Confluence / stay local)"
+      detail $committed
     fi
 
     unmarked=()
