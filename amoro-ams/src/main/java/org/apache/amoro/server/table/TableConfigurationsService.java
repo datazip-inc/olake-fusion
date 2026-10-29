@@ -21,7 +21,10 @@
 package org.apache.amoro.server.table;
 
 import org.apache.amoro.AmoroTable;
+import org.apache.amoro.NoSuchDatabaseException;
+import org.apache.amoro.NoSuchTableException;
 import org.apache.amoro.ServerTableIdentifier;
+import org.apache.amoro.TableFormat;
 import org.apache.amoro.exception.ObjectNotExistsException;
 import org.apache.amoro.properties.CatalogMetaProperties;
 import org.apache.amoro.server.catalog.CatalogManager;
@@ -34,6 +37,7 @@ import org.apache.amoro.shade.guava32.com.google.common.collect.Maps;
 import org.apache.amoro.table.TableProperties;
 import org.apache.amoro.utils.PropertyUtil;
 import org.apache.iceberg.HasTableOperations;
+import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -193,21 +197,35 @@ public class TableConfigurationsService extends PersistentBase {
   // 3. Works for catalog already existing during Fusion restart
   // 4. Runs at startup only. Will not work for tables with configurations in its metadata.json
   // introduced after startup.
-  // 5. A table that failed to load keeps no entry, and is tried again on the next startup
+  // 5. A table that cannot be read stops the startup.
+  // 6. Skipped, as there is nothing to copy.
   public void adoptExistingTables(CatalogManager catalogManager) {
     for (ServerTableIdentifier identifier :
         getAs(TableMetaMapper.class, TableMetaMapper::selectAllTableIdentifiers)) {
 
-      // continue if the iceberg table is already present in the database
-      if (select(identifier) != null) {
+      // only iceberg tables, and only the ones not present in the database yet
+      if (!TableFormat.ICEBERG.equals(identifier.getFormat()) || select(identifier) != null) {
         continue;
       }
+      AmoroTable<?> table;
       try {
-        adoptTableProperties(identifier, catalogManager.loadTable(identifier.getIdentifier()));
-      } catch (Exception e) {
-        // must not stop for the others
-        LOG.warn("Failed to adopt optimizing properties of table {}", identifier, e);
+        table = catalogManager.loadTable(identifier.getIdentifier());
+      } catch (NoSuchTableException
+          | org.apache.iceberg.exceptions.NoSuchTableException
+          | NoSuchDatabaseException
+          | NoSuchNamespaceException
+          | ObjectNotExistsException e) {
+        LOG.warn(
+            "Skip adopting optimizing properties of table {}, it no longer exists", identifier);
+        continue;
+      } catch (RuntimeException e) {
+        throw new IllegalStateException(
+            "Cannot read table "
+                + identifier
+                + " to copy its optimizing properties into the AMS database.",
+            e);
       }
+      adoptTableProperties(identifier, table);
     }
     LOG.info("Adopted optimizing properties for iceberg tables");
   }
