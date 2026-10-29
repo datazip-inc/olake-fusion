@@ -37,7 +37,7 @@
     "sql-formatter": "^15.3.1",
     "typescript": "^5.4.5",
     "unplugin-vue-components": "^0.27.0",
-    "vite": "^6.4.3",
+    "vite": "^6.4.4",
     "vite-plugin-fake-server": "^2.1.1",
     "vite-plugin-svg-icons": "^2.0.1",
     "vite-plugin-vue-devtools": "^7.6.7",
@@ -49,6 +49,7 @@
   "pnpm": {
     "overrides": {
       "form-data": ">=4.0.4",
+      "dompurify": ">=3.4.17",
       "sha.js": ">=2.4.12",
       "lodash-es@<4.18.0": "^4.18.1",
       "tar-fs@2": "^2.1.5",
