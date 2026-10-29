@@ -37,6 +37,7 @@ import org.apache.amoro.process.ProcessFactory;
 import org.apache.amoro.process.ProcessStatus;
 import org.apache.amoro.process.TableProcessStore;
 import org.apache.amoro.server.AmoroServiceConstants;
+import org.apache.amoro.server.optimizing.LogWriter;
 import org.apache.amoro.server.optimizing.OptimizingProcess;
 import org.apache.amoro.server.optimizing.OptimizingStatus;
 import org.apache.amoro.server.optimizing.TaskRuntime;
@@ -52,7 +53,6 @@ import org.apache.amoro.server.table.cleanup.TableRuntimeCleanupState;
 import org.apache.amoro.server.utils.IcebergTableUtil;
 import org.apache.amoro.server.utils.SnowflakeIdGenerator;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Lists;
-import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.amoro.shade.zookeeper3.org.apache.curator.shaded.com.google.common.collect.Maps;
 import org.apache.amoro.table.BaseTable;
 import org.apache.amoro.table.ChangeTable;
@@ -65,15 +65,7 @@ import org.apache.iceberg.Snapshot;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
-import java.time.Instant;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -90,9 +82,6 @@ public class DefaultTableRuntime extends AbstractTableRuntime
   private static final Logger LOG = LoggerFactory.getLogger(DefaultTableRuntime.class);
 
   private static final SnowflakeIdGenerator ID_GENERATOR = new SnowflakeIdGenerator();
-
-  private static final DateTimeFormatter DRIVER_LOG_TIME_FORMATTER =
-      DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC);
 
   private static final StateKey<TableRuntimeOptimizingState> OPTIMIZING_STATE_KEY =
       StateKey.stateKey("optimizing_state")
@@ -419,7 +408,8 @@ public class DefaultTableRuntime extends AbstractTableRuntime
   }
 
   public void planFailed(String reason, Throwable throwable) {
-    finalizePlanningProcess(ProcessStatus.FAILED, reason, throwable);
+    long processId = getProcessId();
+    boolean failed = finalizePlanningProcess(ProcessStatus.FAILED, reason);
 
     store()
         .begin()
@@ -427,6 +417,10 @@ public class DefaultTableRuntime extends AbstractTableRuntime
         .updateState(PROCESS_ID_KEY, any -> 0L)
         .commit();
     this.pendingCronType = null;
+    // Written once the table is IDLE again, so a failed write throws without leaving it PLANNING.
+    if (failed) {
+      appendDriverLogEntry(processId, "ERROR", describeThrowable(throwable, reason), throwable);
+    }
   }
 
   public void beginProcess(OptimizingProcess optimizingProcess) {
@@ -531,7 +525,7 @@ public class DefaultTableRuntime extends AbstractTableRuntime
             "cron fired for %s but planner evaluated and found no data to process",
             triggeredTypeName(getProcessId()));
 
-    finalizePlanningProcess(ProcessStatus.SKIPPED, reason, null);
+    finalizePlanningProcess(ProcessStatus.SKIPPED, reason);
 
     store()
         .begin()
@@ -542,12 +536,12 @@ public class DefaultTableRuntime extends AbstractTableRuntime
     this.pendingCronType = null;
   }
 
-  // mark the process as failed in the database
-  private void finalizePlanningProcess(ProcessStatus status, String reason, Throwable throwable) {
+  // mark the planning process as failed or skipped in the database; false if none was planning
+  private boolean finalizePlanningProcess(ProcessStatus status, String reason) {
 
     long processId = getProcessId();
     if (getOptimizingStatus() != OptimizingStatus.PLANNING || processId == 0) {
-      return;
+      return false;
     }
 
     long now = System.currentTimeMillis();
@@ -579,36 +573,17 @@ public class DefaultTableRuntime extends AbstractTableRuntime
           processId,
           e);
     }
-
-    if (status == ProcessStatus.FAILED) {
-      appendDriverLogEntry(processId, "ERROR", describeThrowable(throwable, reason), throwable);
-    }
+    return true;
   }
 
   public void appendDriverLogEntry(
       long processId, String level, String message, Throwable throwable) {
-    String envLogDir = System.getenv("LOG_DIR");
-    String logBaseDir =
-        (envLogDir != null && !envLogDir.isEmpty()) ? envLogDir : "/mnt/amoro-logs/compaction";
-    Path driverLogPath = Paths.get(logBaseDir, String.valueOf(processId), "driver.log");
-    try {
-      Files.createDirectories(driverLogPath.getParent());
-      Map<String, String> logEntry = new LinkedHashMap<>();
-      logEntry.put("level", level);
-      logEntry.put("time", DRIVER_LOG_TIME_FORMATTER.format(Instant.now()));
-      logEntry.put("processId", String.valueOf(processId));
-      logEntry.put("taskId", "");
-      logEntry.put("logger", "");
-      logEntry.put("message", message);
-      logEntry.put(
-          "stackTrace",
-          throwable == null ? "" : ExceptionUtil.getErrorMessage(throwable, Integer.MAX_VALUE));
-      String logLine = new ObjectMapper().writeValueAsString(logEntry) + System.lineSeparator();
-      Files.writeString(
-          driverLogPath, logLine, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
-    } catch (Exception e) {
-      LOG.warn("Failed to append {} entry to driver log for process {}", level, processId, e);
-    }
+    LogWriter.get()
+        .appendDriverEntry(
+            processId,
+            level,
+            message,
+            throwable == null ? "" : ExceptionUtil.getErrorMessage(throwable, Integer.MAX_VALUE));
   }
 
   private static String describeThrowable(Throwable throwable, String fallback) {

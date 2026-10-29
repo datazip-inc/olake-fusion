@@ -363,8 +363,8 @@ public class OptimizingQueue extends PersistentBase {
         return null;
       }
     } catch (Throwable throwable) {
-      tableRuntime.planFailed(ExceptionUtil.getErrorMessage(throwable, 4000), throwable);
       LOG.error("Planning table {} failed", tableRuntime.getTableIdentifier(), throwable);
+      tableRuntime.planFailed(ExceptionUtil.getErrorMessage(throwable, 4000), throwable);
       throw throwable;
     }
   }
@@ -571,6 +571,7 @@ public class OptimizingQueue extends PersistentBase {
           this.endTime = System.currentTimeMillis();
           persistAndSetCompleted(false);
           trackCompleted();
+          appendFailureEntry();
         }
       } finally {
         lock.unlock();
@@ -667,6 +668,7 @@ public class OptimizingQueue extends PersistentBase {
               this.endTime = taskRuntime.getEndTime();
               persistAndSetCompleted(false);
               trackCompleted();
+              appendFailureEntry();
             }
           }
         }
@@ -772,10 +774,15 @@ public class OptimizingQueue extends PersistentBase {
       try {
         if (hasCommitted) {
           LOG.warn("{} has already committed, give up", tableRuntime.getTableIdentifier());
+          boolean completed = false;
           try {
             persistAndSetCompleted(status == ProcessStatus.SUCCESS);
             trackCompleted();
+            completed = true;
           } catch (Exception ignored) {
+          }
+          if (completed) {
+            appendFailureEntry();
           }
           throw new IllegalStateException("repeat commit, and last error " + failedReason);
         }
@@ -798,6 +805,7 @@ public class OptimizingQueue extends PersistentBase {
               "{} failed to persist process completed, will retry next commit",
               tableRuntime.getTableIdentifier(),
               e);
+          return;
         } catch (Throwable t) {
           LOG.error("{} Commit optimizing failed ", tableRuntime.getTableIdentifier(), t);
           status = ProcessStatus.FAILED;
@@ -806,6 +814,8 @@ public class OptimizingQueue extends PersistentBase {
           persistAndSetCompleted(false);
           trackCompleted();
         }
+        // Outside the try: a failed write must not be taken for a failed commit.
+        appendFailureEntry();
       } finally {
         lock.unlock();
       }
@@ -983,7 +993,12 @@ public class OptimizingQueue extends PersistentBase {
                           getSummary().summaryAsMap(false))),
           () -> tableRuntime.completeProcess(success),
           () -> clearProcess(this));
-      if (!success && failedReason != null) {
+    }
+
+    // Called once the process is persisted as completed. Throws if the entry cannot be written, so
+    // the failure is not lost silently; the process state is already final by then.
+    private void appendFailureEntry() {
+      if (status != ProcessStatus.SUCCESS && failedReason != null) {
         tableRuntime.appendDriverLogEntry(processId, "ERROR", failedReason, null);
       }
     }
