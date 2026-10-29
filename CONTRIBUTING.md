@@ -133,6 +133,11 @@ actively review and provide feedback on each other's PRs.
 
 ## Design document
 
+Features, improvements and non-trivial bug fixes follow the [feature development SOP](dev/sop/README.md):
+a design doc from [the template](dev/sop/design-doc-template.md), AI-assisted test writing,
+implementation and first review through the `/fusion-*` Claude Code skills, then developer review,
+the PR and a second review.
+
 Write down your implementation plan and discuss it with other developers in the community before you
 start coding officially. If it is just a small change, describe the implementation steps clearly in
 the Issue. If it is a relatively large work, it is recommended to write a design document for this
