@@ -83,7 +83,7 @@
                     <groupId>org.apache.logging.log4j</groupId>
                     <artifactId>log4j-slf4j2-impl</artifactId>
                 </exclusion>
-                <!-- flink-runtime brings at.yawk.lz4:lz4-java (same net.jpountz classes, CVE-2025-12183 fixed) -->
+                <!-- flink-runtime brings at.yawk.lz4:lz4-java (same net.jpountz classes; 1.11.4 fixes CVE-2025-12183 and CVE-2026-106449/106450/106451/106452) -->
                 <exclusion>
                     <groupId>org.lz4</groupId>
                     <artifactId>lz4-java</artifactId>
@@ -381,7 +381,7 @@
             <version>${paimon.version}</version>
             <scope>runtime</scope>
             <exclusions>
-                <!-- flink-runtime brings at.yawk.lz4:lz4-java (same net.jpountz classes, CVE-2025-12183 fixed) -->
+                <!-- flink-runtime brings at.yawk.lz4:lz4-java (same net.jpountz classes; 1.11.4 fixes CVE-2025-12183 and CVE-2026-106449/106450/106451/106452) -->
                 <exclusion>
                     <groupId>org.lz4</groupId>
                     <artifactId>lz4-java</artifactId>
