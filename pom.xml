@@ -28,12 +28,12 @@
         <version>23</version>
     </parent>
 
-    <groupId>org.apache.amoro</groupId>
-    <artifactId>amoro-parent</artifactId>
+    <groupId>io.olake.fusion</groupId>
+    <artifactId>fusion-parent</artifactId>
     <version>0.9-SNAPSHOT</version>
     <packaging>pom</packaging>
 
-    <name>Amoro Project Parent</name>
+    <name>Fusion Parent</name>
     <description>Amoro is a Lakehouse management system built on open data formats.</description>
     <url>https://amoro.apache.org</url>
     <inceptionYear>2024</inceptionYear>
@@ -47,15 +47,11 @@
     </licenses>
 
     <modules>
-        <module>amoro-common</module>
-        <module>amoro-web</module>
-        <module>amoro-ams</module>
-        <module>amoro-optimizer</module>
-        <module>amoro-metrics</module>
-        <module>amoro-format-iceberg</module>
-        <module>amoro-format-mixed</module>
-        <module>amoro-format-hudi</module>
-        <module>amoro-format-paimon</module>
+        <module>fusion-web</module>
+        <module>fusion-ams</module>
+        <module>fusion-optimizer</module>
+        <module>fusion-metrics</module>
+        <module>fusion-core</module>
         <module>dist</module>
     </modules>
 
@@ -176,35 +172,15 @@
 
     <dependencyManagement>
         <dependencies>
+
             <dependency>
-                <groupId>org.apache.amoro</groupId>
-                <artifactId>amoro-common</artifactId>
+                <groupId>io.olake.fusion</groupId>
+                <artifactId>fusion-core</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
-            <dependency>
-                <groupId>org.apache.amoro</groupId>
-                <artifactId>amoro-format-iceberg</artifactId>
-                <version>${project.version}</version>
-            </dependency>
 
-            <dependency>
-                <groupId>org.apache.amoro</groupId>
-                <artifactId>amoro-format-paimon</artifactId>
-                <version>${project.version}</version>
-            </dependency>
 
-            <dependency>
-                <groupId>org.apache.amoro</groupId>
-                <artifactId>amoro-format-hudi</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>org.apache.amoro</groupId>
-                <artifactId>amoro-mixed-hive</artifactId>
-                <version>${project.version}</version>
-            </dependency>
 
             <dependency>
                 <groupId>org.apache.amoro</groupId>
@@ -796,21 +772,6 @@
                 <version>${paimon.version}</version>
             </dependency>
 
-            <dependency>
-                <groupId>org.apache.paimon</groupId>
-                <artifactId>paimon-spark-${spark.major.version}</artifactId>
-                <version>${paimon.version}</version>
-                <exclusions>
-                    <exclusion>
-                        <groupId>org.apache.spark</groupId>
-                        <artifactId>*</artifactId>
-                    </exclusion>
-                    <exclusion>
-                        <groupId>org.scala-lang</groupId>
-                        <artifactId>*</artifactId>
-                    </exclusion>
-                </exclusions>
-            </dependency>
 
             <dependency>
                 <groupId>org.roaringbitmap</groupId>
@@ -1621,12 +1582,6 @@
                                 <order>,javax,java,\\#</order>
                             </importOrder>
                         </java>
-                        <scala>
-                            <scalafmt>
-                                <scalaMajorVersion>2.13</scalaMajorVersion>
-                                <file>tools/maven/scalafmt.conf</file>
-                            </scalafmt>
-                        </scala>
                         <pom>
                             <includes>
                                 <include>pom.xml</include>
@@ -1667,7 +1622,6 @@
                             <exclude>**/.*/**</exclude>
                             <exclude>**/*.prefs</exclude>
                             <exclude>**/*.log</exclude>
-                            <exclude>tools/maven/scalafmt.conf</exclude>
                             <exclude>**/licenses/**</exclude>
                             <exclude>**/licenses-binary/**</exclude>
                             <!-- Administrative files in the main trunk. -->
@@ -1965,12 +1919,6 @@
                 <!-- paimon-1.2.0 does not support scala-2.13 and datasource lookup will cause UT failre -->
                 <paimon.version>1.1.1</paimon.version>
             </properties>
-        </profile>
-        <profile>
-            <id>openapi-sdk</id>
-            <modules>
-                <module>amoro-openapi-sdk</module>
-            </modules>
         </profile>
     </profiles>
 </project>

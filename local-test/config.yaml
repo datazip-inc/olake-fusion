@@ -149,11 +149,11 @@ ams:
 # ---------------------------------------------------------------------------
 containers:
   - name: localContainer
-    container-impl: org.apache.amoro.server.manager.LocalOptimizerContainer
+    container-impl: io.olake.fusion.server.manager.LocalOptimizerContainer
     properties: {}
 
   - name: sparkContainer
-    container-impl: org.apache.amoro.server.manager.SparkOptimizerContainer
+    container-impl: io.olake.fusion.server.manager.SparkOptimizerContainer
     properties:
       spark-home: /opt/spark/
       # Kind control-plane hostname — resolved via Docker DNS (iceberg-net)

@@ -27,12 +27,12 @@
     </formats>
 
     <includeBaseDirectory>true</includeBaseDirectory>
-    <baseDirectory>amoro-${project.version}</baseDirectory>
+    <baseDirectory>fusion-${project.version}</baseDirectory>
 
     <files>
         <file>
             <source>
-                ../amoro-optimizer/amoro-optimizer-spark/target/amoro-optimizer-spark-${spark.major.version}_${scala.binary.version}-${project.version}-jar-with-dependencies.jar
+                ../fusion-optimizer/fusion-optimizer-spark/target/fusion-optimizer-spark-${spark.major.version}_${scala.binary.version}-${project.version}-jar-with-dependencies.jar
             </source>
             <outputDirectory>plugin/optimizer/spark</outputDirectory>
             <destName>optimizer-job.jar</destName>
@@ -40,20 +40,20 @@
         </file>
         <file>
             <source>
-                ../amoro-metrics/amoro-metrics-prometheus/target/amoro-metrics-prometheus-${project.version}-jar-with-dependencies.jar
+                ../fusion-metrics/fusion-metrics-prometheus/target/fusion-metrics-prometheus-${project.version}-jar-with-dependencies.jar
             </source>
             <outputDirectory>plugin/metric-reporters</outputDirectory>
             <destName>prometheus-reporter.jar</destName>
             <fileMode>0644</fileMode>
         </file>
         <file>
-            <source>../amoro-ams/target/amoro-ams-${project.version}.jar</source>
+            <source>../fusion-ams/target/fusion-ams-${project.version}.jar</source>
             <outputDirectory>lib/</outputDirectory>
-            <destName>amoro-ams-${project.version}.jar</destName>
+            <destName>fusion-ams-${project.version}.jar</destName>
             <fileMode>0644</fileMode>
         </file>
         <file>
-            <source>src/main/amoro-bin/conf/env.sh</source>
+            <source>src/main/fusion-bin/conf/env.sh</source>
             <outputDirectory>conf</outputDirectory>
             <fileMode>0755</fileMode>
         </file>
@@ -69,11 +69,6 @@
             <destName>NOTICE</destName>
             <fileMode>0644</fileMode>
         </file>
-        <file>
-            <source>../DISCLAIMER</source>
-            <outputDirectory/>
-            <fileMode>0644</fileMode>
-        </file>
     </files>
     <fileSets>
         <fileSet>
@@ -82,28 +77,28 @@
             <fileMode>0644</fileMode>
         </fileSet>
         <fileSet>
-            <directory>src/main/amoro-bin/bin</directory>
+            <directory>src/main/fusion-bin/bin</directory>
             <outputDirectory>bin</outputDirectory>
             <fileMode>0755</fileMode>
             <lineEnding>unix</lineEnding>
         </fileSet>
         <fileSet>
-            <directory>src/main/amoro-bin/conf</directory>
+            <directory>src/main/fusion-bin/conf</directory>
             <outputDirectory>conf</outputDirectory>
             <fileMode>0644</fileMode>
         </fileSet>
         <fileSet>
-            <directory>../amoro-ams/src/main/resources/mysql</directory>
+            <directory>../fusion-ams/src/main/resources/mysql</directory>
             <outputDirectory>conf/mysql</outputDirectory>
             <fileMode>0644</fileMode>
         </fileSet>
         <fileSet>
-            <directory>../amoro-ams/src/main/resources/postgres</directory>
+            <directory>../fusion-ams/src/main/resources/postgres</directory>
             <outputDirectory>conf/postgres</outputDirectory>
             <fileMode>0644</fileMode>
         </fileSet>
         <fileSet>
-            <directory>../amoro-ams/target/amoro-ams-dependency/lib</directory>
+            <directory>../fusion-ams/target/fusion-ams-dependency/lib</directory>
             <outputDirectory>lib/</outputDirectory>
             <fileMode>0644</fileMode>
         </fileSet>

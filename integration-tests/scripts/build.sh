@@ -41,15 +41,15 @@ artifacts() {
   scala_binary="$(echo "$SCALA_VERSION" | cut -d. -f1-2)"
   ./mvnw -B -ntp clean package -pl dist -am -DskipTests \
     -Psupport-all-formats -Pno-extended-disk-storage -Pno-plugin-bin
-  ./mvnw -B -ntp package -pl amoro-optimizer/amoro-optimizer-spark -am -DskipTests \
+  ./mvnw -B -ntp package -pl fusion-optimizer/fusion-optimizer-spark -am -DskipTests \
     -Dspark.version="$SPARK_VERSION" -Dscala.version="$SCALA_VERSION" -Dscala.binary.version="$scala_binary"
   ./mvnw -B -ntp -f integration-tests/pom.xml test-compile
 }
 
 images() {
   local optimizer_jar
-  optimizer_jar="$(ls amoro-optimizer/amoro-optimizer-spark/target/*-jar-with-dependencies.jar | head -1)"
-  docker build -f docker/amoro/Dockerfile -t fusion:test .
+  optimizer_jar="$(ls fusion-optimizer/fusion-optimizer-spark/target/*-jar-with-dependencies.jar | head -1)"
+  docker build -f docker/fusion/Dockerfile -t fusion:test .
   docker build -f docker/optimizer-spark/Dockerfile -t fusion-spark:test \
     --build-arg SPARK_VERSION="$SPARK_VERSION" \
     --build-arg SPARK_JAVA_TAG="$SPARK_VERSION-java17" \

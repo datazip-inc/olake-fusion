@@ -1,0 +1,22 @@
+
+/*
+  * Licensed to the Apache Software Foundation (ASF) under one
+  * or more contributor license agreements.  See the NOTICE file
+  * distributed with this work for additional information
+  * regarding copyright ownership.  The ASF licenses this file
+  * to you under the Apache License, Version 2.0 (the
+  * "License"); you may not use this file except in compliance
+  * with the License.  You may obtain a copy of the License at
+  *
+  *     http://www.apache.org/licenses/LICENSE-2.0
+  *
+  * Unless required by applicable law or agreed to in writing, software
+  * distributed under the License is distributed on an "AS IS" BASIS,
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
+  *
+  * Modified by Datazip Inc. in 2026
+  */
+
+import{k as A,V as B,aa as F,w as $,Y as c,a1 as d,a4 as _,a8 as b,B as n,Z as f,F as E,a7 as U,P as V,a3 as G,W as L,v as S,r as N,b as q,d as D}from"./vue-dGT8fLn8.js";import{e as I,r as o}from"./index-yHJHVwWK.js";import{F as T,k as W,I as X,X as Y,B as Z,q as H}from"./antd-CJVa8hfK.js";const J={class:"config-properties"},K={key:0},M={class:"config-header g-flex"},Q={class:"td g-flex-ac"},ee={class:"td g-flex-ac bd-left"},se=A({__name:"Properties",props:{propertiesObj:{},isEdit:{type:Boolean}},setup(e,{expose:i}){const r=e,{t:u}=B(),v=F([{dataIndex:"key",title:u("key"),width:284,ellipsis:!0},{dataIndex:"value",title:u("value"),ellipsis:!0}]),l=N(),a=q({data:[]}),g=[{required:!0,message:""}],z=D(()=>r.isEdit);$(()=>r.propertiesObj,()=>{O()},{immediate:!0,deep:!0});function O(){a.data.length=0,Object.keys(r.propertiesObj).forEach(t=>{a.data.push({key:t,value:r.propertiesObj[t],uuid:I()})})}function P(t){const s=a.data.indexOf(t);s!==-1&&a.data.splice(s,1)}function w(){a.data.push({key:"",value:"",uuid:I()})}return i({getPropertiesWithoputValidation(){const t={};return a.data.forEach(s=>{t[s.key]=s.value}),Promise.resolve(t)},getProperties(){return l.value.validateFields().then(()=>{const t={};return a.data.forEach(s=>{t[s.key]=s.value}),Promise.resolve(t)}).catch(()=>!1)}}),(t,s)=>{const h=X,k=W,R=Y,C=T,j=Z,x=H;return c(),d("div",J,[z.value?(c(),d("div",K,[_("div",M,[_("div",Q,b(t.$t("key")),1),_("div",ee,b(t.$t("value")),1)]),n(C,{ref_key:"propertiesFormRef",ref:l,layout:"inline",model:a,class:"g-mt-12"},{default:f(()=>[(c(!0),d(E,null,U(a.data,(p,y)=>(c(),d("div",{key:p.uuid,class:"config-row"},[n(k,{name:["data",y,"key"],rules:g},{default:f(()=>[n(h,{value:p.key,"onUpdate:value":m=>p.key=m,style:{width:"100%"}},null,8,["value","onUpdate:value"])]),_:2},1032,["name"]),n(k,{name:["data",y,"value"],rules:g},{default:f(()=>[n(h,{value:p.value,"onUpdate:value":m=>p.value=m,style:{width:"100%"}},null,8,["value","onUpdate:value"])]),_:2},1032,["name"]),n(R,{class:"icon-close",onClick:m=>P(p)},null,8,["onClick"])]))),128))]),_:1},8,["model"]),n(j,{class:"config-btn",onClick:w},{default:f(()=>[...s[0]||(s[0]=[V(" + ",-1)])]),_:1})])):G("",!0),z.value?G("",!0):(c(),L(x,{key:1,"row-key":"uuid",columns:S(v),"data-source":a.data,pagination:!1},null,8,["columns","data-source"]))])}}});function re(){return o.get("api/ams/v1/optimize/optimizerGroups")}function ie(){return o.get("api/ams/v1/optimize/actions")}function ne(e){const{optimizerGroup:i,dbSearchInput:r,tableSearchInput:u,page:v,pageSize:l,actions:a}=e;return o.get(`api/ams/v1/optimize/optimizerGroups/${i}/tables`,{params:{dbSearchInput:r,tableSearchInput:u,page:v,pageSize:l,actions:a}})}function ue(e){const{optimizerGroup:i,page:r,pageSize:u}=e;return o.get(`api/ams/v1/optimize/optimizerGroups/${i}/optimizers`,{params:{page:r,pageSize:u}})}function pe(e){const{optimizerGroup:i,parallelism:r}=e;return o.post("api/ams/v1/optimize/optimizers",{optimizerGroup:i,parallelism:r})}function ce(e){const{jobId:i}=e;return o.delete(`api/ams/v1/optimize/optimizers/${i}`)}async function le(){return await o.get("api/ams/v1/optimize/resourceGroups")}async function me(){return await o.get("api/ams/v1/optimize/containers/get")}function de(e){return o.post("api/ams/v1/optimize/resourceGroups",e)}function fe(e){return o.put("api/ams/v1/optimize/resourceGroups",e)}function ve(e){return o.get(`/api/ams/v1/optimize/resourceGroups/${e.name}/delete/check`)}function _e(e){return o.delete(`/api/ams/v1/optimize/resourceGroups/${e.name}`)}export{se as _,ie as a,ne as b,ue as c,ve as d,_e as e,me as f,le as g,de as h,re as i,pe as j,ce as r,fe as u};

@@ -209,8 +209,8 @@ This guide is based on IntelliJ IDEA 2024. Some details might differ in other ve
    `Reload All Maven Projects`.
 6. Create a run configuration for the server:
     * Type: **Application**
-    * Main class: `org.apache.amoro.server.AmoroServiceContainer`
-    * Module classpath: `amoro-ams`
+    * Main class: `io.olake.fusion.server.FusionServiceContainer`
+    * Module classpath: `fusion-ams`
     * Working directory: the repository root
     * VM options and environment variables: use the same values as the `launch.json` shown in the
       VS Code section below.
@@ -274,15 +274,15 @@ following content:
   "configurations": [
     {
       "type": "java",
-      "name": "AmoroServiceContainer",
+      "name": "FusionServiceContainer",
       "request": "launch",
-      "mainClass": "org.apache.amoro.server.AmoroServiceContainer",
-      "projectName": "amoro-ams",
+      "mainClass": "io.olake.fusion.server.FusionServiceContainer",
+      "projectName": "fusion-ams",
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
       "vmArgs": "-Dfile.encoding=UTF-8 -Darrow.memory.allocator=unsafe -XX:+UseZGC -XX:CompileCommand=exclude,io/netty/buffer/PoolChunkList.allocate -XX:CompileCommand=exclude,io/netty/buffer/PoolArena.allocate --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.invoke=ALL-UNNAMED --add-opens=java.base/java.lang.reflect=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.util.concurrent=ALL-UNNAMED --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED --add-opens=java.base/sun.nio.cs=ALL-UNNAMED --add-opens=java.base/sun.security.action=ALL-UNNAMED --add-opens=java.base/sun.util.calendar=ALL-UNNAMED",
       "env": {
-        "AMORO_HOME": "${workspaceFolder}/dist/src/main/amoro-bin",
+        "AMORO_HOME": "${workspaceFolder}/dist/src/main/fusion-bin",
         "AMORO_CONF_DIR": "${workspaceFolder}/local-test",
         "CONSOLE_LOG_LEVEL": "info",
         "OPTIMIZER_JAVA_OPTS": "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5006",
@@ -296,7 +296,7 @@ following content:
       "request": "attach",
       "hostName": "localhost",
       "port": 5006,
-      "projectName": "amoro-optimizer-standalone"
+      "projectName": "fusion-optimizer-standalone"
     }
   ]
 }
@@ -304,7 +304,7 @@ following content:
 
 The two configurations serve different purposes:
 
-* **AmoroServiceContainer** launches the Fusion server itself, with the `--add-opens` flags that
+* **FusionServiceContainer** launches the Fusion server itself, with the `--add-opens` flags that
   Iceberg and Arrow require on Java 17. `AMORO_CONF_DIR` points at `local-test/` so the server picks
   up the local `config.yaml`, and `AMS_DATABASE_URL` points at the Postgres container started by
   `make start-deps`.
@@ -326,7 +326,7 @@ to match.
 
    This starts the local dependencies (Postgres and MinIO), runs a full build, extracts the dist
    tarball, and syncs the optimizer runtime jars into place.
-3. Start the server with the **AmoroServiceContainer** run configuration.
+3. Start the server with the **FusionServiceContainer** run configuration.
 4. Open the web UI at <http://localhost:1630> (`admin` / `password`) and add an optimizer group and a
    local optimizer.
 5. Once the optimizer is running, attach to it with the **OptimizerStandalone** configuration, or the
@@ -391,7 +391,7 @@ After installing the plugin, format your code automatically by applying the foll
 If you modify ConfigOptions, please regenerate the configuration documentation by running:
 
 ```shell
-UPDATE=1 ./mvnw test -pl amoro-ams -am -Dtest=ConfigurationsTest
+UPDATE=1 ./mvnw test -pl fusion-ams -am -Dtest=ConfigurationsTest
 ```
 
 ### Copyright

@@ -19,9 +19,9 @@
 COMPOSE_DIR  := local-test
 KIND_CLUSTER := fusion-cluster
 AMORO_LOG_DIR ?= $(CURDIR)/docker/kind/amoro-logs
-DIST_TAR     := $(CURDIR)/dist/target/apache-amoro-0.9-SNAPSHOT-bin.tar.gz
-RUNTIME_HOME := $(CURDIR)/dist/target/amoro-0.9-SNAPSHOT
-BIN_HOME     := $(CURDIR)/dist/src/main/amoro-bin
+DIST_TAR     := $(CURDIR)/dist/target/fusion-0.9-SNAPSHOT-bin.tar.gz
+RUNTIME_HOME := $(CURDIR)/dist/target/fusion-0.9-SNAPSHOT
+BIN_HOME     := $(CURDIR)/dist/src/main/fusion-bin
 
 # Auto-detect JDK 17: prefer JAVA_HOME if already JDK 17,
 # then macOS java_home utility, then common Linux paths.
@@ -106,7 +106,7 @@ sync-libs:
 
 setup-debug-mode: start-deps build
 	@echo ""
-	@echo "Setup complete. Run 'AmoroServiceContainer' from your IDE. See CONTRIBUTING.md"
+	@echo "Setup complete. Run 'FusionServiceContainer' from your IDE. See CONTRIBUTING.md"
 
 clean-debug-mode: stop-deps
 	@rm -rf "$(RUNTIME_HOME)"
@@ -144,10 +144,10 @@ spotless-fix:
 	@$(MVN) spotless:apply -B -ntp
 
 sync-frontend:
-	@SRC=amoro-web/src/main/resources/static; \
-	DST=amoro-web/target/classes/static; \
+	@SRC=fusion-web/src/main/resources/static; \
+	DST=fusion-web/target/classes/static; \
 	if [ ! -d "$$SRC" ]; then \
-		echo "ERROR: $$SRC not found. Run 'pnpm build' inside amoro-web/ first."; \
+		echo "ERROR: $$SRC not found. Run 'pnpm build' inside fusion-web/ first."; \
 		exit 1; \
 	fi; \
 	mkdir -p "$$DST"; \
