@@ -80,7 +80,7 @@ importers:
         version: 20.14.8
       '@vitejs/plugin-vue':
         specifier: ^5.0.5
-        version: 5.0.5(vite@6.4.5(@types/node@20.14.8)(less@4.2.0)(yaml@2.5.0))(vue@3.4.27(typescript@5.4.5))
+        version: 5.0.5(vite@6.4.5(@types/node@20.14.8)(less@4.2.0)(yaml@2.5.0))(vue@3.5.44(typescript@5.4.5))
       eslint:
         specifier: ^9.4.0
         version: 9.4.0
@@ -113,7 +113,7 @@ importers:
         version: 2.0.1(vite@6.4.5(@types/node@20.14.8)(less@4.2.0)(yaml@2.5.0))
       vite-plugin-vue-devtools:
         specifier: ^7.6.7
-        version: 7.6.7(rollup@4.63.5)(vite@6.4.3(@types/node@20.14.8)(less@4.2.0)(yaml@2.5.0))(vue@3.4.27(typescript@5.4.5))
+        version: 7.6.7(rollup@4.63.5)(vite@6.4.5(@types/node@20.14.8)(less@4.2.0)(yaml@2.5.0))(vue@3.5.44(typescript@5.4.5))
       vue-tsc:
         specifier: ^2.0.21
         version: 2.0.21(typescript@5.4.5)
@@ -5189,10 +5189,10 @@ snapshots:
       '@typescript-eslint/types': 7.18.0
       eslint-visitor-keys: 3.4.3
 
-  '@vitejs/plugin-vue@5.0.5(vite@6.4.3(@types/node@20.14.8)(less@4.2.0)(yaml@2.5.0))(vue@3.4.27(typescript@5.4.5))':
+  '@vitejs/plugin-vue@5.0.5(vite@6.4.5(@types/node@20.14.8)(less@4.2.0)(yaml@2.5.0))(vue@3.5.44(typescript@5.4.5))':
     dependencies:
-      vite: 6.4.3(@types/node@20.14.8)(less@4.2.0)(yaml@2.5.0)
-      vue: 3.4.27(typescript@5.4.5)
+      vite: 6.4.5(@types/node@20.14.8)(less@4.2.0)(yaml@2.5.0)
+      vue: 3.5.44(typescript@5.4.5)
 
   '@volar/language-core@2.3.4':
     dependencies:
@@ -5311,15 +5311,15 @@ snapshots:
 
   '@vue/devtools-api@6.6.3': {}
 
-  '@vue/devtools-core@7.6.7(vite@6.4.3(@types/node@20.14.8)(less@4.2.0)(yaml@2.5.0))(vue@3.4.27(typescript@5.4.5))':
+  '@vue/devtools-core@7.6.7(vite@6.4.5(@types/node@20.14.8)(less@4.2.0)(yaml@2.5.0))(vue@3.5.44(typescript@5.4.5))':
     dependencies:
       '@vue/devtools-kit': 7.6.7
       '@vue/devtools-shared': 7.6.7
       mitt: 3.0.1
       nanoid: 5.1.16
       pathe: 1.1.2
-      vite-hot-client: 0.2.4(vite@6.4.3(@types/node@20.14.8)(less@4.2.0)(yaml@2.5.0))
-      vue: 3.4.27(typescript@5.4.5)
+      vite-hot-client: 0.2.4(vite@6.4.5(@types/node@20.14.8)(less@4.2.0)(yaml@2.5.0))
+      vue: 3.5.44(typescript@5.4.5)
     transitivePeerDependencies:
       - vite
 
@@ -8202,9 +8202,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  vite-plugin-vue-devtools@7.6.7(rollup@4.63.5)(vite@6.4.3(@types/node@20.14.8)(less@4.2.0)(yaml@2.5.0))(vue@3.4.27(typescript@5.4.5)):
+  vite-plugin-vue-devtools@7.6.7(rollup@4.63.5)(vite@6.4.5(@types/node@20.14.8)(less@4.2.0)(yaml@2.5.0))(vue@3.5.44(typescript@5.4.5)):
     dependencies:
-      '@vue/devtools-core': 7.6.7(vite@6.4.3(@types/node@20.14.8)(less@4.2.0)(yaml@2.5.0))(vue@3.4.27(typescript@5.4.5))
+      '@vue/devtools-core': 7.6.7(vite@6.4.5(@types/node@20.14.8)(less@4.2.0)(yaml@2.5.0))(vue@3.5.44(typescript@5.4.5))
       '@vue/devtools-kit': 7.6.7
       '@vue/devtools-shared': 7.6.7
       execa: 9.5.1
