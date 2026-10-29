@@ -94,3 +94,7 @@ CLAUDE.local.md
 # Claude Code: local worktrees and personal settings (shared skills in .claude/skills are tracked)
 .claude/worktrees/
 .claude/settings.local.json
+
+# Design docs live on Confluence; only local working copies are kept here (see its README)
+/dev/design-docs/*
+!/dev/design-docs/README.md
