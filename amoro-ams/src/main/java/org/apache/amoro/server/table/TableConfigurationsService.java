@@ -22,6 +22,8 @@ package org.apache.amoro.server.table;
 
 import org.apache.amoro.AmoroTable;
 import org.apache.amoro.ServerTableIdentifier;
+import org.apache.amoro.exception.ObjectNotExistsException;
+import org.apache.amoro.properties.CatalogMetaProperties;
 import org.apache.amoro.server.catalog.CatalogManager;
 import org.apache.amoro.server.dashboard.model.OptimizingConfigurations;
 import org.apache.amoro.server.persistence.PersistentBase;
@@ -55,6 +57,7 @@ public class TableConfigurationsService extends PersistentBase {
   }
 
   private volatile TableService tableService;
+  private volatile CatalogManager catalogManager;
 
   private TableConfigurationsService() {}
 
@@ -62,11 +65,17 @@ public class TableConfigurationsService extends PersistentBase {
     this.tableService = tableService;
   }
 
+  public void setCatalogManager(CatalogManager catalogManager) {
+    this.catalogManager = catalogManager;
+  }
+
   // the optimizing configurations of a table are always the ones stored in db (the defaults when
-  // it has none stored), never the ones of its metadata.json
+  // it has none stored), never the ones of its metadata.json. The catalog's other optimizing
+  // properties (optimizer group, quota, ...) apply as defaults, the table's own values first.
   public Map<String, String> overlay(
       ServerTableIdentifier identifier, Map<String, String> properties) {
-    Map<String, String> merged = Maps.newHashMap(properties);
+    Map<String, String> merged = catalogOptimizingDefaults(identifier.getCatalog());
+    merged.putAll(properties);
     TableOptimizingConfigurationsMeta meta = get(identifier);
     put(
         merged,
@@ -77,6 +86,39 @@ public class TableConfigurationsService extends PersistentBase {
     put(merged, TableProperties.SELF_OPTIMIZING_FULL_TRIGGER_CRON, meta.getFullTriggerCron());
     put(merged, TableProperties.SELF_OPTIMIZING_TARGET_SIZE, String.valueOf(meta.getTargetSize()));
     return merged;
+  }
+
+  // The catalog's table.self-optimizing.* properties, without the table. prefix. Merging the
+  // catalog's properties into a table drops them whenever the table's metadata.json leaves
+  // optimizing disabled, so a table enabled only in db would otherwise run in the "default"
+  // optimizer group, which has no optimizer, with the default quota.
+  private Map<String, String> catalogOptimizingDefaults(String catalogName) {
+    Map<String, String> defaults = Maps.newHashMap();
+    CatalogManager manager = catalogManager;
+    if (manager == null) {
+      return defaults;
+    }
+    Map<String, String> catalogProperties;
+    try {
+      catalogProperties = manager.getCatalogMeta(catalogName).getCatalogProperties();
+    } catch (ObjectNotExistsException e) {
+      // a dropped catalog whose tables are not disposed yet
+      return defaults;
+    }
+    if (catalogProperties == null) {
+      return defaults;
+    }
+    String prefix =
+        CatalogMetaProperties.TABLE_PROPERTIES_PREFIX
+            + CatalogMetaProperties.OPTIMIZE_PROPERTIES_PREFIX;
+    catalogProperties.forEach(
+        (key, value) -> {
+          if (key.startsWith(prefix)) {
+            defaults.put(
+                key.substring(CatalogMetaProperties.TABLE_PROPERTIES_PREFIX.length()), value);
+          }
+        });
+    return defaults;
   }
 
   /** Returns the stored overrides for a table, or null when it has none. */

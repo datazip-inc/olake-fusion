@@ -217,6 +217,7 @@ public class AmoroServiceContainer {
     optimizerManager = new DefaultOptimizerManager(serviceConfig, catalogManager);
     terminalManager = new TerminalManager(serviceConfig, catalogManager);
 
+    TableConfigurationsService.getInstance().setCatalogManager(catalogManager);
     TableConfigurationsService.getInstance().adoptExistingTables(catalogManager);
 
     initHttpService();
