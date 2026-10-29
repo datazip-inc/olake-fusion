@@ -27,14 +27,14 @@ MVN="${PROJECT_HOME}/mvnw"
 
 cd $CURRENT_DIR
 
-AMORO_VERSION=`cat $PROJECT_HOME/pom.xml | grep 'amoro-parent' -C 3 | grep -Eo '<version>.*</version>' | awk -F'[><]' '{print $3}'`
+AMORO_VERSION=`cat $PROJECT_HOME/pom.xml | grep 'fusion-parent' -C 3 | grep -Eo '<version>.*</version>' | awk -F'[><]' '{print $3}'`
 FLINK_VERSION=1.20.0
 SPARK_VERSION=3.5.8
 DEBIAN_MIRROR=http://deb.debian.org
 APACHE_ARCHIVE=https://archive.apache.org/dist
-FLINK_OPTIMIZER_JOB_PATH=amoro-optimizer/amoro-optimizer-flink/target/amoro-optimizer-flink-${AMORO_VERSION}-jar-with-dependencies.jar
+FLINK_OPTIMIZER_JOB_PATH=fusion-optimizer/fusion-optimizer-flink/target/fusion-optimizer-flink-${AMORO_VERSION}-jar-with-dependencies.jar
 FLINK_OPTIMIZER_JOB=${PROJECT_HOME}/${FLINK_OPTIMIZER_JOB_PATH}
-SPARK_OPTIMIZER_JOB_PATH=amoro-optimizer/amoro-optimizer-spark/target/amoro-optimizer-spark-${AMORO_VERSION}-jar-with-dependencies.jar
+SPARK_OPTIMIZER_JOB_PATH=fusion-optimizer/fusion-optimizer-spark/target/fusion-optimizer-spark-${AMORO_VERSION}-jar-with-dependencies.jar
 SPARK_OPTIMIZER_JOB=${PROJECT_HOME}/${SPARK_OPTIMIZER_JOB_PATH}
 AMORO_TAG=$AMORO_VERSION
 MAVEN_MIRROR=https://repo.maven.apache.org/maven2
@@ -164,7 +164,7 @@ function build_optimizer_flink() {
     OPTIMIZER_JOB=${FLINK_OPTIMIZER_JOB}
 
     if [ ! -f "${OPTIMIZER_JOB}" ]; then
-      BUILD_CMD="$MVN clean package -pl amoro-optimizer/amoro-optimizer-flink -am -e -DskipTests"
+      BUILD_CMD="$MVN clean package -pl fusion-optimizer/fusion-optimizer-flink -am -e -DskipTests"
       echo "flink optimizer job not exists in ${OPTIMIZER_JOB}"
       echo "please check the file or run '${BUILD_CMD}' first. "
       exit  1
@@ -187,7 +187,7 @@ function build_optimizer_spark() {
     OPTIMIZER_JOB=${SPARK_OPTIMIZER_JOB}
 
     if [ ! -f "${OPTIMIZER_JOB}" ]; then
-      BUILD_CMD="$MVN clean package -pl amoro-optimizer/amoro-optimizer-spark -am -e -DskipTests -Pspark-${SPARK_MAJOR_VERSION}"
+      BUILD_CMD="$MVN clean package -pl fusion-optimizer/fusion-optimizer-spark -am -e -DskipTests -Pspark-${SPARK_MAJOR_VERSION}"
       echo "spark optimizer job not exists in ${OPTIMIZER_JOB}"
       echo "please check the file or run '${BUILD_CMD}' first. "
       exit  1
@@ -207,7 +207,7 @@ function build_amoro() {
   local IMAGE_TAG=$AMORO_TAG
   print_image $IMAGE_REF $IMAGE_TAG
 
-  local DIST_FILE=${PROJECT_HOME}/dist/target/apache-amoro-${AMORO_VERSION}-bin.tar.gz
+  local DIST_FILE=${PROJECT_HOME}/dist/target/fusion-${AMORO_VERSION}-bin.tar.gz
 
   if [ ! -f "${DIST_FILE}" ]; then
     local BUILD_CMD="$MVN clean package -am -e -pl dist -DskipTests -Pspark-${SPARK_MAJOR_VERSION}"
@@ -220,7 +220,7 @@ function build_amoro() {
   cd "$PROJECT_HOME" || exit
   docker build -t ${IMAGE_REF}:${IMAGE_TAG} \
     --build-arg MAVEN_MIRROR=$MAVEN_MIRROR \
-    -f docker/amoro/Dockerfile .
+    -f docker/fusion/Dockerfile .
   return $?
 }
 

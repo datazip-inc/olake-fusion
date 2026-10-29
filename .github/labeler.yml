@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+# Modified by Datazip Inc. in 2026
+#
 # Pull Request Labeler Github Action Configuration: https://github.com/marketplace/actions/labeler
 
 "type:infra":
@@ -44,25 +46,13 @@
   - "site/**/*"
 
 "module:common":
-  - "amoro-common/**/*"
 
 "module:ams-server":
-  - "amoro-ams/**/*"
+  - "fusion-ams/**/*"
 
 "module:ams-dashboard":
-  - "amoro-web/**/*"
+  - "fusion-web/**/*"
 
 "module:ams-optimizer":
-  - "amoro-optimizer/**/*"
+  - "fusion-optimizer/**/*"
 
-"module:mixed-spark":
-  - "amoro-format-mixed/amoro-mixed-spark/**/*"
-
-"module:mixed-flink":
-  - "amoro-format-mixed/amoro-mixed-flink/**/*"
-
-"module:mixed-hive":
-  - "amoro-format-mixed/amoro-mixed-hive/**/*"
-
-"module:mixed-trino":
-  - "amoro-format-mixed/amoro-mixed-trino/**/*"

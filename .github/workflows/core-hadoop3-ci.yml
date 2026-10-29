@@ -16,11 +16,10 @@ on:
   # push:
   #   paths:
   #     - ".github/workflows/**"
-  #     - "amoro-ams/**"
-  #     - "amoro-common/**"
-  #     - "amoro-metrics/**"
-  #     - "amoro-optimizer/**"
-  #     - "amoro-format-iceberg/**"
+  #     - "fusion-ams/**"
+  #     - "fusion-metrics/**"
+  #     - "fusion-optimizer/**"
+  #     - "fusion-core/**"
   #     - "amoro-format-paimon/**"
   #     - "amoro-format-hudi/**"
   #     - "amoro-format-mixed/amoro-mixed-flink/**"

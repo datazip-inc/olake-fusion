@@ -16,6 +16,8 @@ software distributed under the License is distributed on an
 KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
 under the License.
+
+Modified by Datazip Inc. in 2026
 -->
 
 <!DOCTYPE suppressions PUBLIC
@@ -28,11 +30,11 @@ under the License.
 
     <!-- Limited by the Javalin framework, it is not possible to use shade classes. -->
     <suppress
-            files="org[/\\]apache[/\\]amoro[/\\]server[/\\]RestCatalogService\.java"
+            files="io[/\\]olake[/\\]fusion[/\\]server[/\\]RestCatalogService\.java"
             checks="Regexp"/>
 
     <suppress
-            files="org[/\\]apache[/\\]amoro[/\\]trino[/\\]iceberg[/\\]BaseConnectorTest\.java"
+            files="io[/\\]olake[/\\]fusion[/\\]trino[/\\]iceberg[/\\]BaseConnectorTest\.java"
             checks="FileLength"/>
     <suppress
             files="org[/\\]apache[/\\]hadoop[/\\]util[/\\]VersionInfo\.java"
@@ -40,19 +42,19 @@ under the License.
 
     <!-- Limited by the Trino framework, it is not possible to use shade classes. -->
     <suppress
-            files="org[/\\]apache[/\\]amoro[/\\]trino[/\\]keyed[/\\]KeyedConnectorSplit\.java"
+            files="io[/\\]olake[/\\]fusion[/\\]trino[/\\]keyed[/\\]KeyedConnectorSplit\.java"
             checks="Regexp"/>
     <suppress
-            files="org[/\\]apache[/\\]amoro[/\\]trino[/\\]keyed[/\\]KeyedTableHandle\.java"
+            files="io[/\\]olake[/\\]fusion[/\\]trino[/\\]keyed[/\\]KeyedTableHandle\.java"
             checks="Regexp"/>
     <suppress
-            files="org[/\\]apache[/\\]amoro[/\\]trino[/\\]delete[/\\]TrinoDeleteFile\.java"
+            files="io[/\\]olake[/\\]fusion[/\\]trino[/\\]delete[/\\]TrinoDeleteFile\.java"
             checks="Regexp"/>
     <suppress
-            files="org[/\\]apache[/\\]amoro[/\\]trino[/\\]unkeyed[/\\]IcebergSplit\.java"
+            files="io[/\\]olake[/\\]fusion[/\\]trino[/\\]unkeyed[/\\]IcebergSplit\.java"
             checks="Regexp"/>
     <suppress
-            files="org[/\\]apache[/\\]amoro[/\\]trino[/\\]unkeyed[/\\]AdaptHiveIcebergTableHandle\.java"
+            files="io[/\\]olake[/\\]fusion[/\\]trino[/\\]unkeyed[/\\]AdaptHiveIcebergTableHandle\.java"
             checks="Regexp"/>
 
 </suppressions>

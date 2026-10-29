@@ -62,17 +62,17 @@
         </Root>
 
         <!-- Catch-all for all Amoro code: routes to per-task/process log files -->
-        <Logger name="org.apache.amoro" level="info" additivity="false">
+        <Logger name="io.olake.fusion" level="info" additivity="false">
             <AppenderRef ref="Console"/>
             <AppenderRef ref="RoutingAppender"/>
         </Logger>
 
-        <Logger name="org.apache.amoro.optimizing" level="debug" additivity="false">
+        <Logger name="io.olake.fusion.optimizing" level="debug" additivity="false">
             <AppenderRef ref="Console"/>
             <AppenderRef ref="RoutingAppender"/>
         </Logger>
 
-        <Logger name="org.apache.amoro.optimizer" level="info" additivity="false">
+        <Logger name="io.olake.fusion.optimizer" level="info" additivity="false">
             <AppenderRef ref="Console"/>
             <AppenderRef ref="RoutingAppender"/>
         </Logger>

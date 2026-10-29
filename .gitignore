@@ -71,8 +71,8 @@ conf/
 *.tgz
 
 # dashboard static resources
-amoro-web/src/main/resources/static/
-amoro-web/node/
+fusion-web/src/main/resources/static/
+fusion-web/node/
 
 # Hugo generated directories
 public
@@ -82,9 +82,9 @@ resources
 # migration, say) is silently ignored and ships as a jar that cannot start.
 !**/src/main/resources/
 
-/dist/src/main/amoro-bin/*
-!/dist/src/main/amoro-bin/bin/
-!/dist/src/main/amoro-bin/conf/
+/dist/src/main/fusion-bin/*
+!/dist/src/main/fusion-bin/bin/
+!/dist/src/main/fusion-bin/conf/
 /local-test/data
 CLAUDE.local.md
 

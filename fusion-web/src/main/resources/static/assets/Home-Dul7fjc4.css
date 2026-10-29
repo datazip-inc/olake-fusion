@@ -1,0 +1,22 @@
+
+/*
+  * Licensed to the Apache Software Foundation (ASF) under one
+  * or more contributor license agreements.  See the NOTICE file
+  * distributed with this work for additional information
+  * regarding copyright ownership.  The ASF licenses this file
+  * to you under the Apache License, Version 2.0 (the
+  * "License"); you may not use this file except in compliance
+  * with the License.  You may obtain a copy of the License at
+  *
+  *     http://www.apache.org/licenses/LICENSE-2.0
+  *
+  * Unless required by applicable law or agreed to in writing, software
+  * distributed under the License is distributed on an "AS IS" BASIS,
+  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
+  *
+  * Modified by Datazip Inc. in 2026
+  */
+
+.side-bar[data-v-d7a79614]{position:relative;height:100%;transition:width .3s;display:flex;flex-direction:column;flex-shrink:0}.side-bar[data-v-d7a79614] .ant-menu{height:100%;width:200px}.side-bar[data-v-d7a79614] .ant-menu.ant-menu-inline-collapsed{width:64px}.side-bar[data-v-d7a79614] .ant-menu.ant-menu-inline-collapsed .logo{padding-left:14px}.side-bar[data-v-d7a79614] .ant-menu.ant-menu-inline-collapsed .toggle-btn{position:absolute;right:-68px;top:8px;font-size:18px;padding:0 24px}.side-bar[data-v-d7a79614] .ant-menu-item{margin:0;padding-left:22px!important}.side-bar[data-v-d7a79614] .ant-menu-item .ant-menu-title-content{width:100%;margin-left:12px}.side-bar[data-v-d7a79614] .ant-menu-item.active{background-color:#1890ff;color:#fff}.side-bar[data-v-d7a79614] .ant-menu-item.active-color{color:#fff;background-color:#202a40}.side-bar[data-v-d7a79614] .ant-menu-item:hover{color:#fff}.side-bar[data-v-d7a79614] .ant-menu-item.table-item-tab:hover{background-color:#202a40}.side-bar .logo[data-v-d7a79614]{overflow:hidden;background-color:#001529;cursor:pointer;padding:12px 20px}.side-bar .logo-img[data-v-d7a79614]{width:24px;height:24px}.side-bar .arctic-name[data-v-d7a79614]{width:66px;margin:4px 0 0 4px}.side-bar .toggle-btn[data-v-d7a79614]{position:absolute;right:-68px;top:8px;font-size:18px;padding:0 24px}.side-bar .svg-icon[data-v-d7a79614]{font-size:16px}.tables-menu-wrap[data-v-d7a79614]{position:absolute;top:0;left:200px;right:0;bottom:0;z-index:1100}.tables-menu-wrap.collapsed-sub-menu[data-v-d7a79614]{left:64px}.custom-top-bar{height:48px;display:flex;flex:1;align-items:center;justify-content:flex-end;background:#fff;border-bottom:1px solid #e8e8e8;box-shadow:0 1px 2px #0015290d;padding:0 12px 0 0;font-size:12px}.custom-top-bar .question-icon{font-size:12px;margin-top:-2px}.topbar-tooltip .ant-tooltip-inner{font-size:12px}.logout-button.ant-btn{border:none}.logout-button:hover{border-color:unset}.layout[data-v-40415557]{display:flex;width:100%;height:100%;min-width:1200px}.layout .right-content[data-v-40415557]{display:flex;flex:1;flex-direction:column;transition:width .3s;overflow:hidden}.layout .right-content .content[data-v-40415557]{height:calc(100vh - 48px);overflow:hidden}
