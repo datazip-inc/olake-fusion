@@ -30,7 +30,11 @@ ARG MAVEN_MIRROR=https://repo.maven.apache.org/maven2
 ARG OPTIMIZER_JOB=optimizer-job.jar
 ARG AWS_VERSION=2.24.12
 ARG TARGETARCH
+# The release tag this image is built for, reported by telemetry; empty for local builds.
+ARG FUSION_VERSION=
 USER root
+
+ENV FUSION_VERSION=${FUSION_VERSION}
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends wget \
