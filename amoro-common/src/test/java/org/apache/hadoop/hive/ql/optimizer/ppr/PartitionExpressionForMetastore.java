@@ -14,11 +14,9 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
- * Modified by Datazip Inc. in 2026
  */
 
-package org.apache.amoro.hive;
+package org.apache.hadoop.hive.ql.optimizer.ppr;
 
 import org.apache.hadoop.hive.metastore.FileFormatProxy;
 import org.apache.hadoop.hive.metastore.PartitionExpressionProxy;
@@ -30,12 +28,8 @@ import org.apache.hadoop.hive.serde2.typeinfo.PrimitiveTypeInfo;
 
 import java.util.List;
 
-/**
- * No-op partition expression proxy for {@link HMSMockServer}. The metastore loads its default
- * proxy, hive-exec's PartitionExpressionForMetastore, on startup; hive-exec is pinned to a newer
- * Hive than the metastore and ships without its dependencies, so tests use this class instead.
- */
-public class MockPartitionExpressionProxy implements PartitionExpressionProxy {
+/** Copy from package jar "hive-exec" to avoid class check error */
+public class PartitionExpressionForMetastore implements PartitionExpressionProxy {
 
   public String convertExprToFilter(byte[] expr) throws MetaException {
     return null;

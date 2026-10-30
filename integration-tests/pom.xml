@@ -47,6 +47,20 @@
         <test.parallelism>2</test.parallelism>
     </properties>
 
+    <dependencyManagement>
+        <dependencies>
+            <!-- Keep every Jackson module on jackson.version. spark-connect-client-jvm brings
+                 jackson-module-scala 2.15.x, which refuses to start with a newer jackson-databind. -->
+            <dependency>
+                <groupId>com.fasterxml.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
+                <version>${jackson.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
     <dependencies>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
