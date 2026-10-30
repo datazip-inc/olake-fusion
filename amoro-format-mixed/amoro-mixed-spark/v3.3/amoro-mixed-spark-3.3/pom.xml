@@ -381,7 +381,6 @@
         <dependency>
             <groupId>org.apache.hive</groupId>
             <artifactId>hive-exec</artifactId>
-            <version>${hive.version}</version>
             <classifier>core</classifier>
             <scope>test</scope>
         </dependency>

@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.hive;
@@ -334,6 +336,10 @@ public class HMSMockServer {
     newHiveConf.set("datanucleus.schema.autoCreateTables", "true");
     newHiveConf.set("hive.metastore.client.capability.check", "false");
     newHiveConf.set("iceberg.hive.client-pool-size", "2");
+    // Hive 2 reads hive.metastore.expression.proxy; Hive 3 reads metastore.expression.proxy.
+    newHiveConf.set(
+        "hive.metastore.expression.proxy", MockPartitionExpressionProxy.class.getName());
+    newHiveConf.set("metastore.expression.proxy", MockPartitionExpressionProxy.class.getName());
     return newHiveConf;
   }
 
