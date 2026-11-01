@@ -21,9 +21,8 @@
 package io.olake.fusion.catalog;
 
 import io.olake.fusion.TableFormat;
-import io.olake.fusion.UnifiedCatalog;
 import io.olake.fusion.api.CatalogMeta;
-import io.olake.fusion.properties.CatalogMetaProperties;
+import io.olake.fusion.formats.iceberg.IcebergCatalog;
 import org.apache.iceberg.catalog.Catalog;
 
 public interface CatalogTestHelper {
@@ -32,15 +31,11 @@ public interface CatalogTestHelper {
 
   String metastoreType();
 
-  default boolean isInternalCatalog() {
-    return CatalogMetaProperties.CATALOG_TYPE_AMS.equalsIgnoreCase(metastoreType());
-  }
-
   TableFormat tableFormat();
 
   CatalogMeta buildCatalogMeta(String baseDir);
 
-  UnifiedCatalog buildUnifiedCatalog(CatalogMeta catalogMeta);
+  IcebergCatalog buildFusionCatalog(CatalogMeta catalogMeta);
 
   Catalog buildIcebergCatalog(CatalogMeta catalogMeta);
 }

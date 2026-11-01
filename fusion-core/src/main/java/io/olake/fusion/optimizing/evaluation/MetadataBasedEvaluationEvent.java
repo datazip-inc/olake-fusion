@@ -20,13 +20,8 @@
 
 package io.olake.fusion.optimizing.evaluation;
 
-import static io.olake.fusion.TableFormat.ICEBERG;
-import static io.olake.fusion.TableFormat.MIXED_HIVE;
-import static io.olake.fusion.TableFormat.MIXED_ICEBERG;
-
-import io.olake.fusion.TableFormat;
 import io.olake.fusion.config.OptimizingConfig;
-import io.olake.fusion.table.MixedTable;
+import org.apache.iceberg.Table;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,23 +34,24 @@ public class MetadataBasedEvaluationEvent {
   }
 
   public static boolean isEvaluatingNecessary(
-      OptimizingConfig config, MixedTable table, long lastPlanTime) {
+      OptimizingConfig config, Table table, long lastPlanTime) {
     // Step 1: Perform periodic scheduling according to the fallback interval to avoid false
     // positives or
     // missed triggers based on metadata metric-driven evaluation
     if (isReachFallbackInterval(config, lastPlanTime)) {
-      logger.debug("Maximum interval for evaluating table {} has reached.", table.id());
+      logger.debug("Maximum interval for evaluating table {} has reached.", table.name());
       return true;
     }
 
     TableStatsProvider.BasicFileStats basicStats = getTableStats(table);
-    // Currently only supports ICEBERG and mixed formats (MIXED_ICEBERG, MIXED_HIVE).
+    // Currently only supports ICEBERG.
     // For other formats this will return null.
     if (basicStats != null) {
       // Step 2: Empty table should skip evaluating pending input
       //    TableStatsProvider provider = getTableStatsProvider(table);
       if (basicStats.dataFileCnt == 0) {
-        logger.debug("Table {} contains no data files, skip evaluating pending input.", table.id());
+        logger.debug(
+            "Table {} contains no data files, skip evaluating pending input.", table.name());
         return false;
       }
 
@@ -71,7 +67,7 @@ public class MetadataBasedEvaluationEvent {
       if (basicStats.deleteFileCnt == 0 && avgFileSize > minTargetSize) {
         logger.debug(
             "Table {} contains only appended data and no deleted files (average file size: {}), skip evaluating pending input.",
-            table.id(),
+            table.name(),
             avgFileSize);
         return false;
       }
@@ -79,19 +75,8 @@ public class MetadataBasedEvaluationEvent {
     return true;
   }
 
-  private static TableStatsProvider.BasicFileStats getTableStats(MixedTable table) {
-    TableFormat format = table.format();
-    if (format.equals(ICEBERG) || format.equals(MIXED_ICEBERG) || format.equals(MIXED_HIVE)) {
-      TableStatsProvider provider = MixedAndIcebergTableStatsProvider.INSTANCE;
-      return provider.collect(table);
-    } else {
-      // Unsupported table format for metadata-based evaluation
-      // PAIMON and HUDI formats are currently not supported because obtaining basic statistics
-      // requires traversing manifest files, which would add extra planning overhead.
-      // In the future, if there is a more efficient way to get these stats,
-      // we can extend TableStatsProvider to support these formats.
-      return null;
-    }
+  private static TableStatsProvider.BasicFileStats getTableStats(Table table) {
+    return IcebergTableStatsProvider.INSTANCE.collect(table);
   }
 
   public static boolean isPartitionPendingNecessary(

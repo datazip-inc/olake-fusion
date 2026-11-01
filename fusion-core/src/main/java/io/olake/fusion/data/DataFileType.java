@@ -20,18 +20,16 @@
 
 package io.olake.fusion.data;
 
-import io.olake.fusion.table.BaseTable;
-import io.olake.fusion.table.ChangeTable;
 import org.apache.iceberg.FileContent;
 
 /**
  * Data file type, one of:
  *
  * <ul>
- *   <li>BASE_FILE: store data record in {@link BaseTable}
- *   <li>INSERT_LINE: store data record in {@link ChangeTable}
- *   <li>EQ_DELETE_FILE: store equality delete record in {@link ChangeTable}
- *   <li>POS_DELETE_FILE: store positional delete record in {@link BaseTable}
+ *   <li>BASE_FILE: store data record in the base store
+ *   <li>INSERT_LINE: store data record in the change store of a mixed-format table
+ *   <li>EQ_DELETE_FILE: store equality delete record in the change store of a mixed-format table
+ *   <li>POS_DELETE_FILE: store positional delete record in the base store
  *   <li>ICEBERG_EQ_DELETE_FILE: store equality delete record in native iceberg table
  * </ul>
  */

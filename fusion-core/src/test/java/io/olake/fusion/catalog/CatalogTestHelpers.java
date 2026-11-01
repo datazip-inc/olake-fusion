@@ -25,21 +25,17 @@ import io.olake.fusion.api.CatalogMeta;
 import io.olake.fusion.properties.CatalogMetaProperties;
 import org.apache.hadoop.conf.Configuration;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
-import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
 
 public class CatalogTestHelpers {
-  private static final String HADOOP_EMPTY_CONFIG_BASE64 =
-      Base64.getEncoder()
-          .encodeToString("<configuration></configuration>".getBytes(StandardCharsets.UTF_8));
 
+  /**
+   * Catalog meta on the local file system: storage type {@code Local}, which uses the default
+   * Hadoop configuration, and no authentication.
+   */
   public static CatalogMeta buildCatalogMeta(
       String catalogName,
       String type,
@@ -48,22 +44,9 @@ public class CatalogTestHelpers {
     Map<String, String> storageConfig = new HashMap<>();
     storageConfig.put(
         CatalogMetaProperties.STORAGE_CONFIGS_KEY_TYPE,
-        CatalogMetaProperties.STORAGE_CONFIGS_VALUE_TYPE_HADOOP);
-    storageConfig.put(
-        CatalogMetaProperties.STORAGE_CONFIGS_KEY_CORE_SITE, HADOOP_EMPTY_CONFIG_BASE64);
-    storageConfig.put(
-        CatalogMetaProperties.STORAGE_CONFIGS_KEY_HDFS_SITE, HADOOP_EMPTY_CONFIG_BASE64);
-    if (CatalogMetaProperties.CATALOG_TYPE_HIVE.equalsIgnoreCase(type)) {
-      storageConfig.put(
-          CatalogMetaProperties.STORAGE_CONFIGS_KEY_HIVE_SITE, HADOOP_EMPTY_CONFIG_BASE64);
-    }
+        CatalogMetaProperties.STORAGE_CONFIGS_VALUE_TYPE_LOCAL);
 
     Map<String, String> authConfig = new HashMap<>();
-    authConfig.put(
-        CatalogMetaProperties.AUTH_CONFIGS_KEY_TYPE,
-        CatalogMetaProperties.AUTH_CONFIGS_VALUE_TYPE_SIMPLE);
-    authConfig.put(
-        CatalogMetaProperties.AUTH_CONFIGS_KEY_HADOOP_USERNAME, System.getProperty("user.name"));
 
     if (tableFormats != null && tableFormats.length > 0) {
       properties.put(
@@ -73,30 +56,20 @@ public class CatalogTestHelpers {
     return new CatalogMeta(catalogName, type, storageConfig, authConfig, properties);
   }
 
+  /**
+   * Hive catalog meta for a test metastore. {@code properties} must carry the metastore {@code
+   * uri}; the client pool size of the test metastore configuration is passed on as {@code clients}.
+   */
   public static CatalogMeta buildHiveCatalogMeta(
       String catalogName,
       Map<String, String> properties,
       Configuration hiveConfiguration,
       TableFormat... tableFormats) {
-    CatalogMeta meta =
-        buildCatalogMeta(
-            catalogName, CatalogMetaProperties.CATALOG_TYPE_HIVE, properties, tableFormats);
-    meta.getStorageConfigs()
-        .put(
-            CatalogMetaProperties.STORAGE_CONFIGS_KEY_HIVE_SITE,
-            encodeHadoopConfiguration(hiveConfiguration));
-    return meta;
-  }
-
-  public static String encodeHadoopConfiguration(Configuration conf) {
-    try {
-      ByteArrayOutputStream out = new ByteArrayOutputStream();
-      conf.writeXml(out);
-      String configurationString = out.toString();
-      return Base64.getEncoder()
-          .encodeToString(configurationString.getBytes(StandardCharsets.UTF_8));
-    } catch (IOException e) {
-      throw new UncheckedIOException(e);
+    String clientPoolSize = hiveConfiguration.get("iceberg.hive.client-pool-size");
+    if (clientPoolSize != null) {
+      properties.putIfAbsent(CatalogMetaProperties.CLIENT_POOL_SIZE, clientPoolSize);
     }
+    return buildCatalogMeta(
+        catalogName, CatalogMetaProperties.CATALOG_TYPE_HIVE, properties, tableFormats);
   }
 }

@@ -44,10 +44,10 @@ public final class TableFormat implements Serializable {
   /** Open-source table formats */
   public static final TableFormat ICEBERG = register("ICEBERG");
 
-  public static final TableFormat MIXED_ICEBERG = register("MIXED_ICEBERG");
-  public static final TableFormat MIXED_HIVE = register("MIXED_HIVE");
-  public static final TableFormat PAIMON = register("PAIMON");
-  public static final TableFormat HUDI = register("HUDI");
+  static {
+    // Legacy name only, so stored catalog/table rows still parse and are rejected; never supported.
+    register("MIXED_ICEBERG");
+  }
 
   /**
    * Get all registered formats

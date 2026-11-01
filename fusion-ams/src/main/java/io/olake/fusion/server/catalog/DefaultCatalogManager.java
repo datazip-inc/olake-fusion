@@ -24,16 +24,13 @@ import static io.olake.fusion.properties.CatalogMetaProperties.CATALOG_TYPE_HIVE
 import static io.olake.fusion.properties.CatalogMetaProperties.CLIENT_POOL_SIZE;
 import static io.olake.fusion.properties.CatalogMetaProperties.CLIENT_POOL_SIZE_DEFAULT;
 
-import io.olake.fusion.Constants;
 import io.olake.fusion.FusionTable;
 import io.olake.fusion.api.CatalogMeta;
 import io.olake.fusion.config.Configurations;
 import io.olake.fusion.exception.AlreadyExistsException;
 import io.olake.fusion.exception.IllegalMetadataException;
 import io.olake.fusion.exception.ObjectNotExistsException;
-import io.olake.fusion.properties.CatalogMetaProperties;
 import io.olake.fusion.server.FusionManagementConf;
-import io.olake.fusion.server.dashboard.utils.AmsUtil;
 import io.olake.fusion.server.persistence.PersistentBase;
 import io.olake.fusion.server.persistence.mapper.CatalogMetaMapper;
 import io.olake.fusion.server.utils.Telemetry;
@@ -152,18 +149,6 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
   }
 
   @Override
-  public InternalCatalog getInternalCatalog(String catalogName) {
-    ServerCatalog serverCatalog = getServerCatalog(catalogName);
-    if (serverCatalog == null) {
-      throw new ObjectNotExistsException("Catalog " + catalogName);
-    }
-    if (serverCatalog.isInternal()) {
-      return (InternalCatalog) serverCatalog;
-    }
-    throw new ObjectNotExistsException("Catalog " + catalogName + " is not internal catalog");
-  }
-
-  @Override
   public List<ServerCatalog> getServerCatalogs() {
     List<ServerCatalog> serverCatalogs = Lists.newArrayList();
     for (CatalogMeta c : listCatalogMetas()) {
@@ -225,10 +210,6 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
     String type = catalogMeta.getCatalogType();
 
     if (CATALOG_TYPE_HIVE.equals(type)) {
-      String amsUri =
-          AmsUtil.getAMSThriftAddress(serverConfiguration, Constants.THRIFT_TABLE_SERVICE_NAME);
-      catalogMeta.getCatalogProperties().put(CatalogMetaProperties.AMS_URI, amsUri);
-
       catalogMeta
           .getCatalogProperties()
           .putIfAbsent(CLIENT_POOL_SIZE, String.valueOf(CLIENT_POOL_SIZE_DEFAULT));
@@ -240,15 +221,6 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
     doAs(
         CatalogMetaMapper.class,
         mapper -> {
-          CatalogMeta meta = mapper.getCatalog(catalogName);
-          if (isInternal(meta)) {
-            int dbCount = mapper.selectDatabaseCount(catalogName);
-            int tblCount = mapper.selectTableCount(catalogName);
-            if (dbCount > 0 || tblCount > 0) {
-              throw new IllegalMetadataException(
-                  "Cannot drop internal catalog with databases or tables");
-            }
-          }
           mapper.deleteCatalog(catalogName);
           metaCache.invalidate(catalogName);
         });
@@ -278,7 +250,7 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
   }
 
   @Override
-  public FusionTable<?> loadTable(TableIdentifier identifier) {
+  public FusionTable loadTable(TableIdentifier identifier) {
     ServerCatalog serverCatalog = getServerCatalog(identifier.getCatalog());
     return serverCatalog.loadTable(identifier.getDatabase(), identifier.getTableName());
   }
@@ -318,9 +290,5 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
           return null;
         });
     metaCache.invalidate(name);
-  }
-
-  private static boolean isInternal(CatalogMeta meta) {
-    return CatalogMetaProperties.CATALOG_TYPE_AMS.equalsIgnoreCase(meta.getCatalogType());
   }
 }

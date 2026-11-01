@@ -32,7 +32,7 @@ import io.olake.fusion.catalog.BasicCatalogTestHelper;
 import io.olake.fusion.catalog.CatalogTestHelper;
 import io.olake.fusion.exception.IllegalTaskStateException;
 import io.olake.fusion.exception.PluginRetryAuthException;
-import io.olake.fusion.io.MixedDataTestHelpers;
+import io.olake.fusion.io.DataTestHelpers;
 import io.olake.fusion.optimizing.RewriteFilesOutput;
 import io.olake.fusion.optimizing.TableOptimizing;
 import io.olake.fusion.process.ProcessStatus;
@@ -42,13 +42,12 @@ import io.olake.fusion.server.resource.OptimizerInstance;
 import io.olake.fusion.server.scheduler.inline.TableRuntimeRefreshExecutor;
 import io.olake.fusion.server.table.AMSTableTestBase;
 import io.olake.fusion.server.table.DefaultTableRuntime;
-import io.olake.fusion.table.MixedTable;
-import io.olake.fusion.table.UnkeyedTable;
 import io.olake.fusion.utils.SerializationUtil;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Lists;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Maps;
 import org.apache.iceberg.AppendFiles;
 import org.apache.iceberg.DataFile;
+import org.apache.iceberg.Table;
 import org.apache.iceberg.data.Record;
 import org.junit.After;
 import org.junit.Before;
@@ -112,21 +111,19 @@ public class TestDefaultOptimizingService extends AMSTableTestBase {
   }
 
   private void initTableWithFiles() {
-    MixedTable mixedTable =
-        (MixedTable) tableService().loadTable(serverTableIdentifier()).originalTable();
-    appendData(mixedTable.asUnkeyedTable(), 1);
-    appendData(mixedTable.asUnkeyedTable(), 2);
+    Table mixedTable = tableService().loadTable(serverTableIdentifier()).table();
+    appendData(mixedTable, 1);
+    appendData(mixedTable, 2);
     DefaultTableRuntime runtime = getDefaultTableRuntime(serverTableIdentifier().getId());
 
     runtime.refresh(tableService().loadTable(serverTableIdentifier()));
   }
 
-  private void appendData(UnkeyedTable table, int id) {
+  private void appendData(Table table, int id) {
     ArrayList<Record> newRecords =
         Lists.newArrayList(
-            MixedDataTestHelpers.createRecord(
-                table.schema(), id, "111", 0L, "2022-01-01T12:00:00"));
-    List<DataFile> dataFiles = MixedDataTestHelpers.writeBaseStore(table, 0L, newRecords, false);
+            DataTestHelpers.createRecord(table.schema(), id, "111", 0L, "2022-01-01T12:00:00"));
+    List<DataFile> dataFiles = DataTestHelpers.writeDataFiles(table, newRecords);
     AppendFiles appendFiles = table.newAppend();
     dataFiles.forEach(appendFiles::appendFile);
     appendFiles.commit();
@@ -419,6 +416,8 @@ public class TestDefaultOptimizingService extends AMSTableTestBase {
     OptimizerRegisterInfo registerInfo = new OptimizerRegisterInfo();
     Map<String, String> registerProperties = Maps.newHashMap();
     registerProperties.put(OptimizerProperties.OPTIMIZER_HEART_BEAT_INTERVAL, "100");
+    registerProperties.put(
+        OptimizerProperties.OPTIMIZER_TASK_FORMAT, OptimizerProperties.OPTIMIZER_TASK_FORMAT_VALUE);
     registerInfo.setProperties(registerProperties);
     registerInfo.setThreadCount(1);
     registerInfo.setMemoryMb(1024);

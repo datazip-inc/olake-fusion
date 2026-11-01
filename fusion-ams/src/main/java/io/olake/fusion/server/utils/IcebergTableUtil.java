@@ -20,9 +20,9 @@
 
 package io.olake.fusion.server.utils;
 
+import io.olake.fusion.FusionTable;
 import io.olake.fusion.IcebergFileEntry;
 import io.olake.fusion.ServerTableIdentifier;
-import io.olake.fusion.TableFormat;
 import io.olake.fusion.api.CommitMetaProducer;
 import io.olake.fusion.config.OptimizingConfig;
 import io.olake.fusion.iceberg.Constants;
@@ -30,13 +30,9 @@ import io.olake.fusion.optimizing.plan.AbstractOptimizingEvaluator;
 import io.olake.fusion.optimizing.plan.AbstractOptimizingPlanner;
 import io.olake.fusion.optimizing.plan.IcebergOptimizerEvaluator;
 import io.olake.fusion.optimizing.plan.IcebergOptimizingPlanner;
-import io.olake.fusion.optimizing.plan.MixedIcebergOptimizingEvaluator;
-import io.olake.fusion.optimizing.plan.MixedIcebergOptimizingPlanner;
 import io.olake.fusion.scan.TableEntriesScan;
 import io.olake.fusion.server.table.DefaultTableRuntime;
 import io.olake.fusion.table.BasicTableSnapshot;
-import io.olake.fusion.table.KeyedTableSnapshot;
-import io.olake.fusion.table.MixedTable;
 import io.olake.fusion.table.TableSnapshot;
 import io.olake.fusion.utils.ExpressionUtil;
 import io.olake.fusion.utils.TableFileUtil;
@@ -88,13 +84,8 @@ public class IcebergTableUtil {
     }
   }
 
-  public static TableSnapshot getSnapshot(MixedTable mixedTable, DefaultTableRuntime tableRuntime) {
-    if (mixedTable.isUnkeyedTable()) {
-      return new BasicTableSnapshot(tableRuntime.getCurrentSnapshotId());
-    } else {
-      return new KeyedTableSnapshot(
-          tableRuntime.getCurrentSnapshotId(), tableRuntime.getCurrentChangeSnapshotId());
-    }
+  public static TableSnapshot getSnapshot(DefaultTableRuntime tableRuntime) {
+    return new BasicTableSnapshot(tableRuntime.getCurrentSnapshotId());
   }
 
   public static Snapshot getSnapshot(Table table, boolean refresh) {
@@ -220,7 +211,7 @@ public class IcebergTableUtil {
 
   public static AbstractOptimizingEvaluator createOptimizingEvaluator(
       DefaultTableRuntime tableRuntime,
-      MixedTable table,
+      FusionTable table,
       TableSnapshot snapshot,
       int maxPendingPartitions) {
     ServerTableIdentifier identifier = tableRuntime.getTableIdentifier();
@@ -228,39 +219,19 @@ public class IcebergTableUtil {
     long lastMinor = tableRuntime.getLastMinorOptimizingTime();
     long lastFull = tableRuntime.getLastFullOptimizingTime();
     long lastMajor = tableRuntime.getLastMajorOptimizingTime();
-    if (TableFormat.ICEBERG.equals(table.format())) {
-      return new IcebergOptimizerEvaluator(
-          identifier,
-          config,
-          table,
-          snapshot,
-          maxPendingPartitions,
-          lastMinor,
-          lastFull,
-          lastMajor);
-    } else if (TableFormat.MIXED_ICEBERG.equals(table.format())) {
-      return new MixedIcebergOptimizingEvaluator(
-          identifier,
-          config,
-          table,
-          snapshot,
-          maxPendingPartitions,
-          lastMinor,
-          lastFull,
-          lastMajor);
-    }
-    throw new IllegalStateException("Un-supported table-format:" + table.format().toString());
+    return new IcebergOptimizerEvaluator(
+        identifier, config, table, snapshot, maxPendingPartitions, lastMinor, lastFull, lastMajor);
   }
 
   public static AbstractOptimizingEvaluator createOptimizingEvaluator(
-      DefaultTableRuntime tableRuntime, MixedTable table, int maxPendingPartitions) {
-    TableSnapshot snapshot = IcebergTableUtil.getSnapshot(table, tableRuntime);
+      DefaultTableRuntime tableRuntime, FusionTable table, int maxPendingPartitions) {
+    TableSnapshot snapshot = IcebergTableUtil.getSnapshot(tableRuntime);
     return createOptimizingEvaluator(tableRuntime, table, snapshot, maxPendingPartitions);
   }
 
   public static AbstractOptimizingPlanner createOptimizingPlanner(
       DefaultTableRuntime tableRuntime,
-      MixedTable table,
+      FusionTable table,
       double availableCore,
       long maxInputSizePerThread,
       long processId) {
@@ -271,7 +242,7 @@ public class IcebergTableUtil {
                 .map(
                     entry ->
                         ExpressionUtil.convertPartitionDataToDataFilter(
-                            table, entry.getKey(), entry.getValue()))
+                            table.table(), entry.getKey(), entry.getValue()))
                 .reduce(Expressions::or)
                 .orElse(Expressions.alwaysTrue());
     ServerTableIdentifier identifier = tableRuntime.getTableIdentifier();
@@ -279,34 +250,18 @@ public class IcebergTableUtil {
     long lastMinor = tableRuntime.getLastMinorOptimizingTime();
     long lastFull = tableRuntime.getLastFullOptimizingTime();
     long lastMajor = tableRuntime.getLastMajorOptimizingTime();
-    TableSnapshot snapshot = IcebergTableUtil.getSnapshot(table, tableRuntime);
-    if (TableFormat.ICEBERG.equals(table.format())) {
-      return new IcebergOptimizingPlanner(
-          identifier,
-          config,
-          table,
-          snapshot,
-          partitionFilter,
-          processId,
-          availableCore,
-          maxInputSizePerThread,
-          lastMinor,
-          lastFull,
-          lastMajor);
-    } else if (TableFormat.MIXED_ICEBERG.equals(table.format())) {
-      return new MixedIcebergOptimizingPlanner(
-          identifier,
-          config,
-          table,
-          snapshot,
-          partitionFilter,
-          processId,
-          availableCore,
-          maxInputSizePerThread,
-          lastMinor,
-          lastFull,
-          lastMajor);
-    }
-    throw new IllegalStateException("Unsupported table format:" + table.format().toString());
+    TableSnapshot snapshot = IcebergTableUtil.getSnapshot(tableRuntime);
+    return new IcebergOptimizingPlanner(
+        identifier,
+        config,
+        table,
+        snapshot,
+        partitionFilter,
+        processId,
+        availableCore,
+        maxInputSizePerThread,
+        lastMinor,
+        lastFull,
+        lastMajor);
   }
 }

@@ -20,8 +20,8 @@
 
 package io.olake.fusion.server.catalog;
 
-import io.olake.fusion.FusionCatalog;
 import io.olake.fusion.formats.FusionCatalogTestHelper;
+import io.olake.fusion.formats.iceberg.IcebergCatalog;
 import io.olake.fusion.hive.TestHMS;
 import io.olake.fusion.server.AMSServiceTestBase;
 import org.junit.After;
@@ -40,7 +40,7 @@ public class TableCatalogTestBase extends AMSServiceTestBase {
 
   private final FusionCatalogTestHelper<?> amoroCatalogTestHelper;
 
-  private FusionCatalog amoroCatalog;
+  private IcebergCatalog amoroCatalog;
 
   private Object originalCatalog;
 
@@ -64,7 +64,7 @@ public class TableCatalogTestBase extends AMSServiceTestBase {
     amoroCatalogTestHelper.clean();
   }
 
-  public FusionCatalog getAmoroCatalog() {
+  public IcebergCatalog getAmoroCatalog() {
     return amoroCatalog;
   }
 

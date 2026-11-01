@@ -37,7 +37,6 @@ public class TestSparkContextUtil {
   private static Configurations sessionConfig(String connector) {
     Configurations config = new Configurations();
     config.set(SessionConfigOptions.CATALOGS, Lists.newArrayList(CATALOG));
-    config.set(SessionConfigOptions.CATALOG_URL_BASE, "thrift://localhost:1260");
     config.set(SessionConfigOptions.catalogConnector(CATALOG), connector);
     config.set(SessionConfigOptions.catalogProperty(CATALOG, "type"), "rest");
     config.set(SessionConfigOptions.catalogProperty(CATALOG, "uri"), "http://localhost:8181");

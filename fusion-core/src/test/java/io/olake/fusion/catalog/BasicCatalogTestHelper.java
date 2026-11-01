@@ -20,10 +20,9 @@
 
 package io.olake.fusion.catalog;
 
-import io.olake.fusion.CommonUnifiedCatalog;
 import io.olake.fusion.TableFormat;
-import io.olake.fusion.UnifiedCatalog;
 import io.olake.fusion.api.CatalogMeta;
+import io.olake.fusion.formats.iceberg.IcebergCatalog;
 import io.olake.fusion.properties.CatalogMetaProperties;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Maps;
@@ -77,8 +76,8 @@ public class BasicCatalogTestHelper implements CatalogTestHelper {
   }
 
   @Override
-  public UnifiedCatalog buildUnifiedCatalog(CatalogMeta catalogMeta) {
-    return new CommonUnifiedCatalog(() -> catalogMeta, Maps.newHashMap());
+  public IcebergCatalog buildFusionCatalog(CatalogMeta catalogMeta) {
+    return IcebergCatalog.of(catalogMeta);
   }
 
   @Override

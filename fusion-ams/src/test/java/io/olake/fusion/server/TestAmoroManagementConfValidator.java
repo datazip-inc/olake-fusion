@@ -48,7 +48,7 @@ public class TestAmoroManagementConfValidator {
   }
 
   public static Stream<Arguments> testValidateDBConfig() {
-    return Stream.of(Arguments.of("mysql"), Arguments.of("postgres"));
+    return Stream.of(Arguments.of("postgres"));
   }
 
   @ParameterizedTest
@@ -78,19 +78,6 @@ public class TestAmoroManagementConfValidator {
   }
 
   @Test
-  public void testValidateHAConfig() {
-    Configurations configurations = new Configurations();
-    configurations.setString(FusionManagementConf.SERVER_EXPOSE_HOST, "127.0.0.1");
-    configurations.setBoolean(FusionManagementConf.HA_ENABLE, true);
-    Assert.assertThrows(
-        IllegalArgumentException.class,
-        () -> FusionManagementConfValidator.validateConfig(configurations));
-
-    configurations.setString(FusionManagementConf.HA_ZOOKEEPER_ADDRESS, "127.0.0.1:2181");
-    FusionManagementConfValidator.validateConfig(configurations);
-  }
-
-  @Test
   public void testValidateTerminalBackend() {
     Configurations configurations = new Configurations();
     configurations.setString(FusionManagementConf.SERVER_EXPOSE_HOST, "127.0.0.1");
@@ -104,7 +91,9 @@ public class TestAmoroManagementConfValidator {
     FusionManagementConfValidator.validateConfig(configurations);
 
     configurations.setString(FusionManagementConf.TERMINAL_BACKEND, "kyuubi");
-    FusionManagementConfValidator.validateConfig(configurations);
+    Assert.assertThrows(
+        IllegalArgumentException.class,
+        () -> FusionManagementConfValidator.validateConfig(configurations));
 
     configurations.setString(FusionManagementConf.TERMINAL_BACKEND, "custom");
     FusionManagementConfValidator.validateConfig(configurations);
@@ -143,14 +132,6 @@ public class TestAmoroManagementConfValidator {
         IllegalArgumentException.class,
         () -> FusionManagementConfValidator.validateConfig(configurations));
     configurations.setInteger(FusionManagementConf.CLEAN_ORPHAN_FILES_THREAD_COUNT, 10);
-    FusionManagementConfValidator.validateConfig(configurations);
-
-    configurations.setBoolean(FusionManagementConf.SYNC_HIVE_TABLES_ENABLED, true);
-    configurations.setInteger(FusionManagementConf.SYNC_HIVE_TABLES_THREAD_COUNT, -1);
-    Assert.assertThrows(
-        IllegalArgumentException.class,
-        () -> FusionManagementConfValidator.validateConfig(configurations));
-    configurations.setInteger(FusionManagementConf.SYNC_HIVE_TABLES_THREAD_COUNT, 10);
     FusionManagementConfValidator.validateConfig(configurations);
   }
 }

@@ -53,9 +53,9 @@ public class TestPeriodicTableSchedulerCleanup extends PersistentBase {
 
   static {
     try {
-      Class.forName("io.olake.fusion.server.table.DerbyPersistence");
+      Class.forName("io.olake.fusion.server.persistence.PostgresPersistence");
     } catch (Exception e) {
-      throw new RuntimeException("Failed to initialize Derby persistence", e);
+      throw new RuntimeException("Failed to initialize Postgres persistence", e);
     }
   }
 
@@ -171,7 +171,6 @@ public class TestPeriodicTableSchedulerCleanup extends PersistentBase {
         Arrays.asList(
             CleanupOperation.ORPHAN_FILES_CLEANING,
             CleanupOperation.DANGLING_DELETE_FILES_CLEANING,
-            CleanupOperation.DATA_EXPIRING,
             CleanupOperation.SNAPSHOTS_EXPIRING);
 
     for (CleanupOperation operation : operations) {
@@ -196,7 +195,6 @@ public class TestPeriodicTableSchedulerCleanup extends PersistentBase {
         Arrays.asList(
             CleanupOperation.ORPHAN_FILES_CLEANING,
             CleanupOperation.DANGLING_DELETE_FILES_CLEANING,
-            CleanupOperation.DATA_EXPIRING,
             CleanupOperation.SNAPSHOTS_EXPIRING);
 
     for (CleanupOperation operation : operations) {
@@ -226,7 +224,6 @@ public class TestPeriodicTableSchedulerCleanup extends PersistentBase {
         Arrays.asList(
             CleanupOperation.ORPHAN_FILES_CLEANING,
             CleanupOperation.DANGLING_DELETE_FILES_CLEANING,
-            CleanupOperation.DATA_EXPIRING,
             CleanupOperation.SNAPSHOTS_EXPIRING);
 
     for (CleanupOperation operation : operations) {

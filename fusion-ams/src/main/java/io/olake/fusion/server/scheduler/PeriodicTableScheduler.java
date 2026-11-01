@@ -269,7 +269,7 @@ public abstract class PeriodicTableScheduler extends RuntimeHandlerChain {
   public void handleStatusChanged(TableRuntime tableRuntime, OptimizingStatus originalStatus) {}
 
   @Override
-  public void handleTableAdded(FusionTable<?> table, TableRuntime tableRuntime) {
+  public void handleTableAdded(FusionTable table, TableRuntime tableRuntime) {
     scheduleIfNecessary(tableRuntime, getStartDelay());
   }
 
@@ -312,7 +312,7 @@ public abstract class PeriodicTableScheduler extends RuntimeHandlerChain {
     return START_DELAY + getExecutorDelay();
   }
 
-  protected FusionTable<?> loadTable(TableRuntime tableRuntime) {
+  protected FusionTable loadTable(TableRuntime tableRuntime) {
     return tableService.loadTable(tableRuntime.getTableIdentifier());
   }
 

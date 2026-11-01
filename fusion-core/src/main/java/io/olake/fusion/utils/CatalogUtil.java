@@ -22,14 +22,21 @@ package io.olake.fusion.utils;
 
 import io.olake.fusion.TableFormat;
 import io.olake.fusion.api.CatalogMeta;
-import io.olake.fusion.api.TableMeta;
 import io.olake.fusion.properties.CatalogMetaProperties;
 import io.olake.fusion.table.TableIdentifier;
 import io.olake.fusion.table.TableMetaStore;
+import io.olake.fusion.table.TableProperties;
+import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Maps;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Sets;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.iceberg.CachingCatalog;
+import org.apache.iceberg.CatalogProperties;
+import org.apache.iceberg.aws.glue.GlueCatalog;
+import org.apache.iceberg.catalog.Catalog;
+import org.apache.iceberg.rest.RESTCatalog;
+import org.apache.iceberg.util.PropertyUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -73,16 +80,13 @@ public class CatalogUtil {
 
     // Generate table format from catalog type for compatibility with older versions
     switch (metastoreType) {
-      case CatalogMetaProperties.CATALOG_TYPE_AMS:
-        return Sets.newHashSet(TableFormat.MIXED_ICEBERG);
       case CatalogMetaProperties.CATALOG_TYPE_CUSTOM:
       case CatalogMetaProperties.CATALOG_TYPE_REST:
       case CatalogMetaProperties.CATALOG_TYPE_HADOOP:
       case CatalogMetaProperties.CATALOG_TYPE_FILESYSTEM:
       case CatalogMetaProperties.CATALOG_TYPE_GLUE:
-        return Sets.newHashSet(TableFormat.ICEBERG);
       case CatalogMetaProperties.CATALOG_TYPE_HIVE:
-        return Sets.newHashSet(TableFormat.MIXED_HIVE);
+        return Sets.newHashSet(TableFormat.ICEBERG);
       default:
         throw new IllegalArgumentException("Unsupported catalog type:" + metastoreType);
     }
@@ -117,111 +121,162 @@ public class CatalogUtil {
                         e.getKey()
                             .substring(CatalogMetaProperties.TABLE_PROPERTIES_PREFIX.length()),
                     Map.Entry::getValue));
+
+    if (!PropertyUtil.propertyAsBoolean(
+        tableProperties,
+        TableProperties.ENABLE_LOG_STORE,
+        TableProperties.ENABLE_LOG_STORE_DEFAULT)) {
+      mergedProperties =
+          mergedProperties.entrySet().stream()
+              .filter(
+                  e -> !e.getKey().startsWith(CatalogMetaProperties.LOG_STORE_PROPERTIES_PREFIX))
+              .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    String optimizationEnabled =
+        tableProperties.getOrDefault(
+            TableProperties.ENABLE_SELF_OPTIMIZING,
+            mergedProperties.getOrDefault(
+                TableProperties.ENABLE_SELF_OPTIMIZING,
+                String.valueOf(TableProperties.ENABLE_SELF_OPTIMIZING_DEFAULT)));
+    if (!Boolean.parseBoolean(optimizationEnabled)) {
+      mergedProperties =
+          mergedProperties.entrySet().stream()
+              .filter(e -> !e.getKey().startsWith(CatalogMetaProperties.OPTIMIZE_PROPERTIES_PREFIX))
+              .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+      // maintain 'optimize.enable' flag as false in table properties
+      mergedProperties.put(TableProperties.ENABLE_SELF_OPTIMIZING, optimizationEnabled);
+    }
     mergedProperties.putAll(tableProperties);
+
     return mergedProperties;
   }
 
-  /** Build {@link TableMetaStore} from catalog meta. */
-  public static TableMetaStore buildMetaStore(CatalogMeta catalogMeta) {
-    // load storage configs
-    TableMetaStore.Builder builder = TableMetaStore.builder();
-    boolean isLocalStorage = false;
-    if (catalogMeta.getStorageConfigs() != null) {
-      Map<String, String> storageConfigs = catalogMeta.getStorageConfigs();
-      String storageType = CatalogUtil.getCompatibleStorageType(storageConfigs);
-      isLocalStorage =
-          CatalogMetaProperties.STORAGE_CONFIGS_VALUE_TYPE_LOCAL.equalsIgnoreCase(storageType);
-      if (CatalogMetaProperties.STORAGE_CONFIGS_VALUE_TYPE_HADOOP.equalsIgnoreCase(storageType)) {
-        String coreSite = storageConfigs.get(CatalogMetaProperties.STORAGE_CONFIGS_KEY_CORE_SITE);
-        String hdfsSite = storageConfigs.get(CatalogMetaProperties.STORAGE_CONFIGS_KEY_HDFS_SITE);
-        String hiveSite = storageConfigs.get(CatalogMetaProperties.STORAGE_CONFIGS_KEY_HIVE_SITE);
-        builder
-            .withBase64CoreSite(coreSite)
-            .withBase64MetaStoreSite(hiveSite)
-            .withBase64HdfsSite(hdfsSite);
-      } else if (isLocalStorage) {
-        builder.withConfiguration(new Configuration());
-      }
+  /**
+   * add initialize properties for iceberg catalog
+   *
+   * @param catalogName - catalog name
+   * @param metastoreType - metastore type
+   * @param properties - catalog properties
+   * @return catalog properties with initialize properties.
+   */
+  public static Map<String, String> withIcebergCatalogInitializeProperties(
+      String catalogName, String metastoreType, Map<String, String> properties) {
+    Map<String, String> icebergCatalogProperties = Maps.newHashMap(properties);
+    icebergCatalogProperties.put(
+        org.apache.iceberg.CatalogUtil.ICEBERG_CATALOG_TYPE,
+        CatalogUtil.normalizeCatalogType(metastoreType));
+    if (CatalogMetaProperties.CATALOG_TYPE_GLUE.equals(metastoreType)) {
+      icebergCatalogProperties.put(CatalogProperties.CATALOG_IMPL, GlueCatalog.class.getName());
+    }
+    if (CatalogMetaProperties.CATALOG_TYPE_REST.equals(metastoreType)) {
+      icebergCatalogProperties.put(CatalogProperties.CATALOG_IMPL, RESTCatalog.class.getName());
     }
 
-    if (!isLocalStorage) {
-      boolean loadAuthFromAMS =
-          propertyAsBoolean(
-              catalogMeta.getCatalogProperties(),
-              CatalogMetaProperties.LOAD_AUTH_FROM_AMS,
-              CatalogMetaProperties.LOAD_AUTH_FROM_AMS_DEFAULT);
-      // load auth configs from ams
-      if (loadAuthFromAMS) {
-        if (catalogMeta.getAuthConfigs() != null) {
-          Map<String, String> authConfigs = catalogMeta.getAuthConfigs();
-          String authType = authConfigs.get(CatalogMetaProperties.AUTH_CONFIGS_KEY_TYPE);
-          LOG.info("TableMetaStore use auth config in catalog meta, authType is {}", authType);
-          if (CatalogMetaProperties.AUTH_CONFIGS_VALUE_TYPE_SIMPLE.equalsIgnoreCase(authType)) {
-            String hadoopUsername =
-                authConfigs.get(CatalogMetaProperties.AUTH_CONFIGS_KEY_HADOOP_USERNAME);
-            builder.withSimpleAuth(hadoopUsername);
-          } else if (CatalogMetaProperties.AUTH_CONFIGS_VALUE_TYPE_KERBEROS.equalsIgnoreCase(
-              authType)) {
-            String krb5 = authConfigs.get(CatalogMetaProperties.AUTH_CONFIGS_KEY_KRB5);
-            String keytab = authConfigs.get(CatalogMetaProperties.AUTH_CONFIGS_KEY_KEYTAB);
-            String principal = authConfigs.get(CatalogMetaProperties.AUTH_CONFIGS_KEY_PRINCIPAL);
-            builder.withBase64KrbAuth(keytab, krb5, principal);
-          } else if (CatalogMetaProperties.AUTH_CONFIGS_VALUE_TYPE_AK_SK.equalsIgnoreCase(
-              authType)) {
-            String accessKey = authConfigs.get(CatalogMetaProperties.AUTH_CONFIGS_KEY_ACCESS_KEY);
-            String secretKey = authConfigs.get(CatalogMetaProperties.AUTH_CONFIGS_KEY_SECRET_KEY);
-            String storageType =
-                catalogMeta.getStorageConfigs().get(CatalogMetaProperties.STORAGE_CONFIGS_KEY_TYPE);
-            builder.withAkSkAuth(accessKey, secretKey, storageType);
-          }
-        }
-      }
+    if (CatalogMetaProperties.CATALOG_TYPE_CUSTOM.equalsIgnoreCase(metastoreType)) {
+      Preconditions.checkArgument(
+          icebergCatalogProperties.containsKey(CatalogProperties.CATALOG_IMPL),
+          "Custom catalog properties must contains " + CatalogProperties.CATALOG_IMPL);
+    }
 
-      // cover auth configs from ams with auth configs in properties
+    if (icebergCatalogProperties.containsKey(CatalogProperties.CATALOG_IMPL)) {
+      icebergCatalogProperties.remove(org.apache.iceberg.CatalogUtil.ICEBERG_CATALOG_TYPE);
+    }
+
+    return icebergCatalogProperties;
+  }
+
+  /**
+   * Build cache catalog.
+   *
+   * @param catalog The catalog of the wrap that needs to be cached
+   * @param properties table properties
+   * @return If Cache is enabled, CachingCatalog is returned, otherwise, the input catalog is
+   *     returned
+   */
+  public static Catalog buildCacheCatalog(Catalog catalog, Map<String, String> properties) {
+    boolean cacheEnabled =
+        PropertyUtil.propertyAsBoolean(
+            properties, CatalogProperties.CACHE_ENABLED, CatalogProperties.CACHE_ENABLED_DEFAULT);
+
+    boolean cacheCaseSensitive =
+        PropertyUtil.propertyAsBoolean(
+            properties,
+            CatalogProperties.CACHE_CASE_SENSITIVE,
+            CatalogProperties.CACHE_CASE_SENSITIVE_DEFAULT);
+
+    long cacheExpirationIntervalMs =
+        PropertyUtil.propertyAsLong(
+            properties,
+            CatalogProperties.CACHE_EXPIRATION_INTERVAL_MS,
+            CatalogProperties.CACHE_EXPIRATION_INTERVAL_MS_DEFAULT);
+
+    // An expiration interval of 0ms effectively disables caching.
+    // Do not wrap with CachingCatalog.
+    if (cacheExpirationIntervalMs <= 0) {
+      LOG.warn(
+          "Configuration `{}` is {}, less than or equal to 0, then the cache will not take effect.",
+          CatalogProperties.CACHE_EXPIRATION_INTERVAL_MS,
+          cacheExpirationIntervalMs);
+      cacheEnabled = false;
+    }
+    return cacheEnabled
+        ? CachingCatalog.wrap(catalog, cacheCaseSensitive, cacheExpirationIntervalMs)
+        : catalog;
+  }
+
+  /**
+   * Build {@link TableMetaStore} from catalog meta.
+   *
+   * <p>Storage type {@code Local} uses the default Hadoop configuration without authentication.
+   * Every other storage (S3) authenticates through the catalog's FileIO properties; only the AK/SK
+   * auth type is recorded in the meta store.
+   */
+  public static TableMetaStore buildMetaStore(CatalogMeta catalogMeta) {
+    TableMetaStore.Builder builder = TableMetaStore.builder();
+    Map<String, String> storageConfigs = catalogMeta.getStorageConfigs();
+    if (storageConfigs != null
+        && CatalogMetaProperties.STORAGE_CONFIGS_VALUE_TYPE_LOCAL.equalsIgnoreCase(
+            storageConfigs.get(CatalogMetaProperties.STORAGE_CONFIGS_KEY_TYPE))) {
+      return builder.withConfiguration(new Configuration()).build();
+    }
+
+    boolean loadAuthFromAMS =
+        propertyAsBoolean(
+            catalogMeta.getCatalogProperties(),
+            CatalogMetaProperties.LOAD_AUTH_FROM_AMS,
+            CatalogMetaProperties.LOAD_AUTH_FROM_AMS_DEFAULT);
+    // load auth configs from ams
+    if (loadAuthFromAMS && catalogMeta.getAuthConfigs() != null) {
       String authType =
-          catalogMeta.getCatalogProperties().get(CatalogMetaProperties.AUTH_CONFIGS_KEY_TYPE);
-      if (StringUtils.isNotEmpty(authType)) {
-        LOG.info("TableMetaStore use auth config in properties, authType is {}", authType);
-        if (CatalogMetaProperties.AUTH_CONFIGS_VALUE_TYPE_SIMPLE.equalsIgnoreCase(authType)) {
-          String hadoopUsername =
-              catalogMeta
-                  .getCatalogProperties()
-                  .get(CatalogMetaProperties.AUTH_CONFIGS_KEY_HADOOP_USERNAME);
-          builder.withSimpleAuth(hadoopUsername);
-        } else if (CatalogMetaProperties.AUTH_CONFIGS_VALUE_TYPE_KERBEROS.equalsIgnoreCase(
-            authType)) {
-          String krb5 =
-              catalogMeta.getCatalogProperties().get(CatalogMetaProperties.AUTH_CONFIGS_KEY_KRB5);
-          String keytab =
-              catalogMeta.getCatalogProperties().get(CatalogMetaProperties.AUTH_CONFIGS_KEY_KEYTAB);
-          String principal =
-              catalogMeta
-                  .getCatalogProperties()
-                  .get(CatalogMetaProperties.AUTH_CONFIGS_KEY_PRINCIPAL);
-          builder.withBase64KrbAuth(keytab, krb5, principal);
-        } else if (CatalogMetaProperties.AUTH_CONFIGS_VALUE_TYPE_AK_SK.equalsIgnoreCase(authType)) {
-          String accessKey =
-              catalogMeta
-                  .getCatalogProperties()
-                  .get(CatalogMetaProperties.AUTH_CONFIGS_KEY_ACCESS_KEY);
-          String secretKey =
-              catalogMeta
-                  .getCatalogProperties()
-                  .get(CatalogMetaProperties.AUTH_CONFIGS_KEY_SECRET_KEY);
-          String storageType =
-              catalogMeta.getStorageConfigs().get(CatalogMetaProperties.STORAGE_CONFIGS_KEY_TYPE);
-          builder.withAkSkAuth(accessKey, secretKey, storageType);
-        }
-      }
+          catalogMeta.getAuthConfigs().get(CatalogMetaProperties.AUTH_CONFIGS_KEY_TYPE);
+      LOG.info("TableMetaStore use auth config in catalog meta, authType is {}", authType);
+      applyAkSkAuth(builder, catalogMeta.getAuthConfigs(), storageConfigs);
+    }
+
+    // cover auth configs from ams with auth configs in properties
+    String authType =
+        catalogMeta.getCatalogProperties().get(CatalogMetaProperties.AUTH_CONFIGS_KEY_TYPE);
+    if (StringUtils.isNotEmpty(authType)) {
+      LOG.info("TableMetaStore use auth config in properties, authType is {}", authType);
+      applyAkSkAuth(builder, catalogMeta.getCatalogProperties(), storageConfigs);
     }
     return builder.build();
   }
 
-  public static TableIdentifier tableId(TableMeta tableMeta) {
-    return TableIdentifier.of(
-        tableMeta.getTableIdentifier().getCatalog(),
-        tableMeta.getTableIdentifier().getDatabase(),
-        tableMeta.getTableIdentifier().getTableName());
+  private static void applyAkSkAuth(
+      TableMetaStore.Builder builder,
+      Map<String, String> authConfigs,
+      Map<String, String> storageConfigs) {
+    if (CatalogMetaProperties.AUTH_CONFIGS_VALUE_TYPE_AK_SK.equalsIgnoreCase(
+        authConfigs.get(CatalogMetaProperties.AUTH_CONFIGS_KEY_TYPE))) {
+      builder.withAkSkAuth(
+          authConfigs.get(CatalogMetaProperties.AUTH_CONFIGS_KEY_ACCESS_KEY),
+          authConfigs.get(CatalogMetaProperties.AUTH_CONFIGS_KEY_SECRET_KEY),
+          storageConfigs == null
+              ? null
+              : storageConfigs.get(CatalogMetaProperties.STORAGE_CONFIGS_KEY_TYPE));
+    }
   }
 
   public static io.olake.fusion.api.TableIdentifier amsTableId(TableIdentifier tableIdentifier) {
@@ -229,21 +284,6 @@ public class CatalogUtil {
         tableIdentifier.getCatalog(),
         tableIdentifier.getDatabase(),
         tableIdentifier.getTableName());
-  }
-
-  /**
-   * Get storage type compatible with history storage type `hdfs`, which is `Hadoop` now.
-   *
-   * @param conf - configurations containing `storage.type`
-   * @return storage type, return `Hadoop` if `storage.type` is `hdfs`, return null if
-   *     `storage.type` not exist.
-   */
-  public static String getCompatibleStorageType(Map<String, String> conf) {
-    if (CatalogMetaProperties.STORAGE_CONFIGS_VALUE_TYPE_HDFS_LEGACY.equals(
-        conf.get(CatalogMetaProperties.STORAGE_CONFIGS_KEY_TYPE))) {
-      return CatalogMetaProperties.STORAGE_CONFIGS_VALUE_TYPE_HADOOP;
-    }
-    return conf.get(CatalogMetaProperties.STORAGE_CONFIGS_KEY_TYPE);
   }
 
   /**

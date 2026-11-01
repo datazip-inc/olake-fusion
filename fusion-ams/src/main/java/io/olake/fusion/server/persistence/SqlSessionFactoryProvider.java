@@ -23,18 +23,13 @@ package io.olake.fusion.server.persistence;
 import static com.github.pagehelper.page.PageAutoDialect.registerDialectAlias;
 
 import com.github.pagehelper.PageInterceptor;
-import com.github.pagehelper.dialect.helper.MySqlDialect;
 import com.github.pagehelper.dialect.helper.PostgreSqlDialect;
-import com.github.pagehelper.dialect.helper.SqlServer2012Dialect;
 import io.olake.fusion.server.persistence.mapper.ApiTokensMapper;
 import io.olake.fusion.server.persistence.mapper.CatalogMetaMapper;
-import io.olake.fusion.server.persistence.mapper.HaLeaseMapper;
 import io.olake.fusion.server.persistence.mapper.OptimizerMapper;
 import io.olake.fusion.server.persistence.mapper.OptimizingProcessMapper;
-import io.olake.fusion.server.persistence.mapper.PlatformFileMapper;
 import io.olake.fusion.server.persistence.mapper.PlatformPropertyMapper;
 import io.olake.fusion.server.persistence.mapper.ResourceMapper;
-import io.olake.fusion.server.persistence.mapper.TableBlockerMapper;
 import io.olake.fusion.server.persistence.mapper.TableMetaMapper;
 import io.olake.fusion.server.persistence.mapper.TableProcessMapper;
 import io.olake.fusion.server.persistence.mapper.TableRuntimeMapper;
@@ -73,13 +68,10 @@ public class SqlSessionFactoryProvider {
     configuration.addMapper(CatalogMetaMapper.class);
     configuration.addMapper(OptimizerMapper.class);
     configuration.addMapper(ApiTokensMapper.class);
-    configuration.addMapper(PlatformFileMapper.class);
     configuration.addMapper(PlatformPropertyMapper.class);
     configuration.addMapper(ResourceMapper.class);
-    configuration.addMapper(TableBlockerMapper.class);
     configuration.addMapper(TableProcessMapper.class);
     configuration.addMapper(TableRuntimeMapper.class);
-    configuration.addMapper(HaLeaseMapper.class);
 
     PageInterceptor interceptor = new PageInterceptor();
     Properties interceptorProperties = new Properties();
@@ -89,9 +81,7 @@ public class SqlSessionFactoryProvider {
 
     DatabaseIdProvider provider = new VendorDatabaseIdProvider();
     Properties properties = new Properties();
-    properties.setProperty("MySQL", "mysql");
     properties.setProperty("PostgreSQL", "postgres");
-    properties.setProperty("Derby", "derby");
     provider.setProperties(properties);
     configuration.setDatabaseId(provider.getDatabaseId(dataSource));
     if (sqlSessionFactory == null) {
@@ -105,8 +95,6 @@ public class SqlSessionFactoryProvider {
 
   private void registerDialectAliases() {
     registerDialectAlias("postgres", PostgreSqlDialect.class);
-    registerDialectAlias("mysql", MySqlDialect.class);
-    registerDialectAlias("derby", SqlServer2012Dialect.class);
   }
 
   public SqlSessionFactory get() {

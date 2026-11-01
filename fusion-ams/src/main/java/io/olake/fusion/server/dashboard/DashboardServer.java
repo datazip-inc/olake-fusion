@@ -32,15 +32,10 @@ import io.javalin.http.Context;
 import io.javalin.http.HttpCode;
 import io.javalin.http.staticfiles.Location;
 import io.javalin.http.staticfiles.StaticFileConfig;
-import io.olake.fusion.authentication.PasswdAuthenticationProvider;
-import io.olake.fusion.authentication.TokenAuthenticationProvider;
 import io.olake.fusion.config.Configurations;
 import io.olake.fusion.exception.ForbiddenException;
 import io.olake.fusion.exception.SignatureCheckException;
-import io.olake.fusion.server.FusionManagementConf;
 import io.olake.fusion.server.FusionServiceContainer;
-import io.olake.fusion.server.RestCatalogService;
-import io.olake.fusion.server.authentication.HttpAuthenticationFactory;
 import io.olake.fusion.server.catalog.CatalogManager;
 import io.olake.fusion.server.dashboard.controller.ApiTokenController;
 import io.olake.fusion.server.dashboard.controller.CatalogController;
@@ -50,7 +45,6 @@ import io.olake.fusion.server.dashboard.controller.LoginController;
 import io.olake.fusion.server.dashboard.controller.OptimizerController;
 import io.olake.fusion.server.dashboard.controller.OptimizerGroupController;
 import io.olake.fusion.server.dashboard.controller.OverviewController;
-import io.olake.fusion.server.dashboard.controller.PlatformFileInfoController;
 import io.olake.fusion.server.dashboard.controller.SettingController;
 import io.olake.fusion.server.dashboard.controller.TableController;
 import io.olake.fusion.server.dashboard.controller.TelemetryController;
@@ -70,7 +64,6 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
-import java.security.Principal;
 import java.util.Objects;
 import java.util.function.Consumer;
 
@@ -78,8 +71,6 @@ public class DashboardServer {
 
   public static final Logger LOG = LoggerFactory.getLogger(DashboardServer.class);
 
-  private static final String AUTH_TYPE_BASIC = "basic";
-  private static final String AUTH_TYPE_JWT = "jwt";
   private static final String X_REQUEST_SOURCE_HEADER = "X-Request-Source";
   private static final String X_REQUEST_SOURCE_WEB = "Web";
   private final CatalogController catalogController;
@@ -87,7 +78,6 @@ public class DashboardServer {
   private final LoginController loginController;
   private final OptimizerGroupController optimizerGroupController;
   private final OptimizerController optimizerController;
-  private final PlatformFileInfoController platformFileInfoController;
   private final SettingController settingController;
   private final TableController tableController;
   private final TerminalController terminalController;
@@ -97,10 +87,6 @@ public class DashboardServer {
   private final LogController logController;
   private final TelemetryController telemetryController;
 
-  private final PasswdAuthenticationProvider basicAuthProvider;
-  private final TokenAuthenticationProvider jwtAuthProvider;
-  private final String proxyClientIpHeader;
-
   public DashboardServer(
       Configurations serviceConfig,
       CatalogManager catalogManager,
@@ -108,13 +94,11 @@ public class DashboardServer {
       OptimizerManager optimizerManager,
       TerminalManager terminalManager,
       FusionServiceContainer ams) {
-    PlatformFileManager platformFileManager = new PlatformFileManager();
-    this.catalogController = new CatalogController(catalogManager, platformFileManager);
+    this.catalogController = new CatalogController(catalogManager);
     this.healthCheckController = new HealthCheckController(ams);
     this.loginController = new LoginController(serviceConfig);
     this.optimizerGroupController = new OptimizerGroupController(tableManager, optimizerManager);
     this.optimizerController = new OptimizerController(optimizerManager);
-    this.platformFileInfoController = new PlatformFileInfoController(platformFileManager);
     this.settingController = new SettingController(serviceConfig, optimizerManager);
     ServerTableDescriptor tableDescriptor =
         new ServerTableDescriptor(catalogManager, tableManager, serviceConfig);
@@ -128,22 +112,6 @@ public class DashboardServer {
     this.apiTokenController = new ApiTokenController(apiTokenManager);
     this.logController = new LogController();
     this.telemetryController = new TelemetryController();
-
-    String authType = serviceConfig.get(FusionManagementConf.HTTP_SERVER_REST_AUTH_TYPE);
-    this.basicAuthProvider =
-        AUTH_TYPE_BASIC.equalsIgnoreCase(authType)
-            ? HttpAuthenticationFactory.getPasswordAuthenticationProvider(
-                serviceConfig.get(FusionManagementConf.HTTP_SERVER_AUTH_BASIC_PROVIDER),
-                serviceConfig)
-            : null;
-    this.jwtAuthProvider =
-        AUTH_TYPE_JWT.equalsIgnoreCase(authType)
-            ? HttpAuthenticationFactory.getBearerAuthenticationProvider(
-                serviceConfig.get(FusionManagementConf.HTTP_SERVER_AUTH_JWT_PROVIDER),
-                serviceConfig)
-            : null;
-    this.proxyClientIpHeader =
-        serviceConfig.get(FusionManagementConf.HTTP_SERVER_PROXY_CLIENT_IP_HEADER);
   }
 
   private volatile String indexHtml = null;
@@ -227,7 +195,6 @@ public class DashboardServer {
                     ctx.html(getIndexFileContent());
                   }
                 });
-            get("/hive-tables/upgrade", ctx -> ctx.html(getIndexFileContent()));
           });
 
       // for dashboard api
@@ -254,15 +221,6 @@ public class DashboardServer {
             get(
                 "/catalogs/{catalog}/dbs/{db}/tables/{table}/details",
                 tableController::getTableDetail);
-            get(
-                "/catalogs/{catalog}/dbs/{db}/tables/{table}/hive/details",
-                tableController::getHiveTableDetail);
-            post(
-                "/catalogs/{catalog}/dbs/{db}/tables/{table}/upgrade",
-                tableController::upgradeHiveTable);
-            get(
-                "/catalogs/{catalog}/dbs/{db}/tables/{table}/upgrade/status",
-                tableController::getUpgradeStatus);
             get(
                 "/catalogs/{catalog}/dbs/{db}/tables/{table}/optimizing-processes",
                 tableController::getOptimizingProcesses);
@@ -298,7 +256,6 @@ public class DashboardServer {
                 "/catalogs/{catalog}/dbs/{db}/tables/{table}/optimizing-processes/{processId}/cancel",
                 tableController::cancelOptimizingProcess);
           });
-      get("/upgrade/properties", tableController::getUpgradeHiveTableProperties);
 
       // catalog apis
       path(
@@ -315,7 +272,6 @@ public class DashboardServer {
             delete("/{catalogName}", catalogController::deleteCatalog);
             put("/{catalogName}", catalogController::updateCatalog);
             get("/{catalogName}/delete/check", catalogController::catalogDeleteCheck);
-            get("/{catalogName}/config/{type}/{key}", catalogController::getCatalogConfFileContent);
           });
 
       // optimizing api
@@ -361,14 +317,6 @@ public class DashboardServer {
             get("/{sessionId}/result", terminalController::getSqlResult);
             put("/{sessionId}/stop", terminalController::stopSql);
             get("/latestInfos/", terminalController::getLatestInfo);
-          });
-
-      // file apis
-      path(
-          "/files",
-          () -> {
-            post("", platformFileInfoController::uploadFile);
-            get("/{fileId}", platformFileInfoController::downloadFile);
           });
 
       // telemetry apis
@@ -435,24 +383,7 @@ public class DashboardServer {
       }
       return;
     }
-    if (null != basicAuthProvider || null != jwtAuthProvider) {
-      Principal authPrincipal;
-      if (null != basicAuthProvider) {
-        authPrincipal =
-            basicAuthProvider.authenticate(
-                HttpAuthenticationFactory.getPasswordCredential(ctx, proxyClientIpHeader));
-      } else {
-        authPrincipal =
-            jwtAuthProvider.authenticate(
-                HttpAuthenticationFactory.getBearerTokenCredential(ctx, proxyClientIpHeader));
-      }
-      LOG.info(
-          "Authenticated principal: {}, URI: {}",
-          authPrincipal != null ? authPrincipal.getName() : "null",
-          uriPath);
-    } else {
-      apiTokenController.checkApiToken(ctx);
-    }
+    apiTokenController.checkApiToken(ctx);
   }
 
   public void handleException(Exception e, Context ctx) {
@@ -483,8 +414,6 @@ public class DashboardServer {
     "/optimizers",
     "/login",
     "/terminal",
-    "/hive-tables/upgrade",
-    "/hive-tables",
     "/index.html",
     "/favicon.ico",
     "/assets/*",
@@ -492,8 +421,7 @@ public class DashboardServer {
     "/openapi-ui/*",
     "/swagger-docs",
     "/api/ams/v1/api/token/calculate/signature",
-    "/api/ams/v1/api/token/calculate/encryptString",
-    RestCatalogService.ICEBERG_REST_API_PREFIX + "/*"
+    "/api/ams/v1/api/token/calculate/encryptString"
   };
 
   private static boolean inWhiteList(String uri) {

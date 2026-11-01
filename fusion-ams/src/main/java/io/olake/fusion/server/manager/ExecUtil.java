@@ -24,8 +24,9 @@ import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
 import java.io.InputStream;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -69,9 +70,10 @@ public class ExecUtil {
     @Override
     public void run() {
       try {
-        List<String> temp = IOUtils.readLines(is).stream().collect(Collectors.toList());
+        List<String> temp =
+            IOUtils.readLines(is, StandardCharsets.UTF_8).stream().collect(Collectors.toList());
         output.addAll(temp);
-      } catch (IOException e) {
+      } catch (UncheckedIOException e) {
         throw new RuntimeException(e);
       }
     }

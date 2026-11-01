@@ -29,35 +29,23 @@ import io.olake.fusion.catalog.CatalogTestHelper;
 import io.olake.fusion.catalog.TableTestBase;
 import io.olake.fusion.config.OptimizingConfig;
 import io.olake.fusion.data.ChangeAction;
-import io.olake.fusion.iceberg.Constants;
+import io.olake.fusion.io.DataTestHelpers;
 import io.olake.fusion.io.IcebergDataTestHelpers;
-import io.olake.fusion.io.MixedDataTestHelpers;
 import io.olake.fusion.io.writer.RecordWithAction;
 import io.olake.fusion.optimizing.plan.CommonPartitionEvaluator;
-import io.olake.fusion.optimizing.plan.MixedIcebergPartitionPlan;
 import io.olake.fusion.optimizing.plan.PartitionEvaluator;
 import io.olake.fusion.optimizing.scan.IcebergTableFileScanHelper;
-import io.olake.fusion.optimizing.scan.KeyedTableFileScanHelper;
 import io.olake.fusion.optimizing.scan.TableFileScanHelper;
-import io.olake.fusion.optimizing.scan.UnkeyedTableFileScanHelper;
-import io.olake.fusion.properties.HiveTableProperties;
-import io.olake.fusion.table.KeyedTable;
-import io.olake.fusion.table.KeyedTableSnapshot;
-import io.olake.fusion.table.MixedTable;
 import io.olake.fusion.table.TableProperties;
-import io.olake.fusion.table.UnkeyedTable;
-import io.olake.fusion.utils.TablePropertyUtil;
 import org.apache.amoro.shade.guava32.com.google.common.collect.ImmutableList;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Lists;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Maps;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Sets;
-import org.apache.iceberg.AppendFiles;
-import org.apache.iceberg.DataFile;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.RowDelta;
 import org.apache.iceberg.Schema;
-import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.StructLike;
+import org.apache.iceberg.Table;
 import org.apache.iceberg.data.Record;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.io.CloseableIterable;
@@ -108,14 +96,8 @@ public class TestMetadataBasedEvaluationEvent extends TableTestBase {
   }
 
   public void initData() throws IOException {
-    if (getMixedTable().isKeyedTable()) {
-      writeBaseStore(getMixedTable().asKeyedTable(), initRecords(1, 4, 0, "2022-01-01T12:00:00"));
-      writeBaseStore(getMixedTable().asKeyedTable(), initRecords(5, 8, 0, "2022-01-01T12:00:00"));
-
-    } else {
-      write(getMixedTable().asUnkeyedTable(), initRecords(1, "aaa", 0, 1, ChangeAction.INSERT));
-      write(getMixedTable().asUnkeyedTable(), initRecords(2, "bbb", 0, 1, ChangeAction.INSERT));
-    }
+    write(getTable(), initRecords(1, "aaa", 0, 1, ChangeAction.INSERT));
+    write(getTable(), initRecords(2, "bbb", 0, 1, ChangeAction.INSERT));
   }
 
   private List<RecordWithAction> initRecords(
@@ -123,8 +105,7 @@ public class TestMetadataBasedEvaluationEvent extends TableTestBase {
     ImmutableList.Builder<RecordWithAction> builder = ImmutableList.builder();
     builder.add(
         new RecordWithAction(
-            MixedDataTestHelpers.createRecord(
-                id, name, ts, String.format("2022-01-%02dT12:00:00", day)),
+            DataTestHelpers.createRecord(id, name, ts, String.format("2022-01-%02dT12:00:00", day)),
             action));
 
     return builder.build();
@@ -139,7 +120,7 @@ public class TestMetadataBasedEvaluationEvent extends TableTestBase {
     return builder.build();
   }
 
-  private void write(UnkeyedTable table, List<RecordWithAction> list) throws IOException {
+  private void write(Table table, List<RecordWithAction> list) throws IOException {
     WriteResult result = IcebergDataTestHelpers.delta(table, list);
 
     RowDelta rowDelta = table.newRowDelta();
@@ -148,73 +129,10 @@ public class TestMetadataBasedEvaluationEvent extends TableTestBase {
     rowDelta.commit();
   }
 
-  private void writeBaseStore(KeyedTable keyedTable, List<Record> records) {
-    List<DataFile> baseFiles =
-        tableTestHelper()
-            .writeBaseStore(keyedTable, keyedTable.beginTransaction(""), records, false);
-    AppendFiles baseAppend = keyedTable.baseTable().newAppend();
-    baseFiles.forEach(baseAppend::appendFile);
-    baseAppend.commit();
-  }
-
-  private void writeChangeStore(KeyedTable keyedTable, List<DataFile> dataFiles) {
-    AppendFiles appendFiles = keyedTable.changeTable().newAppend();
-    dataFiles.forEach(appendFiles::appendFile);
-    appendFiles.commit();
-  }
-
   public void addChangeStoreData() throws IOException {
-    MixedTable mixedTable = getMixedTable();
-    if (mixedTable.isUnkeyedTable()) {
-      write(mixedTable.asUnkeyedTable(), initRecords(1, "aaa", 0, 1, ChangeAction.DELETE));
-      write(mixedTable.asUnkeyedTable(), initRecords(2, "ccc", 0, 1, ChangeAction.UPDATE_AFTER));
-    } else {
-      writeChangeStore(
-          mixedTable.asKeyedTable(),
-          tableTestHelper()
-              .writeChangeStore(
-                  mixedTable.asKeyedTable(),
-                  mixedTable.asKeyedTable().beginTransaction(""),
-                  ChangeAction.INSERT,
-                  initRecords(1, 2, 0, "2022-01-01T12:00:00"),
-                  false));
-      writeChangeStore(
-          mixedTable.asKeyedTable(),
-          tableTestHelper()
-              .writeChangeStore(
-                  mixedTable.asKeyedTable(),
-                  mixedTable.asKeyedTable().beginTransaction(""),
-                  ChangeAction.INSERT,
-                  initRecords(3, 8, 0, "2022-01-01T12:00:00"),
-                  false));
-      writeChangeStore(
-          mixedTable.asKeyedTable(),
-          tableTestHelper()
-              .writeChangeStore(
-                  mixedTable.asKeyedTable(),
-                  mixedTable.asKeyedTable().beginTransaction(""),
-                  ChangeAction.DELETE,
-                  initRecords(1, 1, 0, "2022-01-01T12:00:00"),
-                  false));
-      writeChangeStore(
-          mixedTable.asKeyedTable(),
-          tableTestHelper()
-              .writeChangeStore(
-                  mixedTable.asKeyedTable(),
-                  mixedTable.asKeyedTable().beginTransaction(""),
-                  ChangeAction.DELETE,
-                  initRecords(2, 2, 0, "2022-01-01T12:00:00"),
-                  false));
-      writeChangeStore(
-          mixedTable.asKeyedTable(),
-          tableTestHelper()
-              .writeChangeStore(
-                  mixedTable.asKeyedTable(),
-                  mixedTable.asKeyedTable().beginTransaction(""),
-                  ChangeAction.DELETE,
-                  initRecords(3, 4, 0, "2022-01-01T12:00:00"),
-                  false));
-    }
+    Table mixedTable = getTable();
+    write(mixedTable, initRecords(1, "aaa", 0, 1, ChangeAction.DELETE));
+    write(mixedTable, initRecords(2, "ccc", 0, 1, ChangeAction.UPDATE_AFTER));
   }
 
   @Test
@@ -232,11 +150,10 @@ public class TestMetadataBasedEvaluationEvent extends TableTestBase {
     // triggering due to reaching the fallback interval.
     OptimizingConfig config =
         getDefaultOptimizingConfig().setEvaluationFallbackInterval(Long.MAX_VALUE);
-    MixedTable table = getMixedTable();
+    Table table = getTable();
 
     // Verify the empty table stats
-    TableStatsProvider.BasicFileStats stats =
-        MixedAndIcebergTableStatsProvider.INSTANCE.collect(table);
+    TableStatsProvider.BasicFileStats stats = IcebergTableStatsProvider.INSTANCE.collect(table);
     Assert.assertEquals(0, stats.dataFileCnt);
     Assert.assertEquals(0, stats.totalFileSize);
     Assert.assertEquals(0, stats.deleteFileCnt);
@@ -251,11 +168,10 @@ public class TestMetadataBasedEvaluationEvent extends TableTestBase {
   public void test_evaluating_nonEmptyTable() throws IOException {
     initData();
     OptimizingConfig config = getDefaultOptimizingConfig();
-    MixedTable table = getMixedTable();
+    Table table = getTable();
 
     // Verify the nonEmpty table stats
-    TableStatsProvider.BasicFileStats stats =
-        MixedAndIcebergTableStatsProvider.INSTANCE.collect(table);
+    TableStatsProvider.BasicFileStats stats = IcebergTableStatsProvider.INSTANCE.collect(table);
     Assert.assertTrue(stats.dataFileCnt > 0);
     Assert.assertTrue(stats.totalFileSize > 0);
     Assert.assertEquals(0, stats.deleteFileCnt);
@@ -298,7 +214,7 @@ public class TestMetadataBasedEvaluationEvent extends TableTestBase {
         getDefaultOptimizingConfig()
             .setEvaluationFallbackInterval(Long.MAX_VALUE)
             .setMinorLeastFileCount(2);
-    MixedTable table = getMixedTable();
+    Table table = getTable();
 
     // 1. Test file size square error sum updates during partition plans initialization using
     // default mse tolerance (=0) , expecting no updates.
@@ -369,35 +285,9 @@ public class TestMetadataBasedEvaluationEvent extends TableTestBase {
   }
 
   private TableFileScanHelper initTableFileScanHelper() {
-    MixedTable mixedTable = getMixedTable();
-    TableFileScanHelper tableFileScanHelper;
-    if (TableFormat.ICEBERG.equals(mixedTable.format())) {
-      tableFileScanHelper =
-          new IcebergTableFileScanHelper(
-              mixedTable.asUnkeyedTable(),
-              mixedTable.asUnkeyedTable().currentSnapshot().snapshotId());
-    } else {
-      if (mixedTable.isUnkeyedTable()) {
-        tableFileScanHelper =
-            new UnkeyedTableFileScanHelper(
-                mixedTable.asUnkeyedTable(),
-                mixedTable.asUnkeyedTable().currentSnapshot().snapshotId());
-      } else {
-        Snapshot currentSnapshot = mixedTable.asKeyedTable().baseTable().currentSnapshot();
-        Snapshot changeSnapshot = mixedTable.asKeyedTable().changeTable().currentSnapshot();
-
-        tableFileScanHelper =
-            new KeyedTableFileScanHelper(
-                mixedTable.asKeyedTable(),
-                new KeyedTableSnapshot(
-                    currentSnapshot != null
-                        ? currentSnapshot.snapshotId()
-                        : Constants.INVALID_SNAPSHOT_ID,
-                    changeSnapshot != null
-                        ? changeSnapshot.snapshotId()
-                        : Constants.INVALID_SNAPSHOT_ID));
-      }
-    }
+    Table mixedTable = getTable();
+    TableFileScanHelper tableFileScanHelper =
+        new IcebergTableFileScanHelper(mixedTable, mixedTable.currentSnapshot().snapshotId());
     tableFileScanHelper.withPartitionFilter(Expressions.alwaysTrue());
 
     return tableFileScanHelper;
@@ -429,29 +319,14 @@ public class TestMetadataBasedEvaluationEvent extends TableTestBase {
 
   private PartitionEvaluator buildEvaluator(
       Pair<Integer, StructLike> partition, OptimizingConfig config) {
-    if (getMixedTable().isUnkeyedTable()) {
-      return new CommonPartitionEvaluator(
-          ServerTableIdentifier.of(TableTestHelper.TEST_TABLE_ID, TableFormat.ICEBERG),
-          config,
-          partition,
-          System.currentTimeMillis(),
-          0L,
-          0L,
-          0L);
-    } else {
-      Map<String, String> partitionProperties =
-          TablePropertyUtil.getPartitionProperties(getMixedTable(), partition.second());
-      return new MixedIcebergPartitionPlan.MixedIcebergPartitionEvaluator(
-          ServerTableIdentifier.of(TableTestHelper.TEST_TABLE_ID, TableFormat.MIXED_ICEBERG),
-          config,
-          partition,
-          partitionProperties,
-          System.currentTimeMillis(),
-          getMixedTable().isKeyedTable(),
-          0L,
-          0L,
-          0L);
-    }
+    return new CommonPartitionEvaluator(
+        ServerTableIdentifier.of(TableTestHelper.TEST_TABLE_ID, TableFormat.ICEBERG),
+        config,
+        partition,
+        System.currentTimeMillis(),
+        0L,
+        0L,
+        0L);
   }
 
   @Test
@@ -468,8 +343,7 @@ public class TestMetadataBasedEvaluationEvent extends TableTestBase {
 
   @Test
   public void testBasicStatsAccept() {
-    MixedAndIcebergTableStatsProvider.BasicFileStats stats =
-        new MixedAndIcebergTableStatsProvider.BasicFileStats();
+    IcebergTableStatsProvider.BasicFileStats stats = new IcebergTableStatsProvider.BasicFileStats();
     // Initial state should be zeros
     Assert.assertEquals(0, stats.deleteFileCnt);
     Assert.assertEquals(0, stats.dataFileCnt);
@@ -497,8 +371,7 @@ public class TestMetadataBasedEvaluationEvent extends TableTestBase {
 
   @Test
   public void testBasicTableStatsAcceptWithMissingProperties() {
-    MixedAndIcebergTableStatsProvider.BasicFileStats stats =
-        new MixedAndIcebergTableStatsProvider.BasicFileStats();
+    IcebergTableStatsProvider.BasicFileStats stats = new IcebergTableStatsProvider.BasicFileStats();
     // Summary map with missing properties should use default values
     Map<String, String> summary = new HashMap<>();
     // Only provide one property, others should default to 0
@@ -511,8 +384,7 @@ public class TestMetadataBasedEvaluationEvent extends TableTestBase {
 
   @Test
   public void testBasicTableStatsAcceptWithInvalidValues() {
-    MixedAndIcebergTableStatsProvider.BasicFileStats stats =
-        new MixedAndIcebergTableStatsProvider.BasicFileStats();
+    IcebergTableStatsProvider.BasicFileStats stats = new IcebergTableStatsProvider.BasicFileStats();
     // Summary map with invalid numeric values should use default values
     Map<String, String> summary = new HashMap<>();
     summary.put("total-delete-files", "invalid");
@@ -543,7 +415,6 @@ public class TestMetadataBasedEvaluationEvent extends TableTestBase {
         .setFilter(TableProperties.SELF_OPTIMIZING_FILTER_DEFAULT)
         .setBaseHashBucket(TableProperties.BASE_FILE_INDEX_HASH_BUCKET_DEFAULT)
         .setBaseRefreshInterval(TableProperties.BASE_REFRESH_INTERVAL_DEFAULT)
-        .setHiveRefreshInterval(HiveTableProperties.REFRESH_HIVE_INTERVAL_DEFAULT)
         .setMinPlanInterval(TableProperties.SELF_OPTIMIZING_MIN_PLAN_INTERVAL_DEFAULT)
         .setEvaluationFallbackInterval(
             TableProperties.SELF_OPTIMIZING_EVALUATION_FALLBACK_INTERVAL_DEFAULT)

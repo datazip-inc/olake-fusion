@@ -23,12 +23,7 @@ package io.olake.fusion.exception;
 import io.olake.fusion.ErrorCodes;
 import io.olake.fusion.ServerTableIdentifier;
 import io.olake.fusion.api.AmoroException;
-import io.olake.fusion.api.InvalidObjectException;
-import io.olake.fusion.api.MetaException;
-import io.olake.fusion.api.NoSuchObjectException;
-import io.olake.fusion.api.OperationConflictException;
 import io.olake.fusion.api.TableIdentifier;
-import org.apache.amoro.shade.thrift.org.apache.thrift.TException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -53,8 +48,6 @@ public class FusionRuntimeException extends RuntimeException {
     CODE_MAP.put(IllegalTaskStateException.class, ErrorCodes.ILLEGAL_TASK_STATE_ERROR_CODE);
     CODE_MAP.put(PluginAuthException.class, ErrorCodes.PLUGIN_AUTH_ERROR_CODE);
     CODE_MAP.put(PluginRetryAuthException.class, ErrorCodes.PLUGIN_RETRY_AUTH_ERROR_CODE);
-
-    CODE_MAP.put(BlockerConflictException.class, ErrorCodes.BLOCKER_CONFLICT_ERROR_CODE);
   }
 
   private static final int UNDEFINED = -1;
@@ -117,22 +110,6 @@ public class FusionRuntimeException extends RuntimeException {
 
   public static AmoroException normalize(Throwable throwable) {
     return wrap(throwable).transform();
-  }
-
-  public static TException normalizeCompatibly(Throwable throwable) {
-    if (throwable.getClass().equals(ObjectNotExistsException.class)) {
-      return new NoSuchObjectException(throwable.getMessage());
-    } else if (throwable.getClass().equals(AlreadyExistsException.class)) {
-      return new io.olake.fusion.api.AlreadyExistsException(throwable.getMessage());
-    } else if (throwable.getClass().equals(IllegalMetadataException.class)
-        || throwable.getClass().equals(PersistenceException.class)) {
-      return new MetaException(throwable.getMessage());
-    } else if (throwable.getClass().equals(IllegalArgumentException.class)) {
-      return new InvalidObjectException(throwable.getMessage());
-    } else if (throwable.getClass().equals(BlockerConflictException.class)) {
-      return new OperationConflictException(throwable.getMessage());
-    }
-    return new TException(throwable.getMessage());
   }
 
   public static FusionRuntimeException wrap(

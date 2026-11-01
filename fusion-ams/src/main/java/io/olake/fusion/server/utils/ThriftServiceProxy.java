@@ -20,7 +20,6 @@
 
 package io.olake.fusion.server.utils;
 
-import io.olake.fusion.server.TableManagementService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,7 +30,7 @@ import java.lang.reflect.Proxy;
 import java.util.function.Function;
 
 public class ThriftServiceProxy<S> implements InvocationHandler {
-  private static final Logger LOG = LoggerFactory.getLogger(TableManagementService.class);
+  private static final Logger LOG = LoggerFactory.getLogger(ThriftServiceProxy.class);
 
   private final S service;
   private final Function<Throwable, Throwable> exceptionTransfer;

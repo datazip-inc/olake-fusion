@@ -27,7 +27,7 @@ import org.apache.iceberg.types.Types.NestedField;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Addition metadata columns for {@link MixedTable} */
+/** Additional metadata columns Fusion projects when it reads table files. */
 public class MetadataColumns {
 
   // IDs Integer.MAX_VALUE - (1001-9999) are used for mixed-format metadata columns

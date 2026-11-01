@@ -27,9 +27,8 @@ public enum SqlExample {
       "create table db_name.table_name (\n"
           + "    id int,\n"
           + "    name string, \n"
-          + "    ts timestamp,\n"
-          + "    primary key (id)\n"
-          + ") using mixed_iceberg \n"
+          + "    ts timestamp\n"
+          + ") using iceberg \n"
           + "partitioned by (days(ts)) \n"
           + "tblproperties ('table.props' = 'val');"),
   DELETE_TABLE("DeleteTable", "drop table db_name.table_name;"),

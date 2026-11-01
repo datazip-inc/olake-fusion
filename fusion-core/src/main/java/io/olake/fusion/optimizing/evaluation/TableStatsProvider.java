@@ -20,12 +20,12 @@
 
 package io.olake.fusion.optimizing.evaluation;
 
-import io.olake.fusion.table.MixedTable;
 import org.apache.amoro.shade.guava32.com.google.common.annotations.VisibleForTesting;
+import org.apache.iceberg.Table;
 
 public abstract class TableStatsProvider {
   /** Collect basic file statistics for the given table. */
-  public abstract BasicFileStats collect(MixedTable table);
+  public abstract BasicFileStats collect(Table table);
 
   /** Statistics representation of basic file metrics. */
   public static class BasicFileStats {

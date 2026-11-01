@@ -31,14 +31,6 @@
 
     <files>
         <file>
-            <source>
-                ../fusion-metrics/fusion-metrics-prometheus/target/fusion-metrics-prometheus-${project.version}-jar-with-dependencies.jar
-            </source>
-            <outputDirectory>plugin/metric-reporters</outputDirectory>
-            <destName>prometheus-reporter.jar</destName>
-            <fileMode>0644</fileMode>
-        </file>
-        <file>
             <source>../fusion-ams/target/fusion-ams-${project.version}.jar</source>
             <outputDirectory>lib/</outputDirectory>
             <destName>fusion-ams-${project.version}.jar</destName>
@@ -77,11 +69,6 @@
         <fileSet>
             <directory>src/main/fusion-bin/conf</directory>
             <outputDirectory>conf</outputDirectory>
-            <fileMode>0644</fileMode>
-        </fileSet>
-        <fileSet>
-            <directory>../fusion-ams/src/main/resources/mysql</directory>
-            <outputDirectory>conf/mysql</outputDirectory>
             <fileMode>0644</fileMode>
         </fileSet>
         <fileSet>

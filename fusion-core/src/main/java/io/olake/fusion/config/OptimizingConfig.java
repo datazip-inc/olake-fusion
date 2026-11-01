@@ -90,9 +90,6 @@ public class OptimizingConfig {
   // base.refresh-interval
   private long baseRefreshInterval;
 
-  // base.hive.refresh-interval
-  private long hiveRefreshInterval;
-
   // self-optimizing.min-plan-interval
   private long minPlanInterval;
 
@@ -301,15 +298,6 @@ public class OptimizingConfig {
     return this;
   }
 
-  public long getHiveRefreshInterval() {
-    return hiveRefreshInterval;
-  }
-
-  public OptimizingConfig setHiveRefreshInterval(long hiveRefreshInterval) {
-    this.hiveRefreshInterval = hiveRefreshInterval;
-    return this;
-  }
-
   public long getEvaluationFallbackInterval() {
     return evaluationFallbackInterval;
   }
@@ -358,7 +346,6 @@ public class OptimizingConfig {
         && Objects.equal(filter, that.filter)
         && baseHashBucket == that.baseHashBucket
         && baseRefreshInterval == that.baseRefreshInterval
-        && hiveRefreshInterval == that.hiveRefreshInterval
         && Objects.equal(optimizerGroup, that.optimizerGroup)
         && Objects.equal(minPlanInterval, that.minPlanInterval)
         && Objects.equal(evaluationMseTolerance, that.evaluationMseTolerance)
@@ -389,7 +376,6 @@ public class OptimizingConfig {
         filter,
         baseHashBucket,
         baseRefreshInterval,
-        hiveRefreshInterval,
         minPlanInterval,
         evaluationMseTolerance,
         evaluationFallbackInterval,
@@ -418,7 +404,6 @@ public class OptimizingConfig {
         .add("filter", filter)
         .add("baseHashBucket", baseHashBucket)
         .add("baseRefreshInterval", baseRefreshInterval)
-        .add("hiveRefreshInterval", hiveRefreshInterval)
         .add("evaluationMseTolerance", evaluationMseTolerance)
         .add("evaluationFallbackInterval", evaluationFallbackInterval)
         .add("minorTriggerCron", minorTriggerCron)

@@ -43,42 +43,42 @@ public interface FormatTableDescriptor {
   List<TableFormat> supportFormat();
 
   /** Get the table metadata information of the {@link FusionTable}. */
-  ServerTableMeta getTableDetail(FusionTable<?> amoroTable);
+  ServerTableMeta getTableDetail(FusionTable fusionTable);
 
   /** Get the snapshot information of the {@link FusionTable}. */
   List<FusionSnapshotsOfTable> getSnapshots(
-      FusionTable<?> amoroTable, String ref, OperationType operationType);
+      FusionTable fusionTable, String ref, OperationType operationType);
 
   /** Get the snapshot detail information of the {@link FusionTable}. */
   List<PartitionFileBaseInfo> getSnapshotDetail(
-      FusionTable<?> amoroTable, String snapshotId, String ref);
+      FusionTable fusionTable, String snapshotId, String ref);
 
   /** Get the DDL information of the {@link FusionTable}. */
-  List<DDLInfo> getTableOperations(FusionTable<?> amoroTable);
+  List<DDLInfo> getTableOperations(FusionTable fusionTable);
 
   /** Get the partition information of the {@link FusionTable}. */
-  List<PartitionBaseInfo> getTablePartitions(FusionTable<?> amoroTable);
+  List<PartitionBaseInfo> getTablePartitions(FusionTable fusionTable);
 
   /** Get the file information of the {@link FusionTable}. */
   List<PartitionFileBaseInfo> getTableFiles(
-      FusionTable<?> amoroTable, String partition, Integer specId);
+      FusionTable fusionTable, String partition, Integer specId);
 
   /** Get the paged optimizing process information of the {@link FusionTable} and total size. */
   Pair<List<OptimizingProcessInfo>, Integer> getOptimizingProcessesInfo(
-      FusionTable<?> amoroTable, String type, ProcessStatus status, int limit, int offset);
+      FusionTable fusionTable, String type, ProcessStatus status, int limit, int offset);
 
   /** Return the optimizing types of the {@link FusionTable} is supported. */
-  Map<String, String> getTableOptimizingTypes(FusionTable<?> amoroTable);
+  Map<String, String> getTableOptimizingTypes(FusionTable fusionTable);
 
   /** Get the paged optimizing process tasks information of the {@link FusionTable}. */
-  List<OptimizingTaskInfo> getOptimizingTaskInfos(FusionTable<?> amoroTable, String processId);
+  List<OptimizingTaskInfo> getOptimizingTaskInfos(FusionTable fusionTable, String processId);
 
   /** Get the tag information of the {@link FusionTable}. */
-  List<TagOrBranchInfo> getTableTags(FusionTable<?> amoroTable);
+  List<TagOrBranchInfo> getTableTags(FusionTable fusionTable);
 
   /** Get the branch information of the {@link FusionTable}. */
-  List<TagOrBranchInfo> getTableBranches(FusionTable<?> amoroTable);
+  List<TagOrBranchInfo> getTableBranches(FusionTable fusionTable);
 
   /** Get the consumer information of the {@link FusionTable}. */
-  List<ConsumerInfo> getTableConsumerInfos(FusionTable<?> amoroTable);
+  List<ConsumerInfo> getTableConsumerInfos(FusionTable fusionTable);
 }

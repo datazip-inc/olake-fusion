@@ -22,8 +22,6 @@ package io.olake.fusion.maintainer;
 
 import io.olake.fusion.config.TableConfiguration;
 
-import java.util.Set;
-
 /**
  * Context interface for table maintainer operations.
  *
@@ -52,14 +50,4 @@ public interface TableMaintainerContext {
    * @return optimizing information, may return EmptyOptimizingInfo if no optimizing process
    */
   OptimizingInfo getOptimizingInfo();
-
-  /**
-   * Get Hive table/partition location paths if the table is a Hive-backed table.
-   *
-   * <p>This is used to exclude Hive-managed files from being cleaned during maintenance operations.
-   * For non-Hive tables, returns an empty set.
-   *
-   * @return set of Hive location paths, or empty set if not a Hive table
-   */
-  Set<String> getHiveLocationPaths();
 }

@@ -48,7 +48,6 @@ public final class LegacyClassNames {
           .put("AmoroServiceContainer", "FusionServiceContainer")
           .put("AmoroSnapshotsOfTable", "FusionSnapshotsOfTable")
           .put("AmoroTable", "FusionTable")
-          .put("AmoroZookeeperFactory", "FusionZookeeperFactory")
           .build();
 
   private LegacyClassNames() {}

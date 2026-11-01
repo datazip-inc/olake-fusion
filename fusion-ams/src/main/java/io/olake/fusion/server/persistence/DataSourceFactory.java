@@ -46,20 +46,21 @@ import java.time.Duration;
 /** Factory to help create data source */
 public class DataSourceFactory {
   private static final Logger LOG = LoggerFactory.getLogger(DataSourceFactory.class);
-  private static final String DERBY_INIT_SQL_SCRIPT = "derby/ams-derby-init.sql";
-  private static final String MYSQL_INIT_SQL_SCRIPT = "mysql/ams-mysql-init.sql";
   private static final String POSTGRES_INIT_SQL_SCRIPT = "postgres/ams-postgres-init.sql";
 
   public static DataSource createDataSource(Configurations config) {
+    String dbType = config.getString(FusionManagementConf.DB_TYPE);
+    if (!FusionManagementConf.DB_TYPE_POSTGRES.equals(dbType)) {
+      throw new IllegalArgumentException(
+          String.format(
+              "Unsupported %s: %s, only %s is supported",
+              FusionManagementConf.DB_TYPE.key(), dbType, FusionManagementConf.DB_TYPE_POSTGRES));
+    }
     BasicDataSource dataSource = new BasicDataSource();
     dataSource.setUrl(config.getString(FusionManagementConf.DB_CONNECTION_URL));
     dataSource.setDriverClassName(config.getString(FusionManagementConf.DB_DRIVER_CLASS_NAME));
-    String dbType = config.getString(FusionManagementConf.DB_TYPE);
-    if (FusionManagementConf.DB_TYPE_MYSQL.equals(dbType)
-        || FusionManagementConf.DB_TYPE_POSTGRES.equals(dbType)) {
-      dataSource.setUsername(config.getString(FusionManagementConf.DB_USER_NAME));
-      dataSource.setPassword(config.getString(FusionManagementConf.DB_PASSWORD));
-    }
+    dataSource.setUsername(config.getString(FusionManagementConf.DB_USER_NAME));
+    dataSource.setPassword(config.getString(FusionManagementConf.DB_PASSWORD));
     dataSource.setDefaultAutoCommit(false);
     dataSource.setMaxTotal(config.getInteger(FusionManagementConf.DB_CONNECT_MAX_TOTAL));
     dataSource.setMaxIdle(config.getInteger(FusionManagementConf.DB_CONNECT_MAX_IDLE));
@@ -89,29 +90,17 @@ public class DataSourceFactory {
       LOG.info("Skip auto create tables due to configuration");
       return;
     }
-    String dbTypeConfig = config.getString(FusionManagementConf.DB_TYPE);
-    String query = "";
-    LOG.info("Start create tables, database type:{}", dbTypeConfig);
+    String query =
+        "SELECT 1 FROM information_schema.tables"
+            + " WHERE table_schema = current_schema() AND table_name = 'catalog_metadata'";
+    LOG.info("Start create tables");
 
     try (Connection connection = ds.getConnection();
         Statement statement = connection.createStatement()) {
-      if (FusionManagementConf.DB_TYPE_DERBY.equals(dbTypeConfig)) {
-        query = "SELECT 1 FROM SYS.SYSTABLES WHERE TABLENAME = 'CATALOG_METADATA'";
-      } else if (FusionManagementConf.DB_TYPE_MYSQL.equals(dbTypeConfig)) {
-        query =
-            String.format(
-                "SELECT 1 FROM information_schema.tables WHERE table_schema = '%s' AND table_name = '%s'",
-                connection.getCatalog(), "catalog_metadata");
-      } else if (FusionManagementConf.DB_TYPE_POSTGRES.equals(dbTypeConfig)) {
-        query =
-            String.format(
-                "SELECT 1 FROM information_schema.tables WHERE table_schema = %s AND table_name = '%s'",
-                "current_schema()", "catalog_metadata");
-      }
       LOG.info("Start check table creation, using query: {}", query);
       try (ResultSet rs = statement.executeQuery(query)) {
         if (!rs.next()) {
-          Path script = Paths.get(getInitSqlScriptPath(dbTypeConfig));
+          Path script = Paths.get(getInitSqlScriptPath());
           LOG.info("Table not exists, start run create tables script file:{}", script);
           ScriptRunner runner = new ScriptRunner(connection);
           runner.runScript(
@@ -126,18 +115,10 @@ public class DataSourceFactory {
     }
   }
 
-  private static URI getInitSqlScriptPath(String type) throws URISyntaxException {
-    String scriptPath = null;
-    if (type.equals(FusionManagementConf.DB_TYPE_MYSQL)) {
-      scriptPath = MYSQL_INIT_SQL_SCRIPT;
-    } else if (type.equals(FusionManagementConf.DB_TYPE_DERBY)) {
-      scriptPath = DERBY_INIT_SQL_SCRIPT;
-    } else if (type.equals(FusionManagementConf.DB_TYPE_POSTGRES)) {
-      scriptPath = POSTGRES_INIT_SQL_SCRIPT;
-    }
-    URL scriptUrl = ClassLoader.getSystemResource(scriptPath);
+  private static URI getInitSqlScriptPath() throws URISyntaxException {
+    URL scriptUrl = ClassLoader.getSystemResource(POSTGRES_INIT_SQL_SCRIPT);
     if (scriptUrl == null) {
-      throw new IllegalStateException("Cannot find init sql script:" + scriptPath);
+      throw new IllegalStateException("Cannot find init sql script:" + POSTGRES_INIT_SQL_SCRIPT);
     }
     return scriptUrl.toURI();
   }

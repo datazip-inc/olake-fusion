@@ -20,15 +20,13 @@
 
 package io.olake.fusion.optimizing.plan;
 
+import io.olake.fusion.FusionTable;
 import io.olake.fusion.ServerTableIdentifier;
 import io.olake.fusion.config.OptimizingConfig;
 import io.olake.fusion.iceberg.Constants;
 import io.olake.fusion.optimizing.OptimizingType;
 import io.olake.fusion.optimizing.RewriteStageTask;
-import io.olake.fusion.table.KeyedTableSnapshot;
-import io.olake.fusion.table.MixedTable;
 import io.olake.fusion.table.TableSnapshot;
-import io.olake.fusion.utils.MixedTableUtil;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Lists;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.StructLike;
@@ -60,7 +58,7 @@ public abstract class AbstractOptimizingPlanner extends AbstractOptimizingEvalua
   public AbstractOptimizingPlanner(
       ServerTableIdentifier identifier,
       OptimizingConfig config,
-      MixedTable table,
+      FusionTable table,
       TableSnapshot snapshot,
       Expression partitionFilter,
       long processId,
@@ -92,8 +90,7 @@ public abstract class AbstractOptimizingPlanner extends AbstractOptimizingEvalua
             Collectors.toMap(
                 partitionPlan -> {
                   Pair<Integer, StructLike> partition = partitionPlan.getPartition();
-                  PartitionSpec spec =
-                      MixedTableUtil.getMixedTablePartitionSpecById(mixedTable, partition.first());
+                  PartitionSpec spec = fusionTable.table().specs().get(partition.first());
                   return spec.partitionToPath(partition.second());
                 },
                 AbstractPartitionPlan::getFromSequence));
@@ -106,8 +103,7 @@ public abstract class AbstractOptimizingPlanner extends AbstractOptimizingEvalua
             Collectors.toMap(
                 partitionPlan -> {
                   Pair<Integer, StructLike> partition = partitionPlan.getPartition();
-                  PartitionSpec spec =
-                      MixedTableUtil.getMixedTablePartitionSpecById(mixedTable, partition.first());
+                  PartitionSpec spec = fusionTable.table().specs().get(partition.first());
                   return spec.partitionToPath(partition.second());
                 },
                 AbstractPartitionPlan::getToSequence));
@@ -127,11 +123,9 @@ public abstract class AbstractOptimizingPlanner extends AbstractOptimizingEvalua
   }
 
   public long getTargetChangeSnapshotId() {
-    if (currentSnapshot instanceof KeyedTableSnapshot) {
-      return ((KeyedTableSnapshot) currentSnapshot).changeSnapshotId();
-    } else {
-      return Constants.INVALID_SNAPSHOT_ID;
-    }
+    // Only kept because the value is persisted (target_change_snapshot_id); Iceberg tables have no
+    // change store.
+    return Constants.INVALID_SNAPSHOT_ID;
   }
 
   @Override

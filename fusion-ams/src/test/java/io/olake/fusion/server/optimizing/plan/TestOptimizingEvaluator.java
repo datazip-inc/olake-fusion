@@ -27,9 +27,8 @@ import io.olake.fusion.catalog.BasicCatalogTestHelper;
 import io.olake.fusion.catalog.CatalogTestHelper;
 import io.olake.fusion.optimizing.plan.AbstractOptimizingEvaluator;
 import io.olake.fusion.optimizing.plan.AbstractPartitionPlan;
-import io.olake.fusion.optimizing.scan.KeyedTableFileScanHelper;
+import io.olake.fusion.optimizing.scan.IcebergTableFileScanHelper;
 import io.olake.fusion.optimizing.scan.TableFileScanHelper;
-import io.olake.fusion.optimizing.scan.UnkeyedTableFileScanHelper;
 import io.olake.fusion.server.optimizing.OptimizingTestHelpers;
 import io.olake.fusion.server.utils.IcebergTableUtil;
 import io.olake.fusion.table.TableProperties;
@@ -90,8 +89,7 @@ public class TestOptimizingEvaluator extends MixedTablePlanTestBase {
     long transactionId = beginTransaction();
     dataFiles.addAll(
         OptimizingTestHelpers.appendBase(
-            getMixedTable(),
-            tableTestHelper().writeBaseStore(getMixedTable(), transactionId, newRecords, false)));
+            getTable(), tableTestHelper().writeDataFiles(getTable(), newRecords)));
 
     AbstractOptimizingEvaluator optimizingEvaluator = buildOptimizingEvaluator();
     Assert.assertFalse(optimizingEvaluator.isNecessary());
@@ -105,8 +103,7 @@ public class TestOptimizingEvaluator extends MixedTablePlanTestBase {
     transactionId = beginTransaction();
     dataFiles.addAll(
         OptimizingTestHelpers.appendBase(
-            getMixedTable(),
-            tableTestHelper().writeBaseStore(getMixedTable(), transactionId, newRecords, false)));
+            getTable(), tableTestHelper().writeDataFiles(getTable(), newRecords)));
 
     optimizingEvaluator = buildOptimizingEvaluator();
     Assert.assertTrue(optimizingEvaluator.isNecessary());
@@ -117,13 +114,13 @@ public class TestOptimizingEvaluator extends MixedTablePlanTestBase {
 
   @Test
   public void testFragmentFilesWithPartitionFilterTimeStamp() {
-    getMixedTable()
+    getTable()
         .updateProperties()
         .set(TableProperties.SELF_OPTIMIZING_FILTER, "op_time >= '2022-01-01T12:00:00'")
         .commit();
     testFragmentFilesWithPartitionFilterDo(true);
 
-    getMixedTable()
+    getTable()
         .updateProperties()
         .set(TableProperties.SELF_OPTIMIZING_FILTER, "op_time > '2022-01-01T12:00:00'")
         .commit();
@@ -132,28 +129,22 @@ public class TestOptimizingEvaluator extends MixedTablePlanTestBase {
 
   @Test
   public void testFragmentFilesWithPartitionFilterInteger() {
-    getMixedTable()
-        .updateProperties()
-        .set(TableProperties.SELF_OPTIMIZING_FILTER, "id > 0")
-        .commit();
+    getTable().updateProperties().set(TableProperties.SELF_OPTIMIZING_FILTER, "id > 0").commit();
     testFragmentFilesWithPartitionFilterDo(true);
 
-    getMixedTable()
-        .updateProperties()
-        .set(TableProperties.SELF_OPTIMIZING_FILTER, "id > 8")
-        .commit();
+    getTable().updateProperties().set(TableProperties.SELF_OPTIMIZING_FILTER, "id > 8").commit();
     testFragmentFilesWithPartitionFilterDo(false);
   }
 
   @Test
   public void testFragmentFilesWithPartitionFilterString() {
-    getMixedTable()
+    getTable()
         .updateProperties()
         .set(TableProperties.SELF_OPTIMIZING_FILTER, "name > '0'")
         .commit();
     testFragmentFilesWithPartitionFilterDo(true);
 
-    getMixedTable()
+    getTable()
         .updateProperties()
         .set(TableProperties.SELF_OPTIMIZING_FILTER, "name > '8'")
         .commit();
@@ -169,8 +160,7 @@ public class TestOptimizingEvaluator extends MixedTablePlanTestBase {
     long transactionId = beginTransaction();
     dataFiles.addAll(
         OptimizingTestHelpers.appendBase(
-            getMixedTable(),
-            tableTestHelper().writeBaseStore(getMixedTable(), transactionId, newRecords, false)));
+            getTable(), tableTestHelper().writeDataFiles(getTable(), newRecords)));
 
     // add more files
     newRecords =
@@ -178,8 +168,7 @@ public class TestOptimizingEvaluator extends MixedTablePlanTestBase {
     transactionId = beginTransaction();
     dataFiles.addAll(
         OptimizingTestHelpers.appendBase(
-            getMixedTable(),
-            tableTestHelper().writeBaseStore(getMixedTable(), transactionId, newRecords, false)));
+            getTable(), tableTestHelper().writeDataFiles(getTable(), newRecords)));
 
     AbstractOptimizingEvaluator optimizingEvaluator = buildOptimizingEvaluator();
     if (isNecessary) {
@@ -193,8 +182,9 @@ public class TestOptimizingEvaluator extends MixedTablePlanTestBase {
   }
 
   protected AbstractOptimizingEvaluator buildOptimizingEvaluator() {
-    TableSnapshot snapshot = IcebergTableUtil.getSnapshot(getMixedTable(), tableRuntime);
-    return IcebergTableUtil.createOptimizingEvaluator(tableRuntime, getMixedTable(), snapshot, 100);
+    TableSnapshot snapshot = IcebergTableUtil.getSnapshot(tableRuntime);
+    return IcebergTableUtil.createOptimizingEvaluator(
+        tableRuntime, getFusionTable(), snapshot, 100);
   }
 
   protected void assertEmptyInput(AbstractOptimizingEvaluator.PendingInput input) {
@@ -276,14 +266,7 @@ public class TestOptimizingEvaluator extends MixedTablePlanTestBase {
 
   @Override
   protected TableFileScanHelper getTableFileScanHelper() {
-    if (getMixedTable().isKeyedTable()) {
-      return new KeyedTableFileScanHelper(
-          getMixedTable().asKeyedTable(),
-          OptimizingTestHelpers.getCurrentKeyedTableSnapshot(getMixedTable().asKeyedTable()));
-    } else {
-      return new UnkeyedTableFileScanHelper(
-          getMixedTable().asUnkeyedTable(),
-          OptimizingTestHelpers.getCurrentTableSnapshot(getMixedTable()).snapshotId());
-    }
+    return new IcebergTableFileScanHelper(
+        getTable(), OptimizingTestHelpers.getCurrentTableSnapshot(getTable()).snapshotId());
   }
 }

@@ -26,7 +26,7 @@ import io.olake.fusion.TableFormat;
 import io.olake.fusion.TableTestHelper;
 import io.olake.fusion.catalog.BasicCatalogTestHelper;
 import io.olake.fusion.catalog.CatalogTestHelper;
-import io.olake.fusion.optimizing.MixedIcebergRewriteExecutorFactory;
+import io.olake.fusion.optimizing.IcebergRewriteExecutorFactory;
 import io.olake.fusion.optimizing.OptimizingType;
 import io.olake.fusion.optimizing.RewriteStageTask;
 import io.olake.fusion.optimizing.TaskProperties;
@@ -97,7 +97,7 @@ public class TestOptimizingPlanner extends TestOptimizingEvaluator {
   protected AbstractOptimizingPlanner buildOptimizingEvaluator() {
     return IcebergTableUtil.createOptimizingPlanner(
         getTableRuntime(),
-        getMixedTable(),
+        getFusionTable(),
         1,
         OptimizerProperties.MAX_INPUT_FILE_SIZE_PER_THREAD_DEFAULT,
         1L);
@@ -107,8 +107,7 @@ public class TestOptimizingPlanner extends TestOptimizingEvaluator {
   protected Map<String, String> buildTaskProperties() {
     Map<String, String> properties = Maps.newHashMap();
     properties.put(
-        TaskProperties.TASK_EXECUTOR_FACTORY_IMPL,
-        MixedIcebergRewriteExecutorFactory.class.getName());
+        TaskProperties.TASK_EXECUTOR_FACTORY_IMPL, IcebergRewriteExecutorFactory.class.getName());
     return properties;
   }
 }

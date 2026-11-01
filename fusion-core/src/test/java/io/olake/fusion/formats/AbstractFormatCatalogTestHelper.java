@@ -20,10 +20,10 @@
 
 package io.olake.fusion.formats;
 
-import io.olake.fusion.FusionCatalog;
 import io.olake.fusion.TableFormat;
 import io.olake.fusion.api.CatalogMeta;
 import io.olake.fusion.catalog.CatalogTestHelpers;
+import io.olake.fusion.formats.iceberg.IcebergCatalog;
 import io.olake.fusion.properties.CatalogMetaProperties;
 import org.apache.hadoop.conf.Configuration;
 
@@ -67,7 +67,7 @@ public abstract class AbstractFormatCatalogTestHelper<C> implements FusionCatalo
   }
 
   @Override
-  public abstract FusionCatalog amoroCatalog();
+  public abstract IcebergCatalog amoroCatalog();
 
   @Override
   public abstract C originalCatalog();

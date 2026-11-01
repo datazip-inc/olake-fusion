@@ -50,7 +50,6 @@
         <module>fusion-web</module>
         <module>fusion-ams</module>
         <module>fusion-optimizer</module>
-        <module>fusion-metrics</module>
         <module>fusion-core</module>
         <module>dist</module>
     </modules>
@@ -77,7 +76,6 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.build.outputTimestamp>2024-06-27T08:00:00Z</project.build.outputTimestamp>
         <root.dir>${project.basedir}</root.dir>
-        <jacoco.flink.skip>false</jacoco.flink.skip>
 
         <maven-assembly-plugin.version>3.3.0</maven-assembly-plugin.version>
         <maven-jar-plugin-version>3.0.2</maven-jar-plugin-version>
@@ -101,8 +99,6 @@
         <maven-checkstyle-plugin.version>3.3.1</maven-checkstyle-plugin.version>
 
         <iceberg.version>1.7.2</iceberg.version>
-        <!-- paimon 1.2.0 does not support scala 2.13; use 1.1.1 as default (matches scala-2.13 profile) -->
-        <paimon.version>1.1.1</paimon.version>
         <hive.version>3.1.3</hive.version>
         <hadoop.version>3.4.2</hadoop.version>
         <hadoop-client-api.artifact>hadoop-client-api</hadoop-client-api.artifact>
@@ -122,14 +118,11 @@
         <commons-lang3.version>3.20.0</commons-lang3.version>
         <commons-net.version>3.12.0</commons-net.version>
         <cglib.version>2.2.2</cglib.version>
-        <curator.version>5.7.0</curator.version>
         <mockito.version>4.11.0</mockito.version>
         <parquet.version>1.15.2</parquet.version>
-        <mysql-jdbc.version>8.4.0</mysql-jdbc.version>
         <lz4-java.version>1.11.4</lz4-java.version>
         <orc-core.version>1.9.7</orc-core.version>
         <awssdk.version>2.24.12</awssdk.version>
-        <aliyun-sdk-oss.version>3.10.2</aliyun-sdk-oss.version>
         <spark.version>3.5.8</spark.version>
         <spark.major.version>3.5</spark.major.version>
         <dropwizard.metrics.version>4.2.19</dropwizard.metrics.version>
@@ -141,20 +134,15 @@
         <commons-dbcp2.version>2.9.0</commons-dbcp2.version>
         <netty.version>4.1.138.Final</netty.version>
         <javalin.version>4.6.8</javalin.version>
-        <kyuubi-hive-jdbc-shaded.version>1.10.2</kyuubi-hive-jdbc-shaded.version>
         <rocksdb.version>7.10.2</rocksdb.version>
         <kryo.version>4.0.3</kryo.version>
         <trino.version>406</trino.version>
         <lucene.version>8.11.2</lucene.version>
         <bitmap.version>1.0.1</bitmap.version>
         <prometheus.version>0.16.0</prometheus.version>
-        <flink.version>1.20.4</flink.version>
-        <flink.scala.binary.version>2.12</flink.scala.binary.version>
-        <fabric8-kubernetes-client.version.version>7.4.0</fabric8-kubernetes-client.version.version>
         <amoro-shade.version>0.7.0-incubating</amoro-shade.version>
         <amoro-shade-guava.version>32.1.1-jre</amoro-shade-guava.version>
         <amoro-shade-jackson.version>2.14.2</amoro-shade-jackson.version>
-        <amoro-shade-zookeeper.version>3.9.1</amoro-shade-zookeeper.version>
         <amoro-shade-thrift.version>0.20.0</amoro-shade-thrift.version>
         <annotation-api.version>1.3.2</annotation-api.version>
         <guava.version>32.1.1-jre</guava.version>
@@ -163,11 +151,8 @@
         <pagehelper.version>6.1.0</pagehelper.version>
         <jsqlparser.version>4.7</jsqlparser.version>
         <fasterxml.jackson.version>2.18.11</fasterxml.jackson.version>
-        <apache-directory-server.version>2.0.0-M15</apache-directory-server.version>
-        <apache-directory-api-all.version>1.0.0-M20</apache-directory-api-all.version>
         <rocksdb-dependency-scope>compile</rocksdb-dependency-scope>
         <lucene-dependency-scope>compile</lucene-dependency-scope>
-        <aliyun-sdk-dependency-scope>provided</aliyun-sdk-dependency-scope>
     </properties>
 
     <dependencyManagement>
@@ -192,12 +177,6 @@
                 <groupId>org.apache.amoro</groupId>
                 <artifactId>amoro-shade-guava-32</artifactId>
                 <version>${amoro-shade-guava.version}-${amoro-shade.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>org.apache.amoro</groupId>
-                <artifactId>amoro-shade-zookeeper-3</artifactId>
-                <version>${amoro-shade-zookeeper.version}-${amoro-shade.version}</version>
             </dependency>
 
             <dependency>
@@ -274,12 +253,6 @@
 
             <dependency>
                 <groupId>org.apache.iceberg</groupId>
-                <artifactId>iceberg-flink</artifactId>
-                <version>${iceberg.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>org.apache.iceberg</groupId>
                 <artifactId>iceberg-hive-metastore</artifactId>
                 <version>${iceberg.version}</version>
             </dependency>
@@ -292,21 +265,8 @@
 
             <dependency>
                 <groupId>org.apache.iceberg</groupId>
-                <artifactId>iceberg-aliyun</artifactId>
-                <version>${iceberg.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>org.apache.iceberg</groupId>
                 <artifactId>iceberg-arrow</artifactId>
                 <version>${iceberg.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>com.aliyun.oss</groupId>
-                <artifactId>aliyun-sdk-oss</artifactId>
-                <version>${aliyun-sdk-oss.version}</version>
-                <scope>${aliyun-sdk-dependency-scope}</scope>
             </dependency>
 
             <dependency>
@@ -409,25 +369,6 @@
                 <groupId>org.apache.parquet</groupId>
                 <artifactId>parquet-format-structures</artifactId>
                 <version>${parquet.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>org.apache.hadoop</groupId>
-                <artifactId>hadoop-aliyun</artifactId>
-                <version>${hadoop.version}</version>
-                <scope>${aliyun-sdk-dependency-scope}</scope>
-                <exclusions>
-                    <exclusion>
-                        <groupId>org.apache.hadoop</groupId>
-                        <artifactId>hadoop-common</artifactId>
-                    </exclusion>
-                </exclusions>
-            </dependency>
-
-            <dependency>
-                <groupId>org.apache.paimon</groupId>
-                <artifactId>paimon-oss</artifactId>
-                <version>${paimon.version}</version>
             </dependency>
 
             <dependency>
@@ -598,47 +539,6 @@
             </dependency>
 
             <dependency>
-                <groupId>org.apache.hadoop</groupId>
-                <artifactId>hadoop-minikdc</artifactId>
-                <version>${hadoop.version}</version>
-                <scope>test</scope>
-                <exclusions>
-                    <exclusion>
-                        <groupId>org.slf4j</groupId>
-                        <artifactId>*</artifactId>
-                    </exclusion>
-                    <exclusion>
-                        <groupId>junit</groupId>
-                        <artifactId>junit</artifactId>
-                    </exclusion>
-                    <exclusion>
-                        <groupId>org.apache.directory.jdbm</groupId>
-                        <artifactId>apacheds-jdbm1</artifactId>
-                    </exclusion>
-                    <!-- HADOOP-19024: replace bcprov-jdk15on with bcprov-jdk18on -->
-                    <exclusion>
-                        <groupId>org.bouncycastle</groupId>
-                        <artifactId>bcprov-jdk15on</artifactId>
-                    </exclusion>
-                </exclusions>
-            </dependency>
-
-            <!-- apacheds-jdbm1 is required by hadoop-minikdc testing -->
-            <dependency>
-                <groupId>org.apache.directory.jdbm</groupId>
-                <artifactId>apacheds-jdbm1</artifactId>
-                <version>2.0.0-M2</version>
-                <scope>test</scope>
-            </dependency>
-
-            <dependency>
-                <groupId>org.apache.directory.api</groupId>
-                <artifactId>api-all</artifactId>
-                <version>${apache-directory-api-all.version}</version>
-                <scope>test</scope>
-            </dependency>
-
-            <dependency>
                 <groupId>org.slf4j</groupId>
                 <artifactId>slf4j-api</artifactId>
                 <version>${slf4j.version}</version>
@@ -760,18 +660,6 @@
                 <version>${dropwizard.metrics.version}</version>
             </dependency>
 
-            <dependency>
-                <groupId>org.apache.paimon</groupId>
-                <artifactId>paimon-bundle</artifactId>
-                <version>${paimon.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>org.apache.paimon</groupId>
-                <artifactId>paimon-s3</artifactId>
-                <version>${paimon.version}</version>
-            </dependency>
-
 
             <dependency>
                 <groupId>org.roaringbitmap</groupId>
@@ -803,25 +691,12 @@
                 <version>${postgres-jdbc.version}</version>
             </dependency>
 
-            <!-- Embedded Derby is only used by tests (AMS persistence and mock Hive metastore); never ship it. -->
+            <!-- Embedded Derby is only used by tests (the mock Hive metastore); never ship it. -->
             <dependency>
                 <groupId>org.apache.derby</groupId>
                 <artifactId>derby</artifactId>
                 <version>${derby-test.version}</version>
                 <scope>test</scope>
-            </dependency>
-
-            <dependency>
-                <groupId>com.mysql</groupId>
-                <artifactId>mysql-connector-j</artifactId>
-                <version>${mysql-jdbc.version}</version>
-                <exclusions>
-                    <!-- protobuf is only used by the X DevAPI, not by the JDBC driver -->
-                    <exclusion>
-                        <groupId>com.google.protobuf</groupId>
-                        <artifactId>protobuf-java</artifactId>
-                    </exclusion>
-                </exclusions>
             </dependency>
 
             <!-- Maintained fork of org.lz4:lz4-java (archived upstream); same net.jpountz classes. 1.11.4 fixes CVE-2025-12183 and CVE-2026-106449/106450/106451/106452 -->
@@ -871,12 +746,6 @@
                 <groupId>io.netty</groupId>
                 <artifactId>netty-codec-http2</artifactId>
                 <version>${netty.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>org.apache.kyuubi</groupId>
-                <artifactId>kyuubi-hive-jdbc-shaded</artifactId>
-                <version>${kyuubi-hive-jdbc-shaded.version}</version>
             </dependency>
 
             <dependency>
@@ -1258,25 +1127,6 @@
                 <groupId>com.github.jsqlparser</groupId>
                 <artifactId>jsqlparser</artifactId>
                 <version>${jsqlparser.version}</version>
-            </dependency>
-
-            <!-- flink dependencies -->
-            <dependency>
-                <groupId>org.apache.flink</groupId>
-                <artifactId>flink-clients</artifactId>
-                <version>${flink.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>org.apache.flink</groupId>
-                <artifactId>flink-runtime-web</artifactId>
-                <version>${flink.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>io.fabric8</groupId>
-                <artifactId>kubernetes-client</artifactId>
-                <version>${fabric8-kubernetes-client.version.version}</version>
             </dependency>
 
             <dependency>
@@ -1856,44 +1706,10 @@
             </build>
         </profile>
         <profile>
-            <id>hadoop2</id>
-            <properties>
-                <guava.version>14.0.1</guava.version>
-                <!-- Do not use Hive 2.3.9 for Hive 4 Metastore support due to incompatible API changes. -->
-                <hive.version>2.3.8</hive.version>
-                <hadoop.version>2.10.2</hadoop.version>
-                <spark.version>3.3.4</spark.version>
-                <spark.major.version>3.3</spark.major.version>
-                <hadoop-client-api.artifact>hadoop-client</hadoop-client-api.artifact>
-                <hadoop-client-runtime.artifact>hadoop-auth</hadoop-client-runtime.artifact>
-            </properties>
-        </profile>
-        <profile>
             <id>no-extended-disk-storage</id>
             <properties>
                 <rocksdb-dependency-scope>provided</rocksdb-dependency-scope>
                 <lucene-dependency-scope>provided</lucene-dependency-scope>
-            </properties>
-        </profile>
-        <profile>
-            <id>aliyun-oss-sdk</id>
-            <properties>
-                <aliyun-sdk-dependency-scope>compile</aliyun-sdk-dependency-scope>
-            </properties>
-        </profile>
-
-        <profile>
-            <id>spark-3.3</id>
-            <properties>
-                <spark.version>3.3.4</spark.version>
-                <spark.major.version>3.3</spark.major.version>
-            </properties>
-        </profile>
-        <profile>
-            <id>spark-3.4</id>
-            <properties>
-                <spark.version>3.4.4</spark.version>
-                <spark.major.version>3.4</spark.major.version>
             </properties>
         </profile>
         <profile>
@@ -1904,20 +1720,10 @@
             </properties>
         </profile>
         <profile>
-            <id>scala-2.12</id>
-            <properties>
-                <scala.version>2.12.15</scala.version>
-                <scala.binary.version>2.12</scala.binary.version>
-                <paimon.version>1.2.0</paimon.version>
-            </properties>
-        </profile>
-        <profile>
             <id>scala-2.13</id>
             <properties>
                 <scala.version>2.13.18</scala.version>
                 <scala.binary.version>2.13</scala.binary.version>
-                <!-- paimon-1.2.0 does not support scala-2.13 and datasource lookup will cause UT failre -->
-                <paimon.version>1.1.1</paimon.version>
             </properties>
         </profile>
     </profiles>

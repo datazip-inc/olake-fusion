@@ -82,8 +82,8 @@ public class TestIcebergFanoutPosDeleteWriter extends TableTestBase {
   public void testWritePosDelete() throws IOException {
     StructLike partitionData = getPartitionData();
     GenericAppenderFactory appenderFactory =
-        new GenericAppenderFactory(getMixedTable().schema(), getMixedTable().spec());
-    appenderFactory.setAll(getMixedTable().properties());
+        new GenericAppenderFactory(getTable().schema(), getTable().spec());
+    appenderFactory.setAll(getFusionTable().properties());
     appenderFactory.set(
         org.apache.iceberg.TableProperties.METRICS_MODE_COLUMN_CONF_PREFIX
             + MetadataColumns.DELETE_FILE_PATH.name(),
@@ -98,8 +98,8 @@ public class TestIcebergFanoutPosDeleteWriter extends TableTestBase {
             appenderFactory,
             fileFormat,
             partitionData,
-            getMixedTable().io(),
-            getMixedTable().asUnkeyedTable().encryption(),
+            getFusionTable().io(),
+            getTable().encryption(),
             "suffix");
 
     String dataDir = temp.newFolder("data").getPath();
@@ -142,7 +142,7 @@ public class TestIcebergFanoutPosDeleteWriter extends TableTestBase {
             record.copy("file_path", dataFile1Path, "pos", 3L));
     Assert.assertEquals(
         expectedDeletes,
-        MixedDataTestHelpers.readDataFile(fileFormat, pathPosSchema, deleteFile1.path()));
+        DataTestHelpers.readDataFile(fileFormat, pathPosSchema, deleteFile1.path()));
 
     DeleteFile deleteFile2 =
         deleteFileMap.get(
@@ -168,6 +168,6 @@ public class TestIcebergFanoutPosDeleteWriter extends TableTestBase {
             record.copy("file_path", dataFile2Path, "pos", 10L));
     Assert.assertEquals(
         expectedDeletes,
-        MixedDataTestHelpers.readDataFile(fileFormat, pathPosSchema, deleteFile2.path()));
+        DataTestHelpers.readDataFile(fileFormat, pathPosSchema, deleteFile2.path()));
   }
 }

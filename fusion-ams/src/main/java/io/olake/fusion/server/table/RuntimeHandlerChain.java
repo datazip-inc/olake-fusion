@@ -92,7 +92,7 @@ public abstract class RuntimeHandlerChain {
     }
   }
 
-  public final void fireTableAdded(FusionTable<?> table, TableRuntime tableRuntime) {
+  public final void fireTableAdded(FusionTable table, TableRuntime tableRuntime) {
     if (!initialized) {
       return;
     }
@@ -134,9 +134,9 @@ public abstract class RuntimeHandlerChain {
     }
   }
 
-  // Currently, paimon is unsupported
+  // Only Iceberg tables are supported
   protected boolean formatSupported(TableFormat format) {
-    return format.in(TableFormat.ICEBERG, TableFormat.MIXED_ICEBERG, TableFormat.MIXED_HIVE);
+    return TableFormat.ICEBERG.equals(format);
   }
 
   protected abstract void handleStatusChanged(
@@ -145,7 +145,7 @@ public abstract class RuntimeHandlerChain {
   protected abstract void handleConfigChanged(
       TableRuntime tableRuntime, TableConfiguration originalConfig);
 
-  protected abstract void handleTableAdded(FusionTable<?> table, TableRuntime tableRuntime);
+  protected abstract void handleTableAdded(FusionTable table, TableRuntime tableRuntime);
 
   protected abstract void handleTableRemoved(TableRuntime tableRuntime);
 

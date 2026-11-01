@@ -20,7 +20,9 @@
 
 package io.olake.fusion.table;
 
+import io.olake.fusion.FusionTable;
 import org.apache.iceberg.ContentFile;
+import org.apache.iceberg.Schema;
 import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.PropertyUtil;
@@ -54,40 +56,45 @@ public class WatermarkGenerator {
   private final SimpleDateFormat eventTimeStringFormat;
   private final String eventTimeNumberFormat;
 
-  public static WatermarkGenerator forTable(MixedTable table) {
+  public static WatermarkGenerator forTable(FusionTable table) {
+    return forTable(table.table().schema(), table.properties(), table.name());
+  }
+
+  /**
+   * Creates a generator for a table.
+   *
+   * @param schema table schema
+   * @param properties table properties, with the catalog defaults merged in
+   * @param tableName table name, for error messages
+   */
+  public static WatermarkGenerator forTable(
+      Schema schema, Map<String, String> properties, String tableName) {
     Types.NestedField eventTimeField = INGEST_TIME_FIELD;
     String eventTimeName =
-        table
-            .properties()
-            .getOrDefault(
-                TableProperties.TABLE_EVENT_TIME_FIELD,
-                TableProperties.TABLE_EVENT_TIME_FIELD_DEFAULT);
+        properties.getOrDefault(
+            TableProperties.TABLE_EVENT_TIME_FIELD, TableProperties.TABLE_EVENT_TIME_FIELD_DEFAULT);
     if (!eventTimeName.equals(INGEST_TIME)) {
-      eventTimeField = table.schema().findField(eventTimeName);
+      eventTimeField = schema.findField(eventTimeName);
       if (eventTimeField == null) {
         throw new IllegalStateException(
-            "Unknown event time field " + eventTimeName + " in table " + table.id());
+            "Unknown event time field " + eventTimeName + " in table " + tableName);
       }
     }
     long lateness =
         PropertyUtil.propertyAsLong(
-                table.properties(),
+                properties,
                 TableProperties.TABLE_WATERMARK_ALLOWED_LATENESS,
                 TableProperties.TABLE_WATERMARK_ALLOWED_LATENESS_DEFAULT)
             * 1000;
     return new WatermarkGenerator(
         eventTimeField,
         lateness,
-        table
-            .properties()
-            .getOrDefault(
-                TableProperties.TABLE_EVENT_TIME_STRING_FORMAT,
-                TableProperties.TABLE_EVENT_TIME_STRING_FORMAT_DEFAULT),
-        table
-            .properties()
-            .getOrDefault(
-                TableProperties.TABLE_EVENT_TIME_NUMBER_FORMAT,
-                TableProperties.TABLE_EVENT_TIME_NUMBER_FORMAT_DEFAULT));
+        properties.getOrDefault(
+            TableProperties.TABLE_EVENT_TIME_STRING_FORMAT,
+            TableProperties.TABLE_EVENT_TIME_STRING_FORMAT_DEFAULT),
+        properties.getOrDefault(
+            TableProperties.TABLE_EVENT_TIME_NUMBER_FORMAT,
+            TableProperties.TABLE_EVENT_TIME_NUMBER_FORMAT_DEFAULT));
   }
 
   private WatermarkGenerator(

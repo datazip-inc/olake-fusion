@@ -27,7 +27,7 @@
 FROM eclipse-temurin:17-jdk-jammy AS builder
 
 # Add the entire project to the build container, unzip it,
-# and remove flink-optimizer to reduce the container size.
+# and remove the bundled Spark optimizer plugin to reduce the container size.
 
 ADD . /workspace/fusion
 WORKDIR /workspace/fusion
@@ -42,15 +42,13 @@ RUN FUSION_VERSION=`cat pom.xml | grep 'fusion-parent' -C 3 | grep -Eo '<version
 
 FROM eclipse-temurin:17-jdk-jammy
 
-ARG MAVEN_MIRROR=https://repo.maven.apache.org/maven2
-
 ENV FUSION_HOME /usr/local/fusion
 # No FUSION_CONF_DIR default: an AMORO_CONF_DIR set by OLake-Helm must keep working, and the conf
 # dir falls back to ${FUSION_HOME}/conf. OLake-Helm and OLake-UI's compose mount under
 # /usr/local/amoro, which links to /usr/local/fusion.
 ENV AMORO_HOME ${FUSION_HOME}
 ENV LOG_LEVEL info
-EXPOSE 1630 1260 1261
+EXPOSE 1630 1261
 
 COPY ./docker/fusion/entrypoint.sh /
 RUN chmod +x /entrypoint.sh
@@ -58,9 +56,6 @@ COPY --from=builder "/usr/local/fusion" "/usr/local/fusion"
 RUN ln -s /usr/local/fusion /usr/local/amoro
 
 WORKDIR ${FUSION_HOME}
-
-RUN cd ${FUSION_HOME}/lib \
-    && wget ${MAVEN_MIRROR}/com/mysql/mysql-connector-j/8.4.0/mysql-connector-j-8.4.0.jar
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["help"]

@@ -24,7 +24,7 @@ import io.olake.fusion.FusionTable;
 import io.olake.fusion.TableRuntime;
 import io.olake.fusion.config.TableConfiguration;
 import io.olake.fusion.maintainer.TableMaintainer;
-import io.olake.fusion.server.optimizing.maintainer.TableMaintainers;
+import io.olake.fusion.server.optimizing.maintainer.TableMaintainerFactory;
 import io.olake.fusion.server.scheduler.PeriodicTableScheduler;
 import io.olake.fusion.server.table.TableService;
 import io.olake.fusion.server.table.cleanup.CleanupOperation;
@@ -77,8 +77,8 @@ public class OrphanFilesCleaningExecutor extends PeriodicTableScheduler {
   public void execute(TableRuntime tableRuntime) {
     try {
       LOG.info("{} start cleaning orphan files", tableRuntime.getTableIdentifier());
-      FusionTable<?> amoroTable = loadTable(tableRuntime);
-      TableMaintainer tableMaintainer = TableMaintainers.create(amoroTable, tableRuntime);
+      FusionTable table = loadTable(tableRuntime);
+      TableMaintainer tableMaintainer = TableMaintainerFactory.create(table, tableRuntime);
       tableMaintainer.cleanOrphanFiles();
     } catch (Throwable t) {
       LOG.error("{} failed to clean orphan file", tableRuntime.getTableIdentifier(), t);

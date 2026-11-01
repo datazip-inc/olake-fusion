@@ -83,14 +83,10 @@ public abstract class ServerCatalog extends PersistentBase {
 
   public abstract List<TableIDWithFormat> listTables(String database);
 
-  public abstract FusionTable<?> loadTable(String database, String tableName);
+  public abstract FusionTable loadTable(String database, String tableName);
 
   public void dispose() {
     // do resource clean up
-  }
-
-  public boolean isInternal() {
-    return false;
   }
 
   /** Called when catalog metadata is changed. */

@@ -20,7 +20,7 @@
 
 package io.olake.fusion.formats;
 
-import io.olake.fusion.FusionCatalog;
+import io.olake.fusion.formats.iceberg.IcebergCatalog;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -34,7 +34,7 @@ public abstract class FusionCatalogTestBase {
 
   protected FusionCatalogTestHelper<?> catalogTestHelper;
 
-  protected FusionCatalog amoroCatalog;
+  protected IcebergCatalog amoroCatalog;
 
   protected Object originalCatalog;
 

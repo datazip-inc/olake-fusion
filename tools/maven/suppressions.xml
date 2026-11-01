@@ -28,11 +28,6 @@ Modified by Datazip Inc. in 2026
     <!-- Using ([/\\]) as the file path separator instead of (/)
     enables it to be compatible with both Linux and Windows systems. -->
 
-    <!-- Limited by the Javalin framework, it is not possible to use shade classes. -->
-    <suppress
-            files="io[/\\]olake[/\\]fusion[/\\]server[/\\]RestCatalogService\.java"
-            checks="Regexp"/>
-
     <suppress
             files="io[/\\]olake[/\\]fusion[/\\]trino[/\\]iceberg[/\\]BaseConnectorTest\.java"
             checks="FileLength"/>

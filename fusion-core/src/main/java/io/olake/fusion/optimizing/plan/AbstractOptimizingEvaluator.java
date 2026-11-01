@@ -20,15 +20,11 @@
 
 package io.olake.fusion.optimizing.plan;
 
+import io.olake.fusion.FusionTable;
 import io.olake.fusion.ServerTableIdentifier;
-import io.olake.fusion.TableFormat;
 import io.olake.fusion.config.OptimizingConfig;
 import io.olake.fusion.optimizing.scan.IcebergTableFileScanHelper;
-import io.olake.fusion.optimizing.scan.KeyedTableFileScanHelper;
 import io.olake.fusion.optimizing.scan.TableFileScanHelper;
-import io.olake.fusion.optimizing.scan.UnkeyedTableFileScanHelper;
-import io.olake.fusion.table.KeyedTableSnapshot;
-import io.olake.fusion.table.MixedTable;
 import io.olake.fusion.table.TableSnapshot;
 import io.olake.fusion.utils.ExpressionUtil;
 import org.apache.amoro.shade.guava32.com.google.common.base.MoreObjects;
@@ -59,7 +55,7 @@ public abstract class AbstractOptimizingEvaluator {
 
   protected final ServerTableIdentifier identifier;
   protected final OptimizingConfig config;
-  protected final MixedTable mixedTable;
+  protected final FusionTable fusionTable;
   protected final TableSnapshot currentSnapshot;
   protected final long lastFullOptimizingTime;
   protected final long lastMinorOptimizingTime;
@@ -72,7 +68,7 @@ public abstract class AbstractOptimizingEvaluator {
   public AbstractOptimizingEvaluator(
       ServerTableIdentifier identifier,
       OptimizingConfig config,
-      MixedTable table,
+      FusionTable table,
       TableSnapshot currentSnapshot,
       int maxPendingPartitions,
       long lastMinorOptimizingTime,
@@ -80,7 +76,7 @@ public abstract class AbstractOptimizingEvaluator {
       long lastMajorOptimizingTime) {
     this.identifier = identifier;
     this.config = config;
-    this.mixedTable = table;
+    this.fusionTable = table;
     this.currentSnapshot = currentSnapshot;
     this.maxPendingPartitions = maxPendingPartitions;
     this.lastFullOptimizingTime = lastFullOptimizingTime;
@@ -90,34 +86,21 @@ public abstract class AbstractOptimizingEvaluator {
 
   protected void initEvaluator() {
     long startTime = System.currentTimeMillis();
-    TableFileScanHelper tableFileScanHelper;
-    if (TableFormat.ICEBERG.equals(mixedTable.format())) {
-      tableFileScanHelper =
-          new IcebergTableFileScanHelper(mixedTable.asUnkeyedTable(), currentSnapshot.snapshotId());
-    } else {
-      if (mixedTable.isUnkeyedTable()) {
-        tableFileScanHelper =
-            new UnkeyedTableFileScanHelper(
-                mixedTable.asUnkeyedTable(), currentSnapshot.snapshotId());
-      } else {
-        tableFileScanHelper =
-            new KeyedTableFileScanHelper(
-                mixedTable.asKeyedTable(), ((KeyedTableSnapshot) currentSnapshot));
-      }
-    }
+    TableFileScanHelper tableFileScanHelper =
+        new IcebergTableFileScanHelper(fusionTable.table(), currentSnapshot.snapshotId());
     tableFileScanHelper.withPartitionFilter(getPartitionFilter());
     initPartitionPlans(tableFileScanHelper);
     isInitialized = true;
     LOG.info(
         "{} finished evaluating, found {} partitions that need optimizing in {} ms",
-        mixedTable.id(),
+        fusionTable.id(),
         needOptimizingPlanMap.size(),
         System.currentTimeMillis() - startTime);
   }
 
   protected Expression getPartitionFilter() {
     return ExpressionUtil.convertSqlFilterToIcebergExpression(
-        config.getFilter(), mixedTable.schema().columns());
+        config.getFilter(), fusionTable.table().schema().columns());
   }
 
   private void initPartitionPlans(TableFileScanHelper tableFileScanHelper) {
@@ -141,7 +124,7 @@ public abstract class AbstractOptimizingEvaluator {
     }
     LOG.info(
         "{} finished file scanning, scanning {} files in {} ms",
-        mixedTable.id(),
+        fusionTable.id(),
         count,
         System.currentTimeMillis() - startTime);
     needOptimizingPlanMap.putAll(
@@ -166,12 +149,8 @@ public abstract class AbstractOptimizingEvaluator {
     }
     // Dangling delete files will cause the data scanned by TableScan
     // to be inconsistent with the snapshot summary of iceberg
-    if (TableFormat.ICEBERG == mixedTable.format()) {
-      Snapshot snapshot = mixedTable.asUnkeyedTable().snapshot(currentSnapshot.snapshotId());
-      return new PendingInput(partitionPlanMap.values(), snapshot);
-    }
-
-    return new PendingInput(partitionPlanMap.values());
+    Snapshot snapshot = fusionTable.table().snapshot(currentSnapshot.snapshotId());
+    return new PendingInput(partitionPlanMap.values(), snapshot);
   }
 
   public PendingInput getOptimizingPendingInput() {

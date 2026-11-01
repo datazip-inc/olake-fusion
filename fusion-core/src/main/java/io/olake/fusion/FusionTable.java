@@ -20,29 +20,100 @@
 
 package io.olake.fusion;
 
+import io.olake.fusion.io.AuthenticatedFileIO;
 import io.olake.fusion.table.TableIdentifier;
+import io.olake.fusion.utils.CatalogUtil;
+import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
+import org.apache.iceberg.SerializableTable;
+import org.apache.iceberg.Table;
 
+import java.util.HashMap;
 import java.util.Map;
 
-public interface FusionTable<T> {
+/**
+ * An Iceberg table loaded from a Fusion catalog. It is the Iceberg {@link Table} itself plus what
+ * Fusion adds around it: the Fusion {@link TableIdentifier}, the catalog's {@code table.*} default
+ * properties, and the catalog-authenticated {@link AuthenticatedFileIO}. All Iceberg reads and
+ * commits go through {@link #table()} directly. This object stays in the server; it is never
+ * serialized.
+ */
+public final class FusionTable {
 
-  /** Returns the {@link TableIdentifier} of this table */
-  TableIdentifier id();
+  private final TableIdentifier identifier;
+  private final Table table;
+  private final AuthenticatedFileIO io;
+  private final Map<String, String> catalogProperties;
+  private Table serializableTable;
+  private Map<String, String> serializableProperties;
 
-  /** Returns the name of this table */
-  default String name() {
-    return id().toString();
+  public FusionTable(
+      TableIdentifier identifier,
+      Table table,
+      AuthenticatedFileIO io,
+      Map<String, String> catalogProperties) {
+    this.identifier = Preconditions.checkNotNull(identifier, "identifier");
+    this.table = Preconditions.checkNotNull(table, "table");
+    this.io = Preconditions.checkNotNull(io, "io");
+    this.catalogProperties = catalogProperties;
   }
 
-  /** Returns the {@link TableFormat} of this table */
-  TableFormat format();
+  /** Returns the {@link TableIdentifier} of this table */
+  public TableIdentifier id() {
+    return identifier;
+  }
 
-  /** Returns the properties of this table */
-  Map<String, String> properties();
+  /** Returns the name of this table */
+  public String name() {
+    return identifier.toString();
+  }
 
-  /** Returns the original of this table */
-  T originalTable();
+  /** Returns the {@link TableFormat} of this table; Fusion only serves Iceberg tables. */
+  public TableFormat format() {
+    return TableFormat.ICEBERG;
+  }
 
-  /** Returns the current snapshot of this table */
-  TableSnapshot currentSnapshot();
+  /** Returns the Iceberg table. */
+  public Table table() {
+    return table;
+  }
+
+  /** Returns the file IO of the table, authenticated with the catalog's credentials. */
+  public AuthenticatedFileIO io() {
+    return io;
+  }
+
+  /**
+   * Returns the table properties with the catalog's {@code table.*} defaults merged in; properties
+   * set on the table win.
+   */
+  public Map<String, String> properties() {
+    if (catalogProperties == null) {
+      return table.properties();
+    }
+    return CatalogUtil.mergeCatalogPropertiesToTable(table.properties(), catalogProperties);
+  }
+
+  /**
+   * Returns a read-only {@link SerializableTable} copy of the table for task inputs. It is made
+   * once, so the inputs of one planned process share it and it is serialized once.
+   */
+  public synchronized Table serializableTable() {
+    if (serializableTable == null) {
+      serializableTable = SerializableTable.copyOf(table);
+    }
+    return serializableTable;
+  }
+
+  /** Returns {@link #properties()} as a map made once, for task inputs. */
+  public synchronized Map<String, String> serializableProperties() {
+    if (serializableProperties == null) {
+      serializableProperties = new HashMap<>(properties());
+    }
+    return serializableProperties;
+  }
+
+  @Override
+  public String toString() {
+    return name();
+  }
 }

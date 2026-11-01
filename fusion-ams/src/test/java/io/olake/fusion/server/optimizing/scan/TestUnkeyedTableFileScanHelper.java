@@ -25,16 +25,16 @@ import io.olake.fusion.TableFormat;
 import io.olake.fusion.TableTestHelper;
 import io.olake.fusion.catalog.BasicCatalogTestHelper;
 import io.olake.fusion.catalog.CatalogTestHelper;
-import io.olake.fusion.io.MixedDataTestHelpers;
+import io.olake.fusion.io.DataTestHelpers;
+import io.olake.fusion.optimizing.scan.IcebergTableFileScanHelper;
 import io.olake.fusion.optimizing.scan.TableFileScanHelper;
-import io.olake.fusion.optimizing.scan.UnkeyedTableFileScanHelper;
 import io.olake.fusion.server.optimizing.OptimizingTestHelpers;
 import io.olake.fusion.server.utils.IcebergTableUtil;
-import io.olake.fusion.table.UnkeyedTable;
 import io.olake.fusion.utils.ExpressionUtil;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Lists;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
+import org.apache.iceberg.Table;
 import org.apache.iceberg.data.Record;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -68,8 +68,7 @@ public class TestUnkeyedTableFileScanHelper extends TableFileScanHelperTestBase 
   @Test
   public void testScanEmptySnapshot() {
     OptimizingTestHelpers.appendBase(
-        getMixedTable(),
-        tableTestHelper().writeBaseStore(getMixedTable(), 0L, Collections.emptyList(), false));
+        getTable(), tableTestHelper().writeDataFiles(getTable(), Collections.emptyList()));
 
     List<TableFileScanHelper.FileScanResult> scan = scanFiles();
     assertScanResult(scan, 0);
@@ -85,13 +84,12 @@ public class TestUnkeyedTableFileScanHelper extends TableFileScanHelperTestBase 
             tableTestHelper().generateTestRecord(4, "444", 0, "2022-01-02T12:00:00"));
     List<DataFile> dataFiles =
         OptimizingTestHelpers.appendBase(
-            getMixedTable(),
-            tableTestHelper().writeBaseStore(getMixedTable(), 0L, newRecords, false));
+            getTable(), tableTestHelper().writeDataFiles(getTable(), newRecords));
     // partition field = "2022-01-01T12:00:00"
     DataFile sampleFile = dataFiles.get(0);
 
     OptimizingTestHelpers.appendBase(
-        getMixedTable(), tableTestHelper().writeBaseStore(getMixedTable(), 0L, newRecords, false));
+        getTable(), tableTestHelper().writeDataFiles(getTable(), newRecords));
 
     List<TableFileScanHelper.FileScanResult> scan = scanFiles();
 
@@ -107,7 +105,7 @@ public class TestUnkeyedTableFileScanHelper extends TableFileScanHelperTestBase 
             buildFileScanHelper()
                 .withPartitionFilter(
                     ExpressionUtil.convertPartitionDataToDataFilter(
-                        getMixedTable(), sampleFile.specId(), sampleFile.partition())));
+                        getTable(), sampleFile.specId(), sampleFile.partition())));
     assertScanResult(scan, 2, null, 0);
   }
 
@@ -121,15 +119,13 @@ public class TestUnkeyedTableFileScanHelper extends TableFileScanHelperTestBase 
             tableTestHelper().generateTestRecord(4, "444", 0, "2022-01-01T12:00:00"));
     List<DataFile> dataFiles =
         OptimizingTestHelpers.appendBase(
-            getMixedTable(),
-            tableTestHelper().writeBaseStore(getMixedTable(), 0L, newRecords, false));
+            getTable(), tableTestHelper().writeDataFiles(getTable(), newRecords));
     List<DeleteFile> posDeleteFiles = Lists.newArrayList();
     for (DataFile dataFile : dataFiles) {
       posDeleteFiles.addAll(
-          MixedDataTestHelpers.writeBaseStorePosDelete(
-              getMixedTable(), 0L, dataFile, Collections.singletonList(0L)));
+          DataTestHelpers.writePosDeletes(getTable(), dataFile, Collections.singletonList(0L)));
     }
-    OptimizingTestHelpers.appendBasePosDelete(getMixedTable(), posDeleteFiles);
+    OptimizingTestHelpers.appendBasePosDelete(getTable(), posDeleteFiles);
 
     List<TableFileScanHelper.FileScanResult> scan = scanFiles();
 
@@ -137,13 +133,13 @@ public class TestUnkeyedTableFileScanHelper extends TableFileScanHelperTestBase 
   }
 
   @Override
-  protected UnkeyedTable getMixedTable() {
-    return super.getMixedTable().asUnkeyedTable();
+  protected Table getTable() {
+    return super.getTable();
   }
 
   @Override
   protected TableFileScanHelper buildFileScanHelper() {
-    long baseSnapshotId = IcebergTableUtil.getSnapshotId(getMixedTable(), true);
-    return new UnkeyedTableFileScanHelper(getMixedTable(), baseSnapshotId);
+    long baseSnapshotId = IcebergTableUtil.getSnapshotId(getTable(), true);
+    return new IcebergTableFileScanHelper(getTable(), baseSnapshotId);
   }
 }

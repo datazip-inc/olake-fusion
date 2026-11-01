@@ -18,3 +18,4 @@
 # Modified by Datazip Inc. in 2026
 #
 
+io.olake.fusion.metrics.promethues.PrometheusMetricsReporter

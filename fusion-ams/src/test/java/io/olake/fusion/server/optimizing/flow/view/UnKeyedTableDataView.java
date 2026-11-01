@@ -20,19 +20,15 @@
 
 package io.olake.fusion.server.optimizing.flow.view;
 
-import static io.olake.fusion.table.TableProperties.WRITE_TARGET_FILE_SIZE_BYTES;
-
-import io.olake.fusion.TableFormat;
 import io.olake.fusion.data.ChangeAction;
 import io.olake.fusion.io.writer.RecordWithAction;
 import io.olake.fusion.server.optimizing.flow.RandomRecordGenerator;
-import io.olake.fusion.table.MixedTable;
 import org.apache.commons.collections.CollectionUtils;
-import org.apache.iceberg.AppendFiles;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.RowDelta;
 import org.apache.iceberg.StructLike;
+import org.apache.iceberg.Table;
 import org.apache.iceberg.data.InternalRecordWrapper;
 import org.apache.iceberg.data.Record;
 import org.apache.iceberg.io.WriteResult;
@@ -52,14 +48,11 @@ public class UnKeyedTableDataView extends AbstractTableDataView {
   private final InternalRecordWrapper wrapper;
 
   public UnKeyedTableDataView(
-      MixedTable mixedTable, int partitionCount, long targetFileSize, Long seed) {
+      Table mixedTable, int partitionCount, long targetFileSize, Long seed) {
     super(mixedTable, null, targetFileSize);
 
     this.wrapper = new InternalRecordWrapper(schema.asStruct());
     this.targetFileSize = targetFileSize;
-    if (mixedTable.format() != TableFormat.ICEBERG) {
-      mixedTable.updateProperties().set(WRITE_TARGET_FILE_SIZE_BYTES, targetFileSize + "");
-    }
 
     this.generator =
         new RandomRecordGenerator(
@@ -121,22 +114,14 @@ public class UnKeyedTableDataView extends AbstractTableDataView {
   }
 
   private void appendCommit(WriteResult writeResult) {
-    if (mixedTable.isKeyedTable()) {
-      AppendFiles appendFiles = mixedTable.asKeyedTable().changeTable().newAppend();
-      for (DataFile dataFile : writeResult.dataFiles()) {
-        appendFiles.appendFile(dataFile);
-      }
-      appendFiles.commit();
-    } else {
-      RowDelta rowDelta = mixedTable.asUnkeyedTable().newRowDelta();
-      for (DataFile dataFile : writeResult.dataFiles()) {
-        rowDelta.addRows(dataFile);
-      }
-      for (DeleteFile deleteFile : writeResult.deleteFiles()) {
-        rowDelta.addDeletes(deleteFile);
-      }
-      rowDelta.commit();
+    RowDelta rowDelta = mixedTable.newRowDelta();
+    for (DataFile dataFile : writeResult.dataFiles()) {
+      rowDelta.addRows(dataFile);
     }
+    for (DeleteFile deleteFile : writeResult.deleteFiles()) {
+      rowDelta.addDeletes(deleteFile);
+    }
+    rowDelta.commit();
   }
 
   private void writeView(List<RecordWithAction> records) {

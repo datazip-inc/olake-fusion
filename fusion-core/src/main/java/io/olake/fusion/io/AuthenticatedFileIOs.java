@@ -20,47 +20,11 @@
 
 package io.olake.fusion.io;
 
-import io.olake.fusion.table.TableIdentifier;
 import io.olake.fusion.table.TableMetaStore;
-import io.olake.fusion.table.TableProperties;
-import io.olake.fusion.utils.MixedFormatCatalogUtil;
 import org.apache.iceberg.hadoop.HadoopFileIO;
 import org.apache.iceberg.io.FileIO;
-import org.apache.iceberg.util.PropertyUtil;
-
-import java.util.Map;
 
 public class AuthenticatedFileIOs {
-
-  public static final boolean CLOSE_TRASH = true;
-
-  public static AuthenticatedHadoopFileIO buildRecoverableHadoopFileIO(
-      TableIdentifier tableIdentifier,
-      String tableLocation,
-      Map<String, String> tableProperties,
-      TableMetaStore tableMetaStore,
-      Map<String, String> catalogProperties) {
-    tableProperties =
-        MixedFormatCatalogUtil.mergeCatalogPropertiesToTable(tableProperties, catalogProperties);
-    if (!CLOSE_TRASH
-        && PropertyUtil.propertyAsBoolean(
-            tableProperties,
-            TableProperties.ENABLE_TABLE_TRASH,
-            TableProperties.ENABLE_TABLE_TRASH_DEFAULT)) {
-      AuthenticatedHadoopFileIO fileIO = new AuthenticatedHadoopFileIO(tableMetaStore);
-      TableTrashManager trashManager =
-          TableTrashManagers.build(tableIdentifier, tableLocation, tableProperties, fileIO);
-      String trashFilePattern =
-          PropertyUtil.propertyAsString(
-              tableProperties,
-              TableProperties.TABLE_TRASH_FILE_PATTERN,
-              TableProperties.TABLE_TRASH_FILE_PATTERN_DEFAULT);
-
-      return new RecoverableHadoopFileIO(tableMetaStore, trashManager, trashFilePattern);
-    } else {
-      return new AuthenticatedHadoopFileIO(tableMetaStore);
-    }
-  }
 
   public static AuthenticatedHadoopFileIO buildHadoopFileIO(TableMetaStore tableMetaStore) {
     return new AuthenticatedHadoopFileIO(tableMetaStore);

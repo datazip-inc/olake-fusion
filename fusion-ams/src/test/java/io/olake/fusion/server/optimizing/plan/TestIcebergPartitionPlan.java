@@ -81,7 +81,7 @@ public class TestIcebergPartitionPlan extends TestUnkeyedPartitionPlan {
     return new IcebergPartitionPlan(
         tableRuntime.getTableIdentifier(),
         tableRuntime.getOptimizingConfig(),
-        getMixedTable(),
+        getFusionTable(),
         getPartition(),
         System.currentTimeMillis(),
         tableRuntime.getLastMinorOptimizingTime(),
@@ -91,8 +91,8 @@ public class TestIcebergPartitionPlan extends TestUnkeyedPartitionPlan {
 
   @Override
   protected TableFileScanHelper getTableFileScanHelper() {
-    long baseSnapshotId = IcebergTableUtil.getSnapshotId(getMixedTable(), true);
-    return new IcebergTableFileScanHelper(getMixedTable(), baseSnapshotId);
+    long baseSnapshotId = IcebergTableUtil.getSnapshotId(getTable(), true);
+    return new IcebergTableFileScanHelper(getTable(), baseSnapshotId);
   }
 
   protected Map<String, String> buildTaskProperties() {

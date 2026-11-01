@@ -20,13 +20,8 @@
 
 package io.olake.fusion.server.optimizing;
 
-import io.olake.fusion.data.ChangeAction;
-import io.olake.fusion.io.MixedDataTestHelpers;
-import io.olake.fusion.io.writer.GenericTaskWriters;
+import io.olake.fusion.io.DataTestHelpers;
 import io.olake.fusion.server.AmsEnvironment;
-import io.olake.fusion.table.KeyedTable;
-import io.olake.fusion.table.MixedTable;
-import io.olake.fusion.table.UnkeyedTable;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Lists;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Sets;
 import org.apache.iceberg.AppendFiles;
@@ -45,7 +40,6 @@ import org.apache.iceberg.data.IcebergGenerics;
 import org.apache.iceberg.data.Record;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.OutputFileFactory;
-import org.apache.iceberg.io.TaskWriter;
 import org.apache.iceberg.util.Pair;
 import org.junit.Assert;
 import org.junit.jupiter.api.AfterAll;
@@ -59,7 +53,6 @@ import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -127,12 +120,6 @@ public abstract class AbstractOptimizingTest {
   }
 
   protected static void updateProperties(Table table, String key, String value) {
-    UpdateProperties updateProperties = table.updateProperties();
-    updateProperties.set(key, value);
-    updateProperties.commit();
-  }
-
-  protected static void updateProperties(MixedTable table, String key, String value) {
     UpdateProperties updateProperties = table.updateProperties();
     updateProperties.set(key, value);
     updateProperties.commit();
@@ -228,13 +215,8 @@ public abstract class AbstractOptimizingTest {
     rowDelta.commit();
   }
 
-  protected static List<DataFile> writeBase(MixedTable table, List<Record> insertRows) {
-    UnkeyedTable baseTable;
-    if (table.isUnkeyedTable()) {
-      baseTable = table.asUnkeyedTable();
-    } else {
-      baseTable = table.asKeyedTable().baseTable();
-    }
+  protected static List<DataFile> writeBase(Table table, List<Record> insertRows) {
+    Table baseTable = table;
     List<DataFile> insertFiles = write(baseTable, insertRows);
     AppendFiles appendFiles = baseTable.newAppend();
     insertFiles.forEach(appendFiles::appendFile);
@@ -242,24 +224,9 @@ public abstract class AbstractOptimizingTest {
     return insertFiles;
   }
 
-  protected static List<DataFile> write(UnkeyedTable table, List<Record> rows) {
+  protected static List<DataFile> write(Table table, List<Record> rows) {
     if (rows != null && !rows.isEmpty()) {
-      try (TaskWriter<Record> writer =
-          GenericTaskWriters.builderFor(table)
-              .withChangeAction(ChangeAction.INSERT)
-              .buildBaseWriter()) {
-        rows.forEach(
-            row -> {
-              try {
-                writer.write(row);
-              } catch (IOException e) {
-                throw new UncheckedIOException(e);
-              }
-            });
-        return Arrays.asList(writer.complete().dataFiles());
-      } catch (IOException e) {
-        throw new RuntimeException(e);
-      }
+      return DataTestHelpers.writeDataFiles(table, rows);
     }
     return Collections.emptyList();
   }
@@ -274,10 +241,6 @@ public abstract class AbstractOptimizingTest {
       LOG.warn("{} failed to close reader", table.name(), e);
     }
     return result;
-  }
-
-  protected static List<Record> readRecords(KeyedTable keyedTable) {
-    return MixedDataTestHelpers.readKeyedTable(keyedTable, null);
   }
 
   protected static void assertIds(List<Record> actualRows, Object... expectIds) {

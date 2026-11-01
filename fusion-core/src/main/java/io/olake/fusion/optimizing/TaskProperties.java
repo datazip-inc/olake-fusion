@@ -45,8 +45,6 @@ public class TaskProperties {
 
   public static final String OUTPUT_DIR = "output_location";
 
-  public static final String MOVE_FILE_TO_HIVE_LOCATION = "move-files-to-hive-location";
-
   public static StructLikeCollections getStructLikeCollections(Map<String, String> properties) {
     boolean enableSpillMap =
         PropertyUtil.propertyAsBoolean(

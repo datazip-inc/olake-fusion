@@ -20,7 +20,6 @@
 
 package io.olake.fusion.server.terminal;
 
-import io.olake.fusion.Constants;
 import io.olake.fusion.TableFormat;
 import io.olake.fusion.api.CatalogMeta;
 import io.olake.fusion.aws.StaticAwsCredentialsProvider;
@@ -32,12 +31,9 @@ import io.olake.fusion.server.catalog.CatalogManager;
 import io.olake.fusion.server.dashboard.model.LatestSessionInfo;
 import io.olake.fusion.server.dashboard.model.LogInfo;
 import io.olake.fusion.server.dashboard.model.SqlResult;
-import io.olake.fusion.server.dashboard.utils.AmsUtil;
-import io.olake.fusion.server.terminal.kyuubi.KyuubiTerminalSessionFactory;
 import io.olake.fusion.server.terminal.local.LocalSessionFactory;
 import io.olake.fusion.table.TableMetaStore;
 import io.olake.fusion.utils.CatalogUtil;
-import io.olake.fusion.utils.LegacyClassNames;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Lists;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Maps;
@@ -49,7 +45,6 @@ import org.slf4j.LoggerFactory;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -121,9 +116,6 @@ public class TerminalManager {
         TerminalSessionFactory.SessionConfigOptions.CATALOGS, Lists.newArrayList(catalog));
     configuration.set(
         TerminalSessionFactory.SessionConfigOptions.catalogConnector(catalog), connectorType);
-    configuration.set(
-        TerminalSessionFactory.SessionConfigOptions.CATALOG_URL_BASE,
-        AmsUtil.getAMSThriftAddress(serviceConfig, Constants.THRIFT_TABLE_SERVICE_NAME));
     for (String key : catalogMeta.getCatalogProperties().keySet()) {
       String value = catalogMeta.getCatalogProperties().get(key);
       configuration.set(
@@ -266,92 +258,28 @@ public class TerminalManager {
   }
 
   private String getSessionId(String loginId, TableMetaStore auth, String catalog) {
-    String authName = auth.getHadoopUsername();
-    if (auth.isKerberosAuthMethod()) {
-      authName = auth.getKrbPrincipal();
-    }
-    String sessionId = loginId + "-" + auth.getAuthMethod() + "-" + authName + "-" + catalog;
+    String sessionId =
+        loginId + "-" + auth.getAuthMethod() + "-" + auth.getHadoopUsername() + "-" + catalog;
     sessionId = sessionId.replace("/", "_");
     return sessionId;
   }
 
   private TableMetaStore getCatalogTableMetaStore(CatalogMeta catalogMeta) {
     TableMetaStore.Builder builder = TableMetaStore.builder();
-    if (catalogMeta.getStorageConfigs() != null) {
-      Map<String, String> storageConfigs = catalogMeta.getStorageConfigs();
-      String storageType = CatalogUtil.getCompatibleStorageType(storageConfigs);
-      if (CatalogMetaProperties.STORAGE_CONFIGS_VALUE_TYPE_LOCAL.equalsIgnoreCase(storageType)) {
-        builder.withConfiguration(new Configuration());
-        return builder.build();
-      }
-      if (CatalogMetaProperties.STORAGE_CONFIGS_VALUE_TYPE_HADOOP.equalsIgnoreCase(storageType)) {
-        builder
-            .withBase64MetaStoreSite(
-                catalogMeta
-                    .getStorageConfigs()
-                    .get(CatalogMetaProperties.STORAGE_CONFIGS_KEY_HIVE_SITE))
-            .withBase64CoreSite(
-                catalogMeta
-                    .getStorageConfigs()
-                    .get(CatalogMetaProperties.STORAGE_CONFIGS_KEY_CORE_SITE))
-            .withBase64HdfsSite(
-                catalogMeta
-                    .getStorageConfigs()
-                    .get(CatalogMetaProperties.STORAGE_CONFIGS_KEY_HDFS_SITE));
-      }
-    }
-    String authType = catalogMeta.getAuthConfigs().get(CatalogMetaProperties.AUTH_CONFIGS_KEY_TYPE);
-    if (CatalogMetaProperties.AUTH_CONFIGS_VALUE_TYPE_SIMPLE.equalsIgnoreCase(authType)) {
-      builder.withSimpleAuth(
-          catalogMeta.getAuthConfigs().get(CatalogMetaProperties.AUTH_CONFIGS_KEY_HADOOP_USERNAME));
-    } else if (CatalogMetaProperties.AUTH_CONFIGS_VALUE_TYPE_KERBEROS.equalsIgnoreCase(authType)) {
-      builder.withBase64Auth(
-          catalogMeta.getAuthConfigs().get(CatalogMetaProperties.AUTH_CONFIGS_KEY_TYPE),
-          catalogMeta.getAuthConfigs().get(CatalogMetaProperties.AUTH_CONFIGS_KEY_HADOOP_USERNAME),
-          catalogMeta.getAuthConfigs().get(CatalogMetaProperties.AUTH_CONFIGS_KEY_KEYTAB),
-          catalogMeta.getAuthConfigs().get(CatalogMetaProperties.AUTH_CONFIGS_KEY_KRB5),
-          catalogMeta.getAuthConfigs().get(CatalogMetaProperties.AUTH_CONFIGS_KEY_PRINCIPAL));
+    if (catalogMeta.getStorageConfigs() != null
+        && CatalogMetaProperties.STORAGE_CONFIGS_VALUE_TYPE_LOCAL.equalsIgnoreCase(
+            catalogMeta.getStorageConfigs().get(CatalogMetaProperties.STORAGE_CONFIGS_KEY_TYPE))) {
+      builder.withConfiguration(new Configuration());
     }
     return builder.build();
   }
 
   private TerminalSessionFactory loadTerminalSessionFactory(Configurations conf) {
-    String backend = conf.get(FusionManagementConf.TERMINAL_BACKEND);
-    if (backend == null) {
-      throw new IllegalArgumentException("lack terminal implement config.");
-    }
-    String backendImplement;
-    switch (backend.toLowerCase()) {
-      case "local":
-        backendImplement = LocalSessionFactory.class.getName();
-        break;
-      case "kyuubi":
-        backendImplement = KyuubiTerminalSessionFactory.class.getName();
-        break;
-      case "custom":
-        Optional<String> customFactoryClz =
-            conf.getOptional(FusionManagementConf.TERMINAL_SESSION_FACTORY);
-        if (!customFactoryClz.isPresent()) {
-          throw new IllegalArgumentException(
-              "terminal backend type is custom, but terminal session factory is not "
-                  + "configured");
-        }
-        backendImplement = customFactoryClz.get();
-        break;
-      default:
-        throw new IllegalArgumentException(
-            "illegal terminal implement: " + backend + ", local, kyuubi, " + "custom is available");
-    }
-    TerminalSessionFactory factory;
-    try {
-      factory =
-          (TerminalSessionFactory)
-              Class.forName(LegacyClassNames.toCurrent(backendImplement)).newInstance();
-    } catch (InstantiationException | IllegalAccessException | ClassNotFoundException e) {
-      throw new RuntimeException("failed to init session factory", e);
-    }
-
-    String factoryPropertiesPrefix = FusionManagementConf.TERMINAL_PREFIX + backend + ".";
+    // The local Spark backend is the only one; FusionManagementConfValidator rejects any other
+    // terminal.backend value.
+    TerminalSessionFactory factory = new LocalSessionFactory();
+    String factoryPropertiesPrefix =
+        FusionManagementConf.TERMINAL_PREFIX + FusionManagementConf.TERMINAL_BACKEND_LOCAL + ".";
     Configurations configuration = new Configurations();
 
     for (String key : conf.keySet()) {
@@ -374,10 +302,7 @@ public class TerminalManager {
     Set<TableFormat> formats = CatalogUtil.tableFormats(catalogMeta);
     String catalogType = CatalogUtil.normalizeCatalogType(catalogMeta.getCatalogType());
     if (formats.contains(TableFormat.ICEBERG)) {
-      if (CatalogMetaProperties.CATALOG_TYPE_AMS.equalsIgnoreCase(catalogType)) {
-        catalogMeta.putToCatalogProperties(
-            CatalogMetaProperties.KEY_WAREHOUSE, catalogMeta.getCatalogName());
-      } else if (!catalogMeta.getCatalogProperties().containsKey(CatalogProperties.CATALOG_IMPL)) {
+      if (!catalogMeta.getCatalogProperties().containsKey(CatalogProperties.CATALOG_IMPL)) {
         catalogMeta.putToCatalogProperties("type", catalogType);
       }
       // apply glue credentials to glue catalog
@@ -389,8 +314,6 @@ public class TerminalManager {
           enriched.forEach(catalogMeta::putToCatalogProperties);
         }
       }
-    } else if (formats.contains(TableFormat.PAIMON) && "hive".equals(catalogType)) {
-      catalogMeta.putToCatalogProperties("metastore", catalogType);
     }
   }
 

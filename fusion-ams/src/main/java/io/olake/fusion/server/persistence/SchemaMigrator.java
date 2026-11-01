@@ -85,7 +85,9 @@ public class SchemaMigrator {
   private static final String HISTORY_TABLE = "ams_schema_migration";
 
   /** Migration scripts in the order they must be applied. */
-  private static final String[] MIGRATIONS = {"V1__platform_property.sql"};
+  private static final String[] MIGRATIONS = {
+    "V1__platform_property.sql", "V2__drop_unused_tables.sql"
+  };
 
   private SchemaMigrator() {}
 
@@ -94,12 +96,6 @@ public class SchemaMigrator {
       LOG.info("Skip schema migrations due to configuration");
       return;
     }
-    String dbType = config.getString(FusionManagementConf.DB_TYPE);
-    if (!FusionManagementConf.DB_TYPE_POSTGRES.equals(dbType)) {
-      LOG.info("Skip schema migrations, they are only maintained for postgres, not {}", dbType);
-      return;
-    }
-
     Map<Integer, String> declared = declaredMigrations();
     try (Connection connection = ds.getConnection()) {
       Map<Integer, AppliedMigration> applied = readHistory(connection);

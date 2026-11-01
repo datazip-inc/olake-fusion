@@ -15,8 +15,6 @@
   * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
   * See the License for the specific language governing permissions and
   * limitations under the License.
-  *
-  * Modified by Datazip Inc. in 2026
   */
 
 import{V as o}from"./vue-dGT8fLn8.js";function u(){const t=["25","50","100"],{t:e}=o();return{total:0,current:1,pageSize:25,pageSizeOptions:t,showQuickJumper:!0,showSizeChanger:!0,hideOnSinglePage:!1,showTotal:n=>e("totalCount",{total:n})}}export{u};

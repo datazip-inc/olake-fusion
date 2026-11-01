@@ -36,6 +36,4 @@ public final class ErrorCodes {
   public static final int ILLEGAL_TASK_STATE_ERROR_CODE = 2004;
   public static final int PLUGIN_AUTH_ERROR_CODE = 2005;
   public static final int PLUGIN_RETRY_AUTH_ERROR_CODE = 2006;
-
-  public static final int BLOCKER_CONFLICT_ERROR_CODE = 3001;
 }

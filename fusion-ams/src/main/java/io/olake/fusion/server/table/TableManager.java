@@ -20,11 +20,4 @@
 
 package io.olake.fusion.server.table;
 
-import io.olake.fusion.server.table.blocker.TableBlockerManager;
-import io.olake.fusion.server.table.internal.InternalTableManager;
-
-public interface TableManager
-    extends MaintainedTableManager, InternalTableManager, TableBlockerManager {
-
-  void setTableService(TableService service);
-}
+public interface TableManager extends MaintainedTableManager {}

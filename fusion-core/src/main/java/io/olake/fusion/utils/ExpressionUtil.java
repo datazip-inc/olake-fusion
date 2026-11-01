@@ -20,7 +20,6 @@
 
 package io.olake.fusion.utils;
 
-import io.olake.fusion.table.MixedTable;
 import net.sf.jsqlparser.expression.DateTimeLiteralExpression;
 import net.sf.jsqlparser.expression.DoubleValue;
 import net.sf.jsqlparser.expression.LongValue;
@@ -46,6 +45,7 @@ import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.StructLike;
+import org.apache.iceberg.Table;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.expressions.UnboundTerm;
@@ -68,13 +68,13 @@ public class ExpressionUtil {
   /**
    * Convert partition data to data filter.
    *
-   * @param table the {@link MixedTable} table
+   * @param table the Iceberg table
    * @param specId the partition spec id
    * @param partitions the collection of partition data
    * @return data filter converted from partition data
    */
   public static Expression convertPartitionDataToDataFilter(
-      MixedTable table, int specId, Collection<StructLike> partitions) {
+      Table table, int specId, Collection<StructLike> partitions) {
     Expression filter = Expressions.alwaysFalse();
     for (StructLike partition : partitions) {
       filter = Expressions.or(filter, convertPartitionDataToDataFilter(table, specId, partition));
@@ -85,14 +85,14 @@ public class ExpressionUtil {
   /**
    * Convert partition data to data filter.
    *
-   * @param table the {@link MixedTable} table
+   * @param table the Iceberg table
    * @param specId the partition spec id
    * @param partition the partition data
    * @return data filter converted from partition data
    */
   public static Expression convertPartitionDataToDataFilter(
-      MixedTable table, int specId, StructLike partition) {
-    PartitionSpec spec = MixedTableUtil.getMixedTablePartitionSpecById(table, specId);
+      Table table, int specId, StructLike partition) {
+    PartitionSpec spec = table.specs().get(specId);
     Schema schema = table.schema();
     Expression filter = Expressions.alwaysTrue();
     for (int i = 0; i < spec.fields().size(); i++) {

@@ -25,15 +25,11 @@ import io.olake.fusion.maintainer.MaintainerMetrics;
 import io.olake.fusion.maintainer.OptimizingInfo;
 import io.olake.fusion.maintainer.TableMaintainerContext;
 import io.olake.fusion.server.table.TableConfigurations;
-import io.olake.fusion.table.KeyedTable;
-import io.olake.fusion.table.MixedTable;
 import io.olake.fusion.table.TableProperties;
-import io.olake.fusion.table.UnkeyedTable;
+import org.apache.iceberg.Table;
 
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
 
 /** Utility class for creating test TableMaintainerContext instances. */
 public class TestTableMaintainerContext {
@@ -44,18 +40,8 @@ public class TestTableMaintainerContext {
     return TableConfigurations.parseTableConfig(merged);
   }
 
-  /** Create a test TableMaintainerContext for the given MixedTable. */
-  public static TableMaintainerContext of(MixedTable table) {
-    return new Impl(parseTestTableConfig(table.properties()), table);
-  }
-
-  /** Create a test TableMaintainerContext for the given KeyedTable. */
-  public static TableMaintainerContext of(KeyedTable table) {
-    return new Impl(parseTestTableConfig(table.properties()));
-  }
-
-  /** Create a test TableMaintainerContext for the given UnkeyedTable. */
-  public static TableMaintainerContext of(UnkeyedTable table) {
+  /** Create a test TableMaintainerContext for the given Table. */
+  public static TableMaintainerContext of(Table table) {
     return new Impl(parseTestTableConfig(table.properties()));
   }
 
@@ -63,18 +49,10 @@ public class TestTableMaintainerContext {
   public static class Impl implements TableMaintainerContext {
     private final TableConfiguration tableConfiguration;
     private OptimizingInfo optimizingInfo;
-    private final MixedTable mixedTable;
 
     public Impl(TableConfiguration tableConfiguration) {
       this.tableConfiguration = tableConfiguration;
       this.optimizingInfo = OptimizingInfo.EMPTY;
-      this.mixedTable = null;
-    }
-
-    public Impl(TableConfiguration tableConfiguration, MixedTable mixedTable) {
-      this.tableConfiguration = tableConfiguration;
-      this.optimizingInfo = OptimizingInfo.EMPTY;
-      this.mixedTable = mixedTable;
     }
 
     public void setOptimizingInfo(OptimizingInfo optimizingInfo) {
@@ -94,11 +72,6 @@ public class TestTableMaintainerContext {
     @Override
     public OptimizingInfo getOptimizingInfo() {
       return optimizingInfo;
-    }
-
-    @Override
-    public Set<String> getHiveLocationPaths() {
-      return Collections.emptySet();
     }
   }
 }

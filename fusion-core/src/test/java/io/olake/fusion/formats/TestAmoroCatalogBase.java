@@ -94,7 +94,7 @@ public abstract class TestAmoroCatalogBase extends FusionCatalogTestBase {
     Map<String, String> properties = new HashMap<>();
     properties.put("key1", "value1");
     createTable(DB1, TABLE, properties);
-    FusionTable<?> amoroTable = amoroCatalog.loadTable(DB1, TABLE);
+    FusionTable amoroTable = amoroCatalog.loadTable(DB1, TABLE);
     Assert.assertEquals(amoroTable.properties().get("key1"), "value1");
     Assert.assertEquals(
         amoroTable.name(), catalogTestHelper.catalogName() + "." + DB1 + "." + TABLE);

@@ -24,7 +24,7 @@ import io.olake.fusion.FusionTable;
 import io.olake.fusion.TableRuntime;
 import io.olake.fusion.config.TableConfiguration;
 import io.olake.fusion.maintainer.TableMaintainer;
-import io.olake.fusion.server.optimizing.maintainer.TableMaintainers;
+import io.olake.fusion.server.optimizing.maintainer.TableMaintainerFactory;
 import io.olake.fusion.server.scheduler.PeriodicTableScheduler;
 import io.olake.fusion.server.table.TableService;
 import io.olake.fusion.server.table.cleanup.CleanupOperation;
@@ -78,8 +78,8 @@ public class SnapshotsExpiringExecutor extends PeriodicTableScheduler {
   @Override
   public void execute(TableRuntime tableRuntime) {
     try {
-      FusionTable<?> amoroTable = loadTable(tableRuntime);
-      TableMaintainer tableMaintainer = TableMaintainers.create(amoroTable, tableRuntime);
+      FusionTable table = loadTable(tableRuntime);
+      TableMaintainer tableMaintainer = TableMaintainerFactory.create(table, tableRuntime);
       tableMaintainer.expireSnapshots();
     } catch (Throwable t) {
       LOG.error("unexpected expire error of table {} ", tableRuntime.getTableIdentifier(), t);

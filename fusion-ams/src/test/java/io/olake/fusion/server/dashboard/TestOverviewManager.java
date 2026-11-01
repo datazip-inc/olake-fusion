@@ -31,17 +31,16 @@ import io.olake.fusion.TableFormat;
 import io.olake.fusion.TableTestHelper;
 import io.olake.fusion.catalog.BasicCatalogTestHelper;
 import io.olake.fusion.catalog.CatalogTestHelper;
-import io.olake.fusion.io.MixedDataTestHelpers;
+import io.olake.fusion.io.DataTestHelpers;
 import io.olake.fusion.server.dashboard.model.OverviewTopTableItem;
 import io.olake.fusion.server.scheduler.inline.TableHealthScoreExecutor;
 import io.olake.fusion.server.scheduler.inline.TableRuntimeRefreshExecutor;
 import io.olake.fusion.server.table.AMSTableTestBase;
 import io.olake.fusion.server.table.DefaultTableRuntime;
-import io.olake.fusion.table.MixedTable;
-import io.olake.fusion.table.UnkeyedTable;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Lists;
 import org.apache.iceberg.AppendFiles;
 import org.apache.iceberg.DataFile;
+import org.apache.iceberg.Table;
 import org.apache.iceberg.data.Record;
 import org.junit.After;
 import org.junit.Before;
@@ -89,21 +88,18 @@ public class TestOverviewManager extends AMSTableTestBase {
   }
 
   private void initTableWithFiles() {
-    UnkeyedTable table =
-        ((MixedTable) tableService().loadTable(serverTableIdentifier()).originalTable())
-            .asUnkeyedTable();
+    Table table = tableService().loadTable(serverTableIdentifier()).table();
     appendData(table, 1);
     appendData(table, 2);
     DefaultTableRuntime runtime = getDefaultTableRuntime(serverTableIdentifier().getId());
     runtime.refresh(tableService().loadTable(serverTableIdentifier()));
   }
 
-  private void appendData(UnkeyedTable table, int id) {
+  private void appendData(Table table, int id) {
     ArrayList<Record> newRecords =
         Lists.newArrayList(
-            MixedDataTestHelpers.createRecord(
-                table.schema(), id, "111", 0L, "2022-01-01T12:00:00"));
-    List<DataFile> dataFiles = MixedDataTestHelpers.writeBaseStore(table, 0L, newRecords, false);
+            DataTestHelpers.createRecord(table.schema(), id, "111", 0L, "2022-01-01T12:00:00"));
+    List<DataFile> dataFiles = DataTestHelpers.writeDataFiles(table, newRecords);
     AppendFiles appendFiles = table.newAppend();
     dataFiles.forEach(appendFiles::appendFile);
     appendFiles.commit();

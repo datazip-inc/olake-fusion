@@ -23,12 +23,11 @@ package io.olake.fusion.server;
 import io.olake.fusion.config.Configurations;
 import io.olake.fusion.resource.ResourceGroup;
 import io.olake.fusion.server.catalog.DefaultCatalogManager;
-import io.olake.fusion.server.manager.EventsManager;
 import io.olake.fusion.server.manager.MetricManager;
+import io.olake.fusion.server.persistence.PostgresPersistence;
 import io.olake.fusion.server.resource.DefaultOptimizerManager;
 import io.olake.fusion.server.resource.OptimizerManager;
 import io.olake.fusion.server.table.DefaultTableManager;
-import io.olake.fusion.server.table.DerbyPersistence;
 import io.olake.fusion.server.table.TableManager;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -37,7 +36,7 @@ import org.junit.ClassRule;
 
 public abstract class AMSManagerTestBase {
 
-  @ClassRule public static DerbyPersistence DERBY = new DerbyPersistence();
+  @ClassRule public static PostgresPersistence POSTGRES = new PostgresPersistence();
 
   protected static DefaultCatalogManager CATALOG_MANAGER = null;
   protected static DefaultTableManager TABLE_MANAGER = null;
@@ -48,7 +47,7 @@ public abstract class AMSManagerTestBase {
     try {
       Configurations configurations = new Configurations();
       CATALOG_MANAGER = new DefaultCatalogManager(configurations);
-      TABLE_MANAGER = new DefaultTableManager(configurations, CATALOG_MANAGER);
+      TABLE_MANAGER = new DefaultTableManager();
       OPTIMIZER_MANAGER = new DefaultOptimizerManager(configurations, CATALOG_MANAGER);
     } catch (Throwable throwable) {
       Assert.fail(throwable.getMessage());
@@ -58,7 +57,6 @@ public abstract class AMSManagerTestBase {
   @AfterClass
   public static void disposeTableService() {
     MetricManager.dispose();
-    EventsManager.dispose();
   }
 
   protected DefaultCatalogManager catalogManager() {

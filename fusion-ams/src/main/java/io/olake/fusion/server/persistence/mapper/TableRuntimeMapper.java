@@ -113,20 +113,14 @@ public interface TableRuntimeMapper {
 
   @Select(
       "<script>"
-          + "<bind name=\"isMySQL\" value=\"_databaseId == 'mysql'\" />"
-          + "<bind name=\"isPostgreSQL\" value=\"_databaseId == 'postgres'\" />"
-          + "<bind name=\"isDerby\" value=\"_databaseId == 'derby'\" />"
           + "SELECT r.table_id, group_name, status_code, status_code_update_time, table_config, table_summary, bucket_id FROM "
           + TABLE_NAME
           + " r JOIN table_identifier i "
           + " ON r.table_id = i.table_id "
-          + "/* Debug: ${_databaseId} */"
           + "WHERE 1=1 "
           + "<if test='groupName != null'> AND r.group_name = #{groupName} </if> "
-          + "<if test='fuzzyDbName != null and isMySQL'> AND i.db_name like CONCAT('%', #{fuzzyDbName, jdbcType=VARCHAR}, '%') </if>"
-          + "<if test='fuzzyDbName != null and (isPostgreSQL or isDerby)'> AND i.db_name like '%' || #{fuzzyDbName, jdbcType=VARCHAR} || '%' </if>"
-          + "<if test='fuzzyTableName != null and isMySQL'> AND i.table_name like CONCAT('%', #{fuzzyTableName, jdbcType=VARCHAR}, '%') </if>"
-          + "<if test='fuzzyTableName != null and (isPostgreSQL or isDerby)'> AND i.table_name like '%' || #{fuzzyTableName, jdbcType=VARCHAR} || '%' </if>"
+          + "<if test='fuzzyDbName != null'> AND i.db_name like '%' || #{fuzzyDbName, jdbcType=VARCHAR} || '%' </if>"
+          + "<if test='fuzzyTableName != null'> AND i.table_name like '%' || #{fuzzyTableName, jdbcType=VARCHAR} || '%' </if>"
           + "<if test='statusCodeFilter != null and statusCodeFilter.size() > 0'>"
           + "AND status_code IN ("
           + "<foreach item='item' collection='statusCodeFilter' separator=','>"

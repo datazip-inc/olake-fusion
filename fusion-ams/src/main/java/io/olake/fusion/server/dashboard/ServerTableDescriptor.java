@@ -74,84 +74,84 @@ public class ServerTableDescriptor extends PersistentBase {
   }
 
   public ServerTableMeta getTableDetail(TableIdentifier tableIdentifier) {
-    FusionTable<?> amoroTable = loadTable(tableIdentifier);
-    FormatTableDescriptor formatTableDescriptor = formatDescriptorMap.get(amoroTable.format());
-    return formatTableDescriptor.getTableDetail(amoroTable);
+    FusionTable fusionTable = loadTable(tableIdentifier);
+    FormatTableDescriptor formatTableDescriptor = formatDescriptorMap.get(fusionTable.format());
+    return formatTableDescriptor.getTableDetail(fusionTable);
   }
 
   public List<FusionSnapshotsOfTable> getSnapshots(
       TableIdentifier tableIdentifier, String ref, OperationType operationType) {
-    FusionTable<?> amoroTable = loadTable(tableIdentifier);
-    FormatTableDescriptor formatTableDescriptor = formatDescriptorMap.get(amoroTable.format());
-    return formatTableDescriptor.getSnapshots(amoroTable, ref, operationType);
+    FusionTable fusionTable = loadTable(tableIdentifier);
+    FormatTableDescriptor formatTableDescriptor = formatDescriptorMap.get(fusionTable.format());
+    return formatTableDescriptor.getSnapshots(fusionTable, ref, operationType);
   }
 
   public List<PartitionFileBaseInfo> getSnapshotDetail(
       TableIdentifier tableIdentifier, String snapshotId, String ref) {
-    FusionTable<?> amoroTable = loadTable(tableIdentifier);
-    FormatTableDescriptor formatTableDescriptor = formatDescriptorMap.get(amoroTable.format());
-    return formatTableDescriptor.getSnapshotDetail(amoroTable, snapshotId, ref);
+    FusionTable fusionTable = loadTable(tableIdentifier);
+    FormatTableDescriptor formatTableDescriptor = formatDescriptorMap.get(fusionTable.format());
+    return formatTableDescriptor.getSnapshotDetail(fusionTable, snapshotId, ref);
   }
 
   public List<DDLInfo> getTableOperations(TableIdentifier tableIdentifier) {
-    FusionTable<?> amoroTable = loadTable(tableIdentifier);
-    FormatTableDescriptor formatTableDescriptor = formatDescriptorMap.get(amoroTable.format());
-    return formatTableDescriptor.getTableOperations(amoroTable);
+    FusionTable fusionTable = loadTable(tableIdentifier);
+    FormatTableDescriptor formatTableDescriptor = formatDescriptorMap.get(fusionTable.format());
+    return formatTableDescriptor.getTableOperations(fusionTable);
   }
 
   public List<PartitionBaseInfo> getTablePartition(TableIdentifier tableIdentifier) {
-    FusionTable<?> amoroTable = loadTable(tableIdentifier);
-    FormatTableDescriptor formatTableDescriptor = formatDescriptorMap.get(amoroTable.format());
-    return formatTableDescriptor.getTablePartitions(amoroTable);
+    FusionTable fusionTable = loadTable(tableIdentifier);
+    FormatTableDescriptor formatTableDescriptor = formatDescriptorMap.get(fusionTable.format());
+    return formatTableDescriptor.getTablePartitions(fusionTable);
   }
 
   public List<PartitionFileBaseInfo> getTableFile(
       TableIdentifier tableIdentifier, String partition, Integer specId) {
-    FusionTable<?> amoroTable = loadTable(tableIdentifier);
-    FormatTableDescriptor formatTableDescriptor = formatDescriptorMap.get(amoroTable.format());
-    return formatTableDescriptor.getTableFiles(amoroTable, partition, specId);
+    FusionTable fusionTable = loadTable(tableIdentifier);
+    FormatTableDescriptor formatTableDescriptor = formatDescriptorMap.get(fusionTable.format());
+    return formatTableDescriptor.getTableFiles(fusionTable, partition, specId);
   }
 
   public List<TagOrBranchInfo> getTableTags(TableIdentifier tableIdentifier) {
-    FusionTable<?> amoroTable = loadTable(tableIdentifier);
-    FormatTableDescriptor formatTableDescriptor = formatDescriptorMap.get(amoroTable.format());
-    return formatTableDescriptor.getTableTags(amoroTable);
+    FusionTable fusionTable = loadTable(tableIdentifier);
+    FormatTableDescriptor formatTableDescriptor = formatDescriptorMap.get(fusionTable.format());
+    return formatTableDescriptor.getTableTags(fusionTable);
   }
 
   public List<TagOrBranchInfo> getTableBranches(TableIdentifier tableIdentifier) {
-    FusionTable<?> amoroTable = loadTable(tableIdentifier);
-    FormatTableDescriptor formatTableDescriptor = formatDescriptorMap.get(amoroTable.format());
-    return formatTableDescriptor.getTableBranches(amoroTable);
+    FusionTable fusionTable = loadTable(tableIdentifier);
+    FormatTableDescriptor formatTableDescriptor = formatDescriptorMap.get(fusionTable.format());
+    return formatTableDescriptor.getTableBranches(fusionTable);
   }
 
   public List<ConsumerInfo> getTableConsumersInfos(TableIdentifier tableIdentifier) {
-    FusionTable<?> amoroTable = loadTable(tableIdentifier);
-    FormatTableDescriptor formatTableDescriptor = formatDescriptorMap.get(amoroTable.format());
-    return formatTableDescriptor.getTableConsumerInfos(amoroTable);
+    FusionTable fusionTable = loadTable(tableIdentifier);
+    FormatTableDescriptor formatTableDescriptor = formatDescriptorMap.get(fusionTable.format());
+    return formatTableDescriptor.getTableConsumerInfos(fusionTable);
   }
 
   public Pair<List<OptimizingProcessInfo>, Integer> getOptimizingProcessesInfo(
       TableIdentifier tableIdentifier, String type, ProcessStatus status, int limit, int offset) {
-    FusionTable<?> amoroTable = loadTable(tableIdentifier);
-    FormatTableDescriptor formatTableDescriptor = formatDescriptorMap.get(amoroTable.format());
+    FusionTable fusionTable = loadTable(tableIdentifier);
+    FormatTableDescriptor formatTableDescriptor = formatDescriptorMap.get(fusionTable.format());
     return formatTableDescriptor.getOptimizingProcessesInfo(
-        amoroTable, type, status, limit, offset);
+        fusionTable, type, status, limit, offset);
   }
 
   public List<OptimizingTaskInfo> getOptimizingProcessTaskInfos(
       TableIdentifier tableIdentifier, String processId) {
-    FusionTable<?> amoroTable = loadTable(tableIdentifier);
-    FormatTableDescriptor formatTableDescriptor = formatDescriptorMap.get(amoroTable.format());
-    return formatTableDescriptor.getOptimizingTaskInfos(amoroTable, processId);
+    FusionTable fusionTable = loadTable(tableIdentifier);
+    FormatTableDescriptor formatTableDescriptor = formatDescriptorMap.get(fusionTable.format());
+    return formatTableDescriptor.getOptimizingTaskInfos(fusionTable, processId);
   }
 
   public Map<String, String> getTableOptimizingTypes(TableIdentifier tableIdentifier) {
-    FusionTable<?> amoroTable = loadTable(tableIdentifier);
-    FormatTableDescriptor formatTableDescriptor = formatDescriptorMap.get(amoroTable.format());
-    return formatTableDescriptor.getTableOptimizingTypes(amoroTable);
+    FusionTable fusionTable = loadTable(tableIdentifier);
+    FormatTableDescriptor formatTableDescriptor = formatDescriptorMap.get(fusionTable.format());
+    return formatTableDescriptor.getTableOptimizingTypes(fusionTable);
   }
 
-  private FusionTable<?> loadTable(TableIdentifier identifier) {
+  private FusionTable loadTable(TableIdentifier identifier) {
     ServerCatalog catalog = catalogManager.getServerCatalog(identifier.getCatalog());
     return catalog.loadTable(identifier.getDatabase(), identifier.getTableName());
   }

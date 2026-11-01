@@ -27,7 +27,6 @@ import io.olake.fusion.TableTestHelper;
 import io.olake.fusion.catalog.BasicCatalogTestHelper;
 import io.olake.fusion.catalog.CatalogTestHelper;
 import io.olake.fusion.exception.ObjectNotExistsException;
-import io.olake.fusion.table.MixedTable;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -50,9 +49,7 @@ public class TestDefaultTableRuntimeManager extends AMSTableTestBase {
 
   @Test
   public void testLoadTable() {
-    MixedTable mixedTable =
-        (MixedTable) tableService().loadTable(serverTableIdentifier()).originalTable();
-    validateMixedTable(mixedTable);
+    validateTable(tableService().loadTable(serverTableIdentifier()));
 
     // test load not existed table
     Assert.assertThrows(

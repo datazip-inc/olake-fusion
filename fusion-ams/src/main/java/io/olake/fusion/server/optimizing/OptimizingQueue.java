@@ -23,7 +23,6 @@ package io.olake.fusion.server.optimizing;
 import io.olake.fusion.FusionTable;
 import io.olake.fusion.OptimizerProperties;
 import io.olake.fusion.ServerTableIdentifier;
-import io.olake.fusion.api.BlockableOperation;
 import io.olake.fusion.api.OptimizingTaskId;
 import io.olake.fusion.api.OptimizingTaskResult;
 import io.olake.fusion.exception.OptimizingClosedException;
@@ -44,18 +43,14 @@ import io.olake.fusion.server.persistence.OptimizingProcessState;
 import io.olake.fusion.server.persistence.PersistentBase;
 import io.olake.fusion.server.persistence.TaskFilesPersistence;
 import io.olake.fusion.server.persistence.mapper.OptimizingProcessMapper;
-import io.olake.fusion.server.persistence.mapper.TableBlockerMapper;
 import io.olake.fusion.server.persistence.mapper.TableProcessMapper;
 import io.olake.fusion.server.process.TableProcessMeta;
 import io.olake.fusion.server.resource.OptimizerInstance;
 import io.olake.fusion.server.resource.OptimizerThread;
 import io.olake.fusion.server.resource.QuotaProvider;
 import io.olake.fusion.server.table.DefaultTableRuntime;
-import io.olake.fusion.server.table.blocker.TableBlocker;
 import io.olake.fusion.server.utils.IcebergTableUtil;
 import io.olake.fusion.server.utils.Telemetry;
-import io.olake.fusion.table.MixedTable;
-import io.olake.fusion.table.TableIdentifier;
 import io.olake.fusion.utils.CompatiblePropertyUtil;
 import io.olake.fusion.utils.ExceptionUtil;
 import org.apache.amoro.shade.guava32.com.google.common.annotations.VisibleForTesting;
@@ -65,6 +60,8 @@ import org.apache.amoro.shade.guava32.com.google.common.collect.Maps;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.sql.SQLException;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -154,7 +151,13 @@ public class OptimizingQueue extends PersistentBase {
               OptimizingProcessMapper.class,
               mapper -> mapper.getProcessState(tableRuntime.getProcessId()));
       process = new TableOptimizingProcess(tableRuntime, meta, state);
-      tableRuntime.recover(process);
+      if (process.isRecoveryFailed()) {
+        // The stored task data could not be read; the process is already closed and the table
+        // is IDLE, so its next cron plans it again.
+        process = null;
+      } else {
+        tableRuntime.recover(process);
+      }
     }
 
     if (tableRuntime.getOptimizingConfig().isEnabled()) {
@@ -267,30 +270,9 @@ public class OptimizingQueue extends PersistentBase {
   private void scheduleTableIfNecessary(long startTime) {
     if (planningTables.size() < maxPlanningParallelism) {
       Set<ServerTableIdentifier> skipTables = new HashSet<>(planningTables);
-      skipBlockedTables(skipTables);
       Optional.ofNullable(scheduler.scheduleTable(skipTables))
           .ifPresent(tableRuntime -> triggerAsyncPlanning(tableRuntime, skipTables, startTime));
     }
-  }
-
-  private void skipBlockedTables(Set<ServerTableIdentifier> skipTables) {
-    List<TableBlocker> tableBlockerList =
-        getAs(
-            TableBlockerMapper.class,
-            mapper -> mapper.selectAllBlockers(System.currentTimeMillis()));
-    Map<TableIdentifier, ServerTableIdentifier> identifierMap = Maps.newHashMap();
-    for (ServerTableIdentifier identifier : scheduler.getTableRuntimeMap().keySet()) {
-      identifierMap.put(identifier.getIdentifier(), identifier);
-    }
-    tableBlockerList.stream()
-        .filter(blocker -> TableBlocker.conflict(BlockableOperation.OPTIMIZE, blocker))
-        .map(
-            blocker ->
-                TableIdentifier.of(
-                    blocker.getCatalog(), blocker.getDatabase(), blocker.getTableName()))
-        .map(identifierMap::get)
-        .filter(Objects::nonNull)
-        .forEach(skipTables::add);
   }
 
   private void triggerAsyncPlanning(
@@ -343,11 +325,11 @@ public class OptimizingQueue extends PersistentBase {
     tableRuntime.beginPlanning();
     try {
       ServerTableIdentifier identifier = tableRuntime.getTableIdentifier();
-      FusionTable<?> table = catalogManager.loadTable(identifier.getIdentifier());
+      FusionTable table = catalogManager.loadTable(identifier.getIdentifier());
       AbstractOptimizingPlanner planner =
           IcebergTableUtil.createOptimizingPlanner(
               tableRuntime.refresh(table),
-              (MixedTable) table.originalTable(),
+              table,
               getAvailableCore(),
               maxInputSizePerThread(),
               tableRuntime.getProcessId());
@@ -457,6 +439,9 @@ public class OptimizingQueue extends PersistentBase {
     private Map<String, Long> fromSequence = Maps.newHashMap();
     private Map<String, Long> toSequence = Maps.newHashMap();
     private boolean hasCommitted = false;
+    private boolean recoveryFailed = false;
+    /** Summary stored for a recovered process, kept when the process cannot be recovered. */
+    private Map<String, String> storedSummary = new HashMap<>();
 
     public TaskRuntime<?> poll(OptimizerThread thread, boolean needQuotaChecking) {
       try {
@@ -519,6 +504,9 @@ public class OptimizingQueue extends PersistentBase {
         toSequence = processState.getToSequence();
       }
       this.status = processMeta.getStatus();
+      if (processMeta.getSummary() != null) {
+        storedSummary = processMeta.getSummary();
+      }
       if (this.status != ProcessStatus.KILLED) {
         tableRuntime.recover(this);
       }
@@ -842,17 +830,10 @@ public class OptimizingQueue extends PersistentBase {
       return new MetricsSummary(taskSummaries);
     }
 
-    private UnKeyedTableCommit buildCommit() {
-      MixedTable table =
-          (MixedTable)
-              catalogManager
-                  .loadTable(tableRuntime.getTableIdentifier().getIdentifier())
-                  .originalTable();
-      Preconditions.checkState(
-          table.isUnkeyedTable(),
-          "Keyed table %s is not supported, Fusion commits Iceberg tables only",
-          table.id());
-      return new UnKeyedTableCommit(targetSnapshotId, table, taskMap.values());
+    private IcebergTableCommit buildCommit() {
+      FusionTable table =
+          catalogManager.loadTable(tableRuntime.getTableIdentifier().getIdentifier());
+      return new IcebergTableCommit(targetSnapshotId, table, taskMap.values());
     }
 
     private void beginAndPersistProcess() {
@@ -966,15 +947,28 @@ public class OptimizingQueue extends PersistentBase {
       taskMap.values().forEach(TaskRuntime::tryCanceling);
     }
 
+    /**
+     * Loads the stored tasks of a recovered process with their inputs. When they cannot be read,
+     * for example inputs written by an earlier release in another format, the process is closed
+     * without a commit: its tasks are canceled, the process is CLOSED with the reason, and the
+     * table becomes IDLE. Nothing is committed, so the Iceberg table is unchanged; files an
+     * optimizer already wrote for the process become orphan files.
+     */
     private void loadTaskRuntimes(OptimizingProcess optimizingProcess) {
+      List<TaskRuntime<RewriteStageTask>> taskRuntimes = Collections.emptyList();
       try {
-        List<TaskRuntime<RewriteStageTask>> taskRuntimes =
+        taskRuntimes =
             getAs(
                 OptimizingProcessMapper.class,
                 mapper ->
                     mapper.selectTaskRuntimes(
                         tableRuntime.getTableIdentifier().getId(), processId));
         Map<Integer, RewriteFilesInput> inputs = TaskFilesPersistence.loadTaskInputs(processId);
+        for (TaskRuntime<RewriteStageTask> taskRuntime : taskRuntimes) {
+          if (inputs.get(taskRuntime.getTaskId().getTaskId()) == null) {
+            throw new IllegalStateException("No stored input for task " + taskRuntime.getTaskId());
+          }
+        }
         taskRuntimes.forEach(
             taskRuntime -> {
               taskRuntime.getCompletedFuture().whenCompleted(() -> acceptResult(taskRuntime));
@@ -988,13 +982,86 @@ public class OptimizingQueue extends PersistentBase {
                 retryTask(taskRuntime);
               }
             });
-      } catch (IllegalArgumentException e) {
+      } catch (RuntimeException e) {
+        if (isDatabaseError(e)) {
+          // the data may be fine; fail as before instead of closing the process
+          throw e;
+        }
         LOG.warn(
-            "Load task inputs failed, close the optimizing process : {}",
+            "Cannot load the stored tasks of optimizing process {} of table {}, closing it"
+                + " without commit",
             optimizingProcess.getProcessId(),
+            tableRuntime.getTableIdentifier(),
             e);
-        optimizingProcess.close(false);
+        recoveryFailed = true;
+        failedReason =
+            "Fusion could not read the stored tasks of this run after a restart, so the run was"
+                + " closed without changing the table: "
+                + ExceptionUtil.getErrorMessage(e, 3000);
+        closeUnrecoverable(taskRuntimes);
       }
+    }
+
+    /**
+     * Ends a recovered process whose tasks cannot be read, whatever its stored status, so the table
+     * does not stay in an optimizing status without a process.
+     */
+    private void closeUnrecoverable(List<TaskRuntime<RewriteStageTask>> storedTasks) {
+      lock.lock();
+      try {
+        if (!tableRuntime.getOptimizingStatus().isProcessing()
+            || tableRuntime.getProcessId() != processId) {
+          // Already completed, for example a SUCCESS process that recover() completed.
+          return;
+        }
+        if (status == ProcessStatus.KILLED) {
+          // The constructor does not recover a KILLED process; completing it needs the link.
+          tableRuntime.recover(this);
+        }
+        if (status == ProcessStatus.RUNNING) {
+          status = ProcessStatus.CLOSED;
+        }
+        endTime = System.currentTimeMillis();
+        // Like persistAndSetCompleted(false), but the tasks have no inputs to summarize, so the
+        // process keeps the summary stored when it was planned.
+        doAsTransaction(
+            () -> storedTasks.forEach(TaskRuntime::tryCanceling),
+            () ->
+                doAs(
+                    TableProcessMapper.class,
+                    mapper ->
+                        mapper.updateProcess(
+                            tableRuntime.getTableIdentifier().getId(),
+                            processId,
+                            "",
+                            status,
+                            tableRuntime.getOptimizingStatus().name().toLowerCase(),
+                            0,
+                            endTime,
+                            failedReason,
+                            new HashMap<>(),
+                            storedSummary)),
+            () -> tableRuntime.completeProcess(false),
+            () -> clearProcess(this));
+        tableRuntime.appendDriverLogEntry(processId, "ERROR", failedReason, null);
+        trackCompleted();
+      } finally {
+        lock.unlock();
+      }
+    }
+
+    private boolean isDatabaseError(Throwable throwable) {
+      for (Throwable t = throwable; t != null; t = t.getCause()) {
+        if (t instanceof SQLException) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    /** Returns true if the stored tasks of this recovered process could not be read. */
+    boolean isRecoveryFailed() {
+      return recoveryFailed;
     }
 
     private void loadTaskRuntimes(List<RewriteStageTask> taskDescriptors) {

@@ -21,46 +21,34 @@
 package io.olake.fusion.server.optimizing.maintainer;
 
 import static io.olake.fusion.formats.iceberg.maintainer.IcebergTableMaintainer.FLINK_MAX_COMMITTED_CHECKPOINT_ID;
-import static io.olake.fusion.utils.MixedTableUtil.BLOB_TYPE_OPTIMIZED_SEQUENCE_EXIST;
 
 import io.olake.fusion.BasicTableTestHelper;
 import io.olake.fusion.TableFormat;
 import io.olake.fusion.TableTestHelper;
 import io.olake.fusion.catalog.BasicCatalogTestHelper;
 import io.olake.fusion.catalog.CatalogTestHelper;
-import io.olake.fusion.data.ChangeAction;
-import io.olake.fusion.formats.iceberg.maintainer.MixedTableMaintainer;
+import io.olake.fusion.formats.iceberg.maintainer.IcebergTableMaintainer;
 import io.olake.fusion.maintainer.OptimizingInfo;
 import io.olake.fusion.server.scheduler.inline.ExecutorTestBase;
 import io.olake.fusion.server.table.TableConfigurations;
-import io.olake.fusion.table.BaseTable;
-import io.olake.fusion.table.KeyedTable;
 import io.olake.fusion.table.TableProperties;
-import io.olake.fusion.table.UnkeyedTable;
-import io.olake.fusion.utils.MixedTableUtil;
 import io.olake.fusion.utils.StatisticsFileUtil;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Iterables;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Iterators;
 import org.apache.iceberg.AppendFiles;
-import org.apache.iceberg.ContentFile;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFiles;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.StatisticsFile;
-import org.apache.iceberg.StructLike;
+import org.apache.iceberg.Table;
 import org.apache.iceberg.util.StructLikeMap;
-import org.jetbrains.annotations.NotNull;
 import org.junit.Assert;
-import org.junit.Assume;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 @RunWith(Parameterized.class)
 public class TestSnapshotExpire extends ExecutorTestBase {
@@ -78,107 +66,8 @@ public class TestSnapshotExpire extends ExecutorTestBase {
   }
 
   @Test
-  public void testExpireChangeTableFiles() {
-    Assume.assumeTrue(isKeyedTable());
-    KeyedTable testKeyedTable = getMixedTable().asKeyedTable();
-    testKeyedTable.updateProperties().set(TableProperties.SNAPSHOT_KEEP_DURATION, "0").commit();
-    testKeyedTable.updateProperties().set(TableProperties.CHANGE_DATA_TTL, "0").commit();
-    List<DataFile> s1Files = insertChangeDataFiles(testKeyedTable, 1);
-    long l = testKeyedTable.changeTable().currentSnapshot().timestampMillis();
-    List<StructLike> partitions =
-        new ArrayList<>(
-            s1Files.stream().collect(Collectors.groupingBy(ContentFile::partition)).keySet());
-    if (isPartitionedTable()) {
-      Assert.assertEquals(2, partitions.size());
-    } else {
-      Assert.assertEquals(1, partitions.size());
-    }
-
-    StructLikeMap<Long> optimizedSequence =
-        StructLikeMap.create(testKeyedTable.spec().partitionType());
-    optimizedSequence.put(partitions.get(0), 3L);
-    if (isPartitionedTable()) {
-      optimizedSequence.put(partitions.get(1), 1L);
-    }
-    writeOptimizedSequence(testKeyedTable, optimizedSequence);
-    s1Files.forEach(
-        file ->
-            Assert.assertTrue(testKeyedTable.changeTable().io().exists(file.path().toString())));
-
-    MixedTableMaintainer tableMaintainer =
-        new MixedTableMaintainer(testKeyedTable, TestTableMaintainerContext.of(testKeyedTable));
-    tableMaintainer.getChangeMaintainer().expireFiles(l + 1);
-
-    // In order to advance the snapshot
-    insertChangeDataFiles(testKeyedTable, 2);
-
-    tableMaintainer.getChangeMaintainer().expireSnapshots(System.currentTimeMillis(), 1);
-
-    Assert.assertEquals(1, Iterables.size(testKeyedTable.changeTable().snapshots()));
-    s1Files.forEach(
-        file ->
-            Assert.assertFalse(testKeyedTable.changeTable().io().exists(file.path().toString())));
-  }
-
-  private void writeOptimizedSequence(
-      KeyedTable testKeyedTable, StructLikeMap<Long> optimizedSequence) {
-    BaseTable baseTable = testKeyedTable.baseTable();
-    baseTable.newAppend().set(BLOB_TYPE_OPTIMIZED_SEQUENCE_EXIST, "true").commit();
-    Snapshot snapshot = baseTable.currentSnapshot();
-    StatisticsFile statisticsFile =
-        StatisticsFileUtil.writerBuilder(baseTable)
-            .withSnapshotId(snapshot.snapshotId())
-            .build()
-            .add(
-                MixedTableUtil.BLOB_TYPE_OPTIMIZED_SEQUENCE,
-                optimizedSequence,
-                StatisticsFileUtil.createPartitionDataSerializer(baseTable.spec(), Long.class))
-            .complete();
-    baseTable.updateStatistics().setStatistics(snapshot.snapshotId(), statisticsFile).commit();
-  }
-
-  @Test
-  public void testNotExpireFlinkLatestCommit4ChangeTable() {
-    Assume.assumeTrue(isKeyedTable());
-    KeyedTable testKeyedTable = getMixedTable().asKeyedTable();
-    insertChangeDataFiles(testKeyedTable, 1);
-    insertChangeDataFiles(testKeyedTable, 2);
-
-    AppendFiles appendFiles = testKeyedTable.changeTable().newAppend();
-    appendFiles.set(FLINK_MAX_COMMITTED_CHECKPOINT_ID, "100");
-    appendFiles.commit();
-
-    AppendFiles appendFiles2 = testKeyedTable.changeTable().newAppend();
-    appendFiles2.set(FLINK_MAX_COMMITTED_CHECKPOINT_ID, "101");
-    appendFiles2.commit();
-    Snapshot checkpointTime2Snapshot = testKeyedTable.changeTable().currentSnapshot();
-
-    insertChangeDataFiles(testKeyedTable, 2);
-    Snapshot lastSnapshot = testKeyedTable.changeTable().currentSnapshot();
-
-    testKeyedTable.updateProperties().set(TableProperties.CHANGE_DATA_TTL, "0").commit();
-
-    Assert.assertEquals(5, Iterables.size(testKeyedTable.changeTable().snapshots()));
-
-    MixedTableMaintainer tableMaintainer =
-        new MixedTableMaintainer(testKeyedTable, TestTableMaintainerContext.of(testKeyedTable));
-    tableMaintainer.expireSnapshots();
-
-    Assert.assertEquals(2, Iterables.size(testKeyedTable.changeTable().snapshots()));
-    List<Snapshot> expectedSnapshots = new ArrayList<>();
-    expectedSnapshots.add(checkpointTime2Snapshot);
-    expectedSnapshots.add(lastSnapshot);
-    Assert.assertTrue(
-        Iterators.elementsEqual(
-            expectedSnapshots.iterator(), testKeyedTable.changeTable().snapshots().iterator()));
-  }
-
-  @Test
   public void testNotExpireFlinkLatestCommit4All() {
-    UnkeyedTable table =
-        isKeyedTable()
-            ? getMixedTable().asKeyedTable().baseTable()
-            : getMixedTable().asUnkeyedTable();
+    Table table = getTable();
     writeAndCommitBaseStore(table);
 
     AppendFiles appendFiles = table.newAppend();
@@ -197,42 +86,12 @@ public class TestSnapshotExpire extends ExecutorTestBase {
 
     Assert.assertEquals(4, Iterables.size(table.snapshots()));
 
-    MixedTableMaintainer tableMaintainer =
-        new MixedTableMaintainer(getMixedTable(), TestTableMaintainerContext.of(table));
-    tableMaintainer.expireSnapshots();
-
-    Assert.assertEquals(2, Iterables.size(table.snapshots()));
-    List<Snapshot> expectedSnapshots = new ArrayList<>();
-    expectedSnapshots.add(checkpointTime2Snapshot);
-    expectedSnapshots.add(lastSnapshot);
-    Assert.assertTrue(
-        Iterators.elementsEqual(expectedSnapshots.iterator(), table.snapshots().iterator()));
-  }
-
-  @Test
-  public void testNotExpireOptimizedSequenceCommit4All() {
-    Assume.assumeTrue(isKeyedTable());
-    BaseTable table = getMixedTable().asKeyedTable().baseTable();
-    writeAndCommitBaseStore(table);
-
-    AppendFiles appendFiles = table.newAppend();
-    appendFiles.set(BLOB_TYPE_OPTIMIZED_SEQUENCE_EXIST, "true");
-    appendFiles.commit();
-
-    AppendFiles appendFiles2 = table.newAppend();
-    appendFiles2.set(BLOB_TYPE_OPTIMIZED_SEQUENCE_EXIST, "true");
-    appendFiles2.commit();
-    Snapshot checkpointTime2Snapshot = table.currentSnapshot();
-
-    writeAndCommitBaseStore(table);
-    Snapshot lastSnapshot = table.currentSnapshot();
-
-    table.updateProperties().set(TableProperties.SNAPSHOT_KEEP_DURATION, "0").commit();
-
-    Assert.assertEquals(4, Iterables.size(table.snapshots()));
-
-    MixedTableMaintainer tableMaintainer =
-        new MixedTableMaintainer(getMixedTable(), TestTableMaintainerContext.of(table));
+    IcebergTableMaintainer tableMaintainer =
+        new IcebergTableMaintainer(
+            table,
+            getFusionTable().io(),
+            getFusionTable().id(),
+            TestTableMaintainerContext.of(table));
     tableMaintainer.expireSnapshots();
 
     Assert.assertEquals(2, Iterables.size(table.snapshots()));
@@ -245,18 +104,16 @@ public class TestSnapshotExpire extends ExecutorTestBase {
 
   @Test
   public void testNotExpireOptimizeCommit4All() {
-    UnkeyedTable table =
-        isKeyedTable()
-            ? getMixedTable().asKeyedTable().baseTable()
-            : getMixedTable().asUnkeyedTable();
+    Table table = getTable();
     table.newAppend().commit();
     table.newAppend().commit();
     table.updateProperties().set(TableProperties.SNAPSHOT_KEEP_DURATION, "0").commit();
 
     TestTableMaintainerContext.Impl context =
         new TestTableMaintainerContext.Impl(
-            TestTableMaintainerContext.parseTestTableConfig(table.properties()), table);
-    new MixedTableMaintainer(table, context).expireSnapshots();
+            TestTableMaintainerContext.parseTestTableConfig(table.properties()));
+    new IcebergTableMaintainer(table, getFusionTable().io(), getFusionTable().id(), context)
+        .expireSnapshots();
     Assert.assertEquals(1, Iterables.size(table.snapshots()));
 
     table.newAppend().commit();
@@ -284,7 +141,8 @@ public class TestSnapshotExpire extends ExecutorTestBase {
     table.newAppend().commit();
     expectedSnapshots.add(table.currentSnapshot());
 
-    new MixedTableMaintainer(table, context).expireSnapshots();
+    new IcebergTableMaintainer(table, getFusionTable().io(), getFusionTable().id(), context)
+        .expireSnapshots();
     Assert.assertEquals(3, Iterables.size(table.snapshots()));
     Assert.assertTrue(
         Iterators.elementsEqual(expectedSnapshots.iterator(), table.snapshots().iterator()));
@@ -292,100 +150,42 @@ public class TestSnapshotExpire extends ExecutorTestBase {
 
   @Test
   public void testExpireTableFiles4All() {
-    UnkeyedTable table =
-        isKeyedTable()
-            ? getMixedTable().asKeyedTable().baseTable()
-            : getMixedTable().asUnkeyedTable();
+    Table table = getTable();
     table.updateProperties().set(TableProperties.SNAPSHOT_KEEP_DURATION, "0").commit();
     List<DataFile> dataFiles = writeAndCommitBaseStore(table);
 
     DeleteFiles deleteFiles = table.newDelete();
     for (DataFile dataFile : dataFiles) {
-      Assert.assertTrue(table.io().exists(dataFile.path().toString()));
+      Assert.assertTrue(
+          table.io().newInputFile(String.valueOf(dataFile.path().toString())).exists());
       deleteFiles.deleteFile(dataFile);
     }
     deleteFiles.commit();
 
     List<DataFile> newDataFiles = writeAndCommitBaseStore(table);
     Assert.assertEquals(3, Iterables.size(table.snapshots()));
-    new MixedTableMaintainer(getMixedTable(), TestTableMaintainerContext.of(getMixedTable()))
-        .getBaseMaintainer()
+    new IcebergTableMaintainer(
+            table,
+            getFusionTable().io(),
+            getFusionTable().id(),
+            TestTableMaintainerContext.of(getTable()))
         .expireSnapshots(System.currentTimeMillis(), 1);
     Assert.assertEquals(1, Iterables.size(table.snapshots()));
 
-    dataFiles.forEach(file -> Assert.assertFalse(table.io().exists(file.path().toString())));
-    newDataFiles.forEach(file -> Assert.assertTrue(table.io().exists(file.path().toString())));
-  }
-
-  @Test
-  public void testExpireTableFilesRepeatedly() {
-    Assume.assumeTrue(isKeyedTable());
-    KeyedTable testKeyedTable = getMixedTable().asKeyedTable();
-
-    testKeyedTable.updateProperties().set(TableProperties.SNAPSHOT_KEEP_DURATION, "0").commit();
-    testKeyedTable.updateProperties().set(TableProperties.CHANGE_DATA_TTL, "0").commit();
-
-    List<DataFile> s1Files = insertChangeDataFiles(testKeyedTable, 1);
-    insertChangeDataFiles(testKeyedTable, 2);
-    long secondCommitTime = testKeyedTable.changeTable().currentSnapshot().timestampMillis();
-
-    List<StructLike> partitions =
-        new ArrayList<>(
-            s1Files.stream().collect(Collectors.groupingBy(ContentFile::partition)).keySet());
-    if (isPartitionedTable()) {
-      Assert.assertEquals(2, partitions.size());
-    } else {
-      Assert.assertEquals(1, partitions.size());
-    }
-
-    StructLikeMap<Long> optimizedSequence =
-        StructLikeMap.create(testKeyedTable.spec().partitionType());
-    optimizedSequence.put(partitions.get(0), 3L);
-    if (isPartitionedTable()) {
-      optimizedSequence.put(partitions.get(1), 3L);
-    }
-    writeOptimizedSequence(testKeyedTable, optimizedSequence);
-
-    Set<DataFile> top8Files = new HashSet<>();
-    testKeyedTable.changeTable().newScan().planFiles().forEach(task -> top8Files.add(task.file()));
-    Assert.assertEquals(8, top8Files.size());
-    Assert.assertEquals(2, Iterables.size(testKeyedTable.changeTable().snapshots()));
-
-    Set<CharSequence> last4File =
-        insertChangeDataFiles(testKeyedTable, 3).stream()
-            .map(DataFile::path)
-            .collect(Collectors.toSet());
-    Assert.assertEquals(12, Iterables.size(testKeyedTable.changeTable().newScan().planFiles()));
-    Assert.assertEquals(3, Iterables.size(testKeyedTable.changeTable().snapshots()));
-
-    MixedTableMaintainer tableMaintainer =
-        new MixedTableMaintainer(testKeyedTable, TestTableMaintainerContext.of(testKeyedTable));
-    tableMaintainer.getChangeMaintainer().expireFiles(secondCommitTime + 1);
-    tableMaintainer.getChangeMaintainer().expireSnapshots(secondCommitTime + 1, 1);
-
-    Set<CharSequence> dataFiles = getDataFiles(testKeyedTable);
-    Assert.assertEquals(last4File, dataFiles);
-
-    Assert.assertEquals(2, Iterables.size(testKeyedTable.changeTable().snapshots()));
-  }
-
-  @NotNull
-  private static Set<CharSequence> getDataFiles(KeyedTable testKeyedTable) {
-    Set<CharSequence> dataFiles = new HashSet<>();
-    testKeyedTable
-        .changeTable()
-        .newScan()
-        .planFiles()
-        .forEach(task -> dataFiles.add(task.file().path()));
-    return dataFiles;
+    dataFiles.forEach(
+        file ->
+            Assert.assertFalse(
+                table.io().newInputFile(String.valueOf(file.path().toString())).exists()));
+    newDataFiles.forEach(
+        file ->
+            Assert.assertTrue(
+                table.io().newInputFile(String.valueOf(file.path().toString())).exists()));
   }
 
   @Test
   public void testExpireStatisticsFiles() {
-    Assume.assumeTrue(isKeyedTable());
-    KeyedTable testKeyedTable = getMixedTable().asKeyedTable();
-    BaseTable baseTable = testKeyedTable.baseTable();
-    testKeyedTable.updateProperties().set(TableProperties.SNAPSHOT_KEEP_DURATION, "0").commit();
+    Table baseTable = getTable();
+    baseTable.updateProperties().set(TableProperties.SNAPSHOT_KEEP_DURATION, "0").commit();
     // commit an empty snapshot and its statistic file
     baseTable.newAppend().commit();
     Snapshot s1 = baseTable.currentSnapshot();
@@ -394,7 +194,7 @@ public class TestSnapshotExpire extends ExecutorTestBase {
             .withSnapshotId(s1.snapshotId())
             .build()
             .add(
-                MixedTableUtil.BLOB_TYPE_OPTIMIZED_SEQUENCE,
+                "optimized-sequence",
                 StructLikeMap.create(baseTable.spec().partitionType()),
                 StatisticsFileUtil.createPartitionDataSerializer(baseTable.spec(), Long.class))
             .complete();
@@ -408,7 +208,7 @@ public class TestSnapshotExpire extends ExecutorTestBase {
             .withSnapshotId(s2.snapshotId())
             .build()
             .add(
-                MixedTableUtil.BLOB_TYPE_OPTIMIZED_SEQUENCE,
+                "optimized-sequence",
                 StructLikeMap.create(baseTable.spec().partitionType()),
                 StatisticsFileUtil.createPartitionDataSerializer(baseTable.spec(), Long.class))
             .complete();
@@ -424,48 +224,26 @@ public class TestSnapshotExpire extends ExecutorTestBase {
     baseTable.updateStatistics().setStatistics(s3.snapshotId(), file3).commit();
 
     Assert.assertEquals(3, Iterables.size(baseTable.snapshots()));
-    Assert.assertTrue(baseTable.io().exists(file1.path()));
-    Assert.assertTrue(baseTable.io().exists(file2.path()));
-    Assert.assertTrue(baseTable.io().exists(file3.path()));
-    new MixedTableMaintainer(testKeyedTable, TestTableMaintainerContext.of(testKeyedTable))
-        .getBaseMaintainer()
+    Assert.assertTrue(baseTable.io().newInputFile(String.valueOf(file1.path())).exists());
+    Assert.assertTrue(baseTable.io().newInputFile(String.valueOf(file2.path())).exists());
+    Assert.assertTrue(baseTable.io().newInputFile(String.valueOf(file3.path())).exists());
+    new IcebergTableMaintainer(
+            baseTable,
+            getFusionTable().io(),
+            getFusionTable().id(),
+            TestTableMaintainerContext.of(baseTable))
         .expireSnapshots(expireTime, 1);
 
     Assert.assertEquals(1, Iterables.size(baseTable.snapshots()));
-    Assert.assertFalse(baseTable.io().exists(file1.path()));
+    Assert.assertFalse(baseTable.io().newInputFile(String.valueOf(file1.path())).exists());
     // file2 should not be removed, since it is used by s3
-    Assert.assertTrue(baseTable.io().exists(file2.path()));
-    Assert.assertTrue(baseTable.io().exists(file3.path()));
-  }
-
-  @Test
-  public void testChangeTableGcDisabled() {
-    Assume.assumeTrue(isKeyedTable());
-    KeyedTable testKeyedTable = getMixedTable().asKeyedTable();
-    testKeyedTable.updateProperties().set("gc.enabled", "false").commit();
-
-    insertChangeDataFiles(testKeyedTable, 1);
-    insertChangeDataFiles(testKeyedTable, 2);
-
-    Assert.assertEquals(2, Iterables.size(testKeyedTable.changeTable().snapshots()));
-
-    MixedTableMaintainer tableMaintainer =
-        new MixedTableMaintainer(testKeyedTable, TestTableMaintainerContext.of(testKeyedTable));
-    testKeyedTable.updateProperties().set(TableProperties.CHANGE_DATA_TTL, "0").commit();
-    tableMaintainer.expireSnapshots();
-    Assert.assertEquals(2, Iterables.size(testKeyedTable.changeTable().snapshots()));
-
-    testKeyedTable.updateProperties().set("gc.enabled", "true").commit();
-    tableMaintainer =
-        new MixedTableMaintainer(testKeyedTable, TestTableMaintainerContext.of(testKeyedTable));
-    tableMaintainer.expireSnapshots();
-    Assert.assertEquals(1, Iterables.size(testKeyedTable.changeTable().snapshots()));
+    Assert.assertTrue(baseTable.io().newInputFile(String.valueOf(file2.path())).exists());
+    Assert.assertTrue(baseTable.io().newInputFile(String.valueOf(file3.path())).exists());
   }
 
   @Test
   public void testBaseTableGcDisabled() {
-    Assume.assumeFalse(isKeyedTable());
-    UnkeyedTable testUnkeyedTable = getMixedTable().asUnkeyedTable();
+    Table testUnkeyedTable = getTable();
     testUnkeyedTable.updateProperties().set("gc.enabled", "false").commit();
 
     testUnkeyedTable.newAppend().commit();
@@ -473,8 +251,12 @@ public class TestSnapshotExpire extends ExecutorTestBase {
 
     Assert.assertEquals(2, Iterables.size(testUnkeyedTable.snapshots()));
 
-    MixedTableMaintainer tableMaintainer =
-        new MixedTableMaintainer(getMixedTable(), TestTableMaintainerContext.of(testUnkeyedTable));
+    IcebergTableMaintainer tableMaintainer =
+        new IcebergTableMaintainer(
+            testUnkeyedTable,
+            getFusionTable().io(),
+            getFusionTable().id(),
+            TestTableMaintainerContext.of(testUnkeyedTable));
     testUnkeyedTable.updateProperties().set(TableProperties.SNAPSHOT_KEEP_DURATION, "0").commit();
 
     tableMaintainer.expireSnapshots();
@@ -482,17 +264,18 @@ public class TestSnapshotExpire extends ExecutorTestBase {
 
     testUnkeyedTable.updateProperties().set("gc.enabled", "true").commit();
     tableMaintainer =
-        new MixedTableMaintainer(getMixedTable(), TestTableMaintainerContext.of(testUnkeyedTable));
+        new IcebergTableMaintainer(
+            testUnkeyedTable,
+            getFusionTable().io(),
+            getFusionTable().id(),
+            TestTableMaintainerContext.of(testUnkeyedTable));
     tableMaintainer.expireSnapshots();
     Assert.assertEquals(1, Iterables.size(testUnkeyedTable.snapshots()));
   }
 
   @Test
   public void testRetainMinSnapshot() {
-    UnkeyedTable table =
-        isKeyedTable()
-            ? getMixedTable().asKeyedTable().baseTable()
-            : getMixedTable().asUnkeyedTable();
+    Table table = getTable();
     table.newAppend().commit();
     table.newAppend().commit();
     List<Snapshot> expectedSnapshots = new ArrayList<>();
@@ -501,7 +284,12 @@ public class TestSnapshotExpire extends ExecutorTestBase {
     table.updateProperties().set(TableProperties.SNAPSHOT_KEEP_DURATION, "0s").commit();
     table.updateProperties().set(TableProperties.SNAPSHOT_MIN_COUNT, "3").commit();
 
-    new MixedTableMaintainer(table, TestTableMaintainerContext.of(table)).expireSnapshots();
+    new IcebergTableMaintainer(
+            table,
+            getFusionTable().io(),
+            getFusionTable().id(),
+            TestTableMaintainerContext.of(table))
+        .expireSnapshots();
     Assert.assertEquals(2, Iterables.size(table.snapshots()));
 
     table.newAppend().commit();
@@ -509,7 +297,12 @@ public class TestSnapshotExpire extends ExecutorTestBase {
     table.newAppend().commit();
     expectedSnapshots.add(table.currentSnapshot());
 
-    new MixedTableMaintainer(table, TestTableMaintainerContext.of(table)).expireSnapshots();
+    new IcebergTableMaintainer(
+            table,
+            getFusionTable().io(),
+            getFusionTable().id(),
+            TestTableMaintainerContext.of(table))
+        .expireSnapshots();
     Assert.assertEquals(3, Iterables.size(table.snapshots()));
     Assert.assertTrue(
         Iterators.elementsEqual(expectedSnapshots.iterator(), table.snapshots().iterator()));
@@ -517,10 +310,7 @@ public class TestSnapshotExpire extends ExecutorTestBase {
 
   @Test
   public void testSnapshotExpireConfig() {
-    UnkeyedTable table =
-        isKeyedTable()
-            ? getMixedTable().asKeyedTable().baseTable()
-            : getMixedTable().asUnkeyedTable();
+    Table table = getTable();
     table.updateProperties().set(TableProperties.SNAPSHOT_KEEP_DURATION, "180s").commit();
     Assert.assertEquals(
         3L, TableConfigurations.parseTableConfig(table.properties()).getSnapshotTTLMinutes());
@@ -541,10 +331,5 @@ public class TestSnapshotExpire extends ExecutorTestBase {
       current = System.currentTimeMillis();
     }
     return current;
-  }
-
-  private List<DataFile> insertChangeDataFiles(KeyedTable testKeyedTable, long transactionId) {
-    return writeAndCommitChangeStore(
-        testKeyedTable, transactionId, ChangeAction.INSERT, createRecords(1, 100));
   }
 }

@@ -20,22 +20,17 @@
 
 package io.olake.fusion.server.table;
 
-import io.olake.fusion.CommonUnifiedCatalog;
+import io.olake.fusion.FusionTable;
 import io.olake.fusion.ServerTableIdentifier;
 import io.olake.fusion.TableFormat;
 import io.olake.fusion.TableRuntime;
 import io.olake.fusion.TableTestHelper;
-import io.olake.fusion.UnifiedCatalog;
 import io.olake.fusion.api.CatalogMeta;
-import io.olake.fusion.api.TableMeta;
 import io.olake.fusion.catalog.CatalogTestHelper;
+import io.olake.fusion.formats.iceberg.IcebergCatalog;
 import io.olake.fusion.hive.TestHMS;
 import io.olake.fusion.server.AMSServiceTestBase;
-import io.olake.fusion.server.catalog.InternalCatalog;
-import io.olake.fusion.table.MixedTable;
-import io.olake.fusion.utils.ConvertStructUtil;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
-import org.apache.amoro.shade.guava32.com.google.common.collect.Maps;
 import org.apache.hadoop.hive.metastore.api.AlreadyExistsException;
 import org.apache.hadoop.hive.metastore.api.Database;
 import org.apache.iceberg.catalog.TableIdentifier;
@@ -57,10 +52,8 @@ public class AMSTableTestBase extends AMSServiceTestBase {
   private final CatalogTestHelper catalogTestHelper;
   private final TableTestHelper tableTestHelper;
   private String catalogWarehouse;
-  private UnifiedCatalog externalCatalog;
+  private IcebergCatalog externalCatalog;
   private CatalogMeta catalogMeta;
-
-  private TableMeta tableMeta;
 
   private final boolean autoInitTable;
   private ServerTableIdentifier serverTableIdentifier;
@@ -81,9 +74,7 @@ public class AMSTableTestBase extends AMSServiceTestBase {
     try {
       catalogWarehouse = temp.newFolder().getPath();
       catalogMeta = catalogTestHelper.buildCatalogMeta(catalogWarehouse);
-      if (!catalogTestHelper.isInternalCatalog()) {
-        externalCatalog = new CommonUnifiedCatalog(() -> catalogMeta, Maps.newHashMap());
-      }
+      externalCatalog = IcebergCatalog.of(catalogMeta);
 
       CATALOG_MANAGER.createCatalog(catalogMeta);
       try {
@@ -114,47 +105,15 @@ public class AMSTableTestBase extends AMSServiceTestBase {
     }
   }
 
-  protected TableMeta buildTableMeta() {
-    ConvertStructUtil.TableMetaBuilder builder =
-        new ConvertStructUtil.TableMetaBuilder(
-            TableTestHelper.TEST_TABLE_ID, tableTestHelper.tableSchema());
-    String tableLocation =
-        String.format(
-            "%s/%s/%s",
-            catalogWarehouse, TableTestHelper.TEST_DB_NAME, TableTestHelper.TEST_TABLE_NAME);
-    return builder
-        .withPrimaryKeySpec(tableTestHelper.primaryKeySpec())
-        .withProperties(tableTestHelper.tableProperties())
-        .withTableLocation(tableLocation)
-        .withFormat(catalogTestHelper.tableFormat())
-        .withChangeLocation(tableLocation + "/change")
-        .withBaseLocation(tableLocation + "/base")
-        .build();
-  }
-
   protected void createDatabase() {
-    if (externalCatalog == null) {
-      InternalCatalog catalog =
-          CATALOG_MANAGER.getInternalCatalog(TableTestHelper.TEST_CATALOG_NAME);
-      if (!catalog.listDatabases().contains(TableTestHelper.TEST_DB_NAME)) {
-        catalog.createDatabase(TableTestHelper.TEST_DB_NAME);
-      }
-    } else {
-      List<String> databases = externalCatalog.listDatabases();
-      if (!(databases != null && databases.contains(TableTestHelper.TEST_DB_NAME))) {
-        externalCatalog.createDatabase(TableTestHelper.TEST_DB_NAME);
-      }
+    List<String> databases = externalCatalog.listDatabases();
+    if (!(databases != null && databases.contains(TableTestHelper.TEST_DB_NAME))) {
+      externalCatalog.createDatabase(TableTestHelper.TEST_DB_NAME);
     }
   }
 
   protected void dropDatabase() {
-    if (externalCatalog == null) {
-      InternalCatalog catalog =
-          CATALOG_MANAGER.getInternalCatalog(TableTestHelper.TEST_CATALOG_NAME);
-      catalog.dropDatabase(TableTestHelper.TEST_DB_NAME);
-    } else {
-      externalCatalog.dropDatabase(TableTestHelper.TEST_DB_NAME);
-    }
+    externalCatalog.dropDatabase(TableTestHelper.TEST_DB_NAME);
   }
 
   protected void createTable() {
@@ -198,36 +157,20 @@ public class AMSTableTestBase extends AMSServiceTestBase {
     return tableTestHelper;
   }
 
-  protected TableMeta tableMeta() {
-    return tableMeta;
-  }
-
   protected CatalogMeta catalogMeta() {
     return catalogMeta;
-  }
-
-  protected TableMetadata tableMetadata() {
-    return new TableMetadata(
-        ServerTableIdentifier.of(
-            tableMeta.getTableIdentifier().getCatalog(),
-            tableMeta.getTableIdentifier().getDatabase(),
-            tableMeta.getTableIdentifier().getTableName(),
-            catalogTestHelper.tableFormat()),
-        tableMeta,
-        catalogMeta);
   }
 
   protected ServerTableIdentifier serverTableIdentifier() {
     return serverTableIdentifier;
   }
 
-  protected void validateMixedTable(MixedTable mixedTable) {
-    Assert.assertEquals(catalogTestHelper().tableFormat(), mixedTable.format());
-    Assert.assertEquals(TableTestHelper.TEST_TABLE_ID, mixedTable.id());
-    Assert.assertEquals(tableTestHelper().tableSchema().asStruct(), mixedTable.schema().asStruct());
-    Assert.assertEquals(tableTestHelper().partitionSpec(), mixedTable.spec());
+  protected void validateTable(FusionTable table) {
+    Assert.assertEquals(catalogTestHelper().tableFormat(), table.format());
+    Assert.assertEquals(TableTestHelper.TEST_TABLE_ID, table.id());
     Assert.assertEquals(
-        tableTestHelper().primaryKeySpec().primaryKeyExisted(), mixedTable.isKeyedTable());
+        tableTestHelper().tableSchema().asStruct(), table.table().schema().asStruct());
+    Assert.assertEquals(tableTestHelper().partitionSpec(), table.table().spec());
   }
 
   protected void validateTableRuntime(TableRuntime tableRuntime) {

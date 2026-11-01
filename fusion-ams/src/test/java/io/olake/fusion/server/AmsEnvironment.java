@@ -33,6 +33,7 @@ import io.olake.fusion.resource.ResourceGroup;
 import io.olake.fusion.server.catalog.DefaultCatalogManager;
 import io.olake.fusion.server.catalog.ServerCatalog;
 import io.olake.fusion.server.manager.AbstractOptimizerContainer;
+import io.olake.fusion.server.persistence.PostgresPersistence;
 import io.olake.fusion.server.resource.Containers;
 import io.olake.fusion.server.resource.OptimizerManager;
 import io.olake.fusion.table.TableIdentifier;
@@ -55,7 +56,6 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Random;
 
 public class AmsEnvironment {
@@ -67,12 +67,9 @@ public class AmsEnvironment {
   private static final String OPTIMIZE_GROUP = "default";
   private final FusionServiceContainer serviceContainer;
   private DefaultCatalogManager catalogManager;
-  private int tableServiceBindPort;
   private int optimizingServiceBindPort;
   private final HMSMockServer testHMS;
 
-  public static final String INTERNAL_ICEBERG_CATALOG = "internal_iceberg_catalog";
-  public static final String INTERNAL_ICEBERG_CATALOG_WAREHOUSE = "/internal_iceberg/warehouse";
   public static final String ICEBERG_CATALOG = "iceberg_catalog";
   public static String ICEBERG_CATALOG_DIR = "/iceberg/warehouse";
   private boolean started = false;
@@ -108,8 +105,6 @@ public class AmsEnvironment {
   public AmsEnvironment(String rootPath) throws Exception {
     this.rootPath = rootPath;
     LOG.info("Initializing test AMS environment with root path: {}", rootPath);
-    String path =
-        Objects.requireNonNull(this.getClass().getClassLoader().getResource("")).getPath();
     FileUtils.writeStringToFile(
         new File(rootPath + "/conf/config.yaml"), getAmsConfig(), Charset.defaultCharset());
     FileUtils.writeStringToFile(
@@ -117,7 +112,6 @@ public class AmsEnvironment {
         getTableRuntimeFactoriesConfig(),
         Charset.defaultCharset());
     System.setProperty(Environments.AMORO_HOME, rootPath);
-    System.setProperty("derby.init.sql.dir", path + "../classes/sql/derby/");
     serviceContainer = new FusionServiceContainer();
     TemporaryFolder hiveDir = new TemporaryFolder();
     hiveDir.create();
@@ -173,22 +167,6 @@ public class AmsEnvironment {
 
   private void initCatalog() {
     createExternalIcebergCatalog();
-    createInternalIceberg();
-  }
-
-  private void createInternalIceberg() {
-    String warehouseDir = rootPath + INTERNAL_ICEBERG_CATALOG_WAREHOUSE;
-    Map<String, String> properties = Maps.newHashMap();
-    createDirIfNotExist(warehouseDir);
-    properties.put(CatalogMetaProperties.KEY_WAREHOUSE, warehouseDir);
-    CatalogMeta catalogMeta =
-        CatalogTestHelpers.buildCatalogMeta(
-            INTERNAL_ICEBERG_CATALOG,
-            CatalogMetaProperties.CATALOG_TYPE_AMS,
-            properties,
-            TableFormat.ICEBERG);
-
-    catalogManager.createCatalog(catalogMeta);
   }
 
   private void createExternalIcebergCatalog() {
@@ -257,10 +235,6 @@ public class AmsEnvironment {
             });
   }
 
-  public String getTableServiceUrl() {
-    return "thrift://127.0.0.1:" + tableServiceBindPort;
-  }
-
   public String getOptimizingServiceUrl() {
     return "thrift://127.0.0.1:" + optimizingServiceBindPort;
   }
@@ -278,8 +252,6 @@ public class AmsEnvironment {
         DynFields.UnboundField<Configurations> field =
             DynFields.builder().hiddenImpl(FusionServiceContainer.class, "serviceConfig").build();
         Configurations serviceConfig = field.bind(serviceContainer).get();
-        serviceConfig.set(
-            FusionManagementConf.TABLE_SERVICE_THRIFT_BIND_PORT, tableServiceBindPort);
         serviceConfig.set(
             FusionManagementConf.OPTIMIZING_SERVICE_THRIFT_BIND_PORT, optimizingServiceBindPort);
         serviceConfig.set(
@@ -306,7 +278,6 @@ public class AmsEnvironment {
   private void genThriftBindPort() {
     // create a random port between 14000 - 18000
     Random random = new Random();
-    this.tableServiceBindPort = random.nextInt(4000) + 14000;
     this.optimizingServiceBindPort = random.nextInt(4000) + 14000;
   }
 
@@ -327,9 +298,6 @@ public class AmsEnvironment {
         + "    max-message-size: 104857600 # 100MB\n"
         + "    selector-thread-count: 2\n"
         + "    selector-queue-size: 4\n"
-        + "    table-service:\n"
-        + "      bind-port: 1260\n"
-        + "      worker-thread-count: 20\n"
         + "    optimizing-service:\n"
         + "      bind-port: 1261\n"
         + "\n"
@@ -343,11 +311,17 @@ public class AmsEnvironment {
         + "    break-quota-limit-enabled: true\n"
         + "\n"
         + "  database:\n"
-        + "    type: \"derby\"\n"
-        + "    jdbc-driver-class: \"org.apache.derby.jdbc.EmbeddedDriver\"\n"
-        + "    url: \"jdbc:derby:"
-        + rootPath.replace("\\", "\\\\")
-        + "/derby;create=true\"\n"
+        + "    type: \"postgres\"\n"
+        + "    jdbc-driver-class: \"org.postgresql.Driver\"\n"
+        + "    url: \""
+        + PostgresPersistence.jdbcUrl()
+        + "\"\n"
+        + "    username: \""
+        + PostgresPersistence.username()
+        + "\"\n"
+        + "    password: \""
+        + PostgresPersistence.password()
+        + "\"\n"
         + "\n"
         + "  terminal:\n"
         + "    backend: local\n"

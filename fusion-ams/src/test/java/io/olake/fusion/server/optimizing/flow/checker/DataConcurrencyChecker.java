@@ -22,12 +22,12 @@ package io.olake.fusion.server.optimizing.flow.checker;
 
 import io.olake.fusion.optimizing.RewriteStageTask;
 import io.olake.fusion.optimizing.plan.AbstractOptimizingPlanner;
-import io.olake.fusion.server.optimizing.UnKeyedTableCommit;
+import io.olake.fusion.server.optimizing.IcebergTableCommit;
 import io.olake.fusion.server.optimizing.flow.CompleteOptimizingFlow;
 import io.olake.fusion.server.optimizing.flow.DataReader;
 import io.olake.fusion.server.optimizing.flow.view.MatchResult;
 import io.olake.fusion.server.optimizing.flow.view.TableDataView;
-import io.olake.fusion.table.MixedTable;
+import org.apache.iceberg.Table;
 import org.apache.iceberg.data.Record;
 
 import javax.annotation.Nullable;
@@ -46,10 +46,10 @@ public class DataConcurrencyChecker implements CompleteOptimizingFlow.Checker {
 
   @Override
   public boolean condition(
-      MixedTable table,
+      Table table,
       @Nullable List<RewriteStageTask> latestTaskDescriptors,
       AbstractOptimizingPlanner latestPlanner,
-      @Nullable UnKeyedTableCommit latestCommit) {
+      @Nullable IcebergTableCommit latestCommit) {
     count++;
     return true;
   }
@@ -61,10 +61,10 @@ public class DataConcurrencyChecker implements CompleteOptimizingFlow.Checker {
 
   @Override
   public void check(
-      MixedTable table,
+      Table table,
       @Nullable List<RewriteStageTask> latestTaskDescriptors,
       AbstractOptimizingPlanner latestPlanner,
-      @Nullable UnKeyedTableCommit latestCommit)
+      @Nullable IcebergTableCommit latestCommit)
       throws Exception {
     table.refresh();
     List<Record> records = new DataReader(table).allData();

@@ -21,11 +21,10 @@
 package io.olake.fusion.server.dashboard.controller;
 
 import io.javalin.http.Context;
-import io.olake.fusion.authentication.PasswdAuthenticationProvider;
 import io.olake.fusion.config.Configurations;
-import io.olake.fusion.server.FusionManagementConf;
+import io.olake.fusion.server.authentication.DefaultPasswdAuthenticationProvider;
 import io.olake.fusion.server.authentication.DefaultPasswordCredential;
-import io.olake.fusion.server.authentication.HttpAuthenticationFactory;
+import io.olake.fusion.server.authentication.PasswdAuthenticationProvider;
 import io.olake.fusion.server.dashboard.response.OkResponse;
 import io.olake.fusion.server.utils.PreconditionUtils;
 import org.slf4j.Logger;
@@ -41,9 +40,7 @@ public class LoginController {
   private final PasswdAuthenticationProvider loginAuthProvider;
 
   public LoginController(Configurations serviceConfig) {
-    this.loginAuthProvider =
-        HttpAuthenticationFactory.getPasswordAuthenticationProvider(
-            serviceConfig.get(FusionManagementConf.HTTP_SERVER_LOGIN_AUTH_PROVIDER), serviceConfig);
+    this.loginAuthProvider = new DefaultPasswdAuthenticationProvider(serviceConfig);
   }
 
   /** Get current user. */

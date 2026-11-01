@@ -20,39 +20,83 @@
 
 package io.olake.fusion.optimizing;
 
-import io.olake.fusion.data.DefaultKeyedFile;
-import io.olake.fusion.data.PrimaryKeyedFile;
-import io.olake.fusion.table.MixedTable;
-import io.olake.fusion.utils.ContentFiles;
 import org.apache.amoro.shade.guava32.com.google.common.base.MoreObjects;
+import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
 import org.apache.iceberg.ContentFile;
 import org.apache.iceberg.DataFile;
-import org.apache.iceberg.DeleteFile;
+import org.apache.iceberg.SerializableTable;
+import org.apache.iceberg.Table;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.Map;
 
+/**
+ * The input of one rewrite task. The server builds it when it plans a process, stores it in
+ * Postgres ({@code optimizing_process_state.rewrite_input}) and sends it to the optimizer, both as
+ * Java-serialized bytes.
+ *
+ * <p>Everything in it is either an Iceberg type or a JDK type, so the stored form names no Fusion
+ * class except this one and {@link BaseOptimizingInput}:
+ *
+ * <ul>
+ *   <li>the files to rewrite, as Iceberg {@link DataFile}s and delete files;
+ *   <li>the table, as a read-only Iceberg {@link SerializableTable} (schema, specs, sort order,
+ *       location provider, encryption and the table's {@code FileIO} with its credentials). The
+ *       optimizer reads and writes files with it and commits nothing; the server commits;
+ *   <li>the table properties with the catalog's {@code table.*} defaults merged in, which decide
+ *       the output file format and size.
+ * </ul>
+ *
+ * <p>This is format 2. Format 1, the Amoro form that carried Fusion's mixed-format table wrapper,
+ * cannot be read: its {@code serialVersionUID} differs, so reading it fails with an {@link
+ * java.io.InvalidClassException} instead of producing a half-read input.
+ */
 public class RewriteFilesInput extends BaseOptimizingInput {
-  private static final long serialVersionUID = -696610318564333923L;
+
+  /**
+   * Format version of the serialized task input. Change it whenever the serialized form changes;
+   * optimizers report it on registration (see {@code OptimizerProperties#OPTIMIZER_TASK_FORMAT}).
+   */
+  public static final long FORMAT_VERSION = 2L;
+
+  private static final long serialVersionUID = FORMAT_VERSION;
+
   private final DataFile[] rewrittenDataFiles;
   private final DataFile[] rePosDeletedDataFiles;
   private final ContentFile<?>[] readOnlyDeleteFiles;
   private final ContentFile<?>[] rewrittenDeleteFiles;
-  private final MixedTable table;
+  private final Table table;
+  private final HashMap<String, String> tableProperties;
 
+  /**
+   * @param table the table to rewrite; anything other than a {@link SerializableTable} is copied
+   *     into one
+   * @param tableProperties table properties with the catalog defaults merged in; never changed
+   *     after it is passed in
+   */
   public RewriteFilesInput(
       DataFile[] rewrittenDataFiles,
       DataFile[] rePosDeletedDataFiles,
       ContentFile<?>[] readOnlyDeleteFiles,
       ContentFile<?>[] rewrittenDeleteFiles,
-      MixedTable table) {
+      Table table,
+      Map<String, String> tableProperties) {
+    Preconditions.checkNotNull(table, "table");
     this.rewrittenDataFiles = rewrittenDataFiles;
     this.rePosDeletedDataFiles = rePosDeletedDataFiles;
     this.readOnlyDeleteFiles = readOnlyDeleteFiles;
     this.rewrittenDeleteFiles = rewrittenDeleteFiles;
-    this.table = table;
+    this.table = table instanceof SerializableTable ? table : SerializableTable.copyOf(table);
+    Map<String, String> properties = tableProperties == null ? table.properties() : tableProperties;
+    // Inputs of one process share the map, so it is serialized once with them.
+    this.tableProperties =
+        properties instanceof HashMap
+            ? (HashMap<String, String>) properties
+            : new HashMap<>(properties);
   }
 
   public DataFile[] rewrittenDataFiles() {
@@ -68,46 +112,6 @@ public class RewriteFilesInput extends BaseOptimizingInput {
   }
 
   public ContentFile<?>[] rewrittenDeleteFiles() {
-    return rewrittenDeleteFiles;
-  }
-
-  public List<PrimaryKeyedFile> rewrittenDataFilesForMixed() {
-    if (rewrittenDataFiles == null) {
-      return null;
-    }
-    return Arrays.stream(rewrittenDataFiles)
-        .map(s -> (DefaultKeyedFile) s)
-        .collect(Collectors.toList());
-  }
-
-  public List<PrimaryKeyedFile> rePosDeletedDataFilesForMixed() {
-    if (rePosDeletedDataFiles == null) {
-      return null;
-    }
-    return Arrays.stream(rePosDeletedDataFiles)
-        .map(s -> (DefaultKeyedFile) s)
-        .collect(Collectors.toList());
-  }
-
-  public List<DeleteFile> positionDeleteForMixed() {
-    return Arrays.stream(deleteFiles())
-        .filter(s -> s instanceof DeleteFile)
-        .map(ContentFiles::asDeleteFile)
-        .collect(Collectors.toList());
-  }
-
-  public List<PrimaryKeyedFile> equalityDeleteForMixed() {
-    return Arrays.stream(deleteFiles())
-        .filter(s -> s instanceof DataFile)
-        .map(s -> (PrimaryKeyedFile) s)
-        .collect(Collectors.toList());
-  }
-
-  public ContentFile<?>[] readOnlyDeleteFilesForMixed() {
-    return readOnlyDeleteFiles;
-  }
-
-  public ContentFile<?>[] rewrittenDeleteFilesForMixed() {
     return rewrittenDeleteFiles;
   }
 
@@ -150,8 +154,14 @@ public class RewriteFilesInput extends BaseOptimizingInput {
     return list.toArray(new ContentFile<?>[0]);
   }
 
-  public MixedTable getTable() {
+  /** Returns the table, a read-only {@link SerializableTable}. */
+  public Table getTable() {
     return table;
+  }
+
+  /** Returns the table properties with the catalog defaults merged in. */
+  public Map<String, String> getTableProperties() {
+    return Collections.unmodifiableMap(tableProperties);
   }
 
   @Override

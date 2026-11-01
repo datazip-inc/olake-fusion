@@ -22,7 +22,7 @@ package io.olake.fusion.utils.map;
 
 import io.olake.fusion.BasicTableTestHelper;
 import io.olake.fusion.data.ChangedLsn;
-import io.olake.fusion.io.MixedDataTestHelpers;
+import io.olake.fusion.io.DataTestHelpers;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Maps;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.StructLike;
@@ -39,8 +39,8 @@ public class TestStructLikeWrapperSizeEstimator {
 
   @Test
   public void testSizeEstimator() {
-    Record record1 = MixedDataTestHelpers.createRecord(1, "name1", 0, "2022-08-30T12:00:00");
-    Record record2 = MixedDataTestHelpers.createRecord(2, "test2", 1, "2023-06-29T13:00:00");
+    Record record1 = DataTestHelpers.createRecord(1, "name1", 0, "2022-08-30T12:00:00");
+    Record record2 = DataTestHelpers.createRecord(2, "test2", 1, "2023-06-29T13:00:00");
 
     Map<StructLike, ChangedLsn> map = Maps.newHashMap();
     ChangedLsn changedLsn = ChangedLsn.of(1, 2);
@@ -66,9 +66,9 @@ public class TestStructLikeWrapperSizeEstimator {
             Types.NestedField.required(2, "name", Types.StringType.get()),
             Types.NestedField.optional(3, "ts", Types.LongType.get()));
 
-    Record record1 = MixedDataTestHelpers.createRecord(schema, 1, "name1", 0);
+    Record record1 = DataTestHelpers.createRecord(schema, 1, "name1", 0);
     // Set the ts field to null
-    Record record2 = MixedDataTestHelpers.createRecord(schema, 1, "name1", null);
+    Record record2 = DataTestHelpers.createRecord(schema, 1, "name1", null);
     Map<StructLike, ChangedLsn> map = Maps.newHashMap();
     ChangedLsn changedLsn = ChangedLsn.of(1, 2);
     map.put(record1, changedLsn);

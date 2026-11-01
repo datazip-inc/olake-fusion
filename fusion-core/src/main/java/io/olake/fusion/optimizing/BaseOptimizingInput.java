@@ -27,6 +27,9 @@ import java.util.Map;
 
 public abstract class BaseOptimizingInput implements TableOptimizing.OptimizingInput {
 
+  /** Pinned to the value the JVM computed for this class before it was pinned. */
+  private static final long serialVersionUID = 2737323002722962947L;
+
   private final Map<String, String> options = new HashMap<>();
 
   @Override

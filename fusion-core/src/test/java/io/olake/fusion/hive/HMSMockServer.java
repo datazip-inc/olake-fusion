@@ -110,7 +110,7 @@ public class HMSMockServer {
   private ExecutorService executorService;
   private TServer server;
   private HiveMetaStore.HMSHandler baseHandler;
-  private HMSClient clientPool;
+  private HiveMetaStoreClient startupClient;
   private final int port;
   private HiveMetaStoreClient client;
   private boolean started = false;
@@ -159,7 +159,8 @@ public class HMSMockServer {
           HiveConf.ConfVars.METASTOREURIS.varname,
           hiveConf.getVar(HiveConf.ConfVars.METASTOREURIS));
 
-      this.clientPool = AuthenticatedHiveClientPool.createHiveMetaStoreClient(hiveConf);
+      // connecting a client also waits until the metastore accepts connections
+      this.startupClient = HMS_CLIENT_CTOR.newInstance(hiveConf);
       started = true;
     } catch (Exception e) {
       throw new RuntimeException("Cannot start TestHiveMetastore", e);
@@ -175,8 +176,8 @@ public class HMSMockServer {
     LOG.info("    Shutdown HiveMetastoreServer ");
     LOG.info("-------------------------------------------------------------------------");
 
-    if (clientPool != null) {
-      clientPool.close();
+    if (startupClient != null) {
+      startupClient.close();
     }
     if (server != null) {
       server.stop();
@@ -222,10 +223,6 @@ public class HMSMockServer {
 
   public HiveConf hiveConf() {
     return hiveConf;
-  }
-
-  public HMSClient clientPool() {
-    return clientPool;
   }
 
   public String getWareHouseLocation() {

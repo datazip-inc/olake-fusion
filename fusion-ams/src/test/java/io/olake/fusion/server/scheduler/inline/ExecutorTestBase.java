@@ -23,16 +23,13 @@ package io.olake.fusion.server.scheduler.inline;
 import io.olake.fusion.TableTestHelper;
 import io.olake.fusion.catalog.CatalogTestHelper;
 import io.olake.fusion.catalog.TableTestBase;
-import io.olake.fusion.data.ChangeAction;
-import io.olake.fusion.table.KeyedTable;
-import io.olake.fusion.table.MixedTable;
-import io.olake.fusion.table.UnkeyedTable;
 import org.apache.amoro.shade.guava32.com.google.common.collect.ImmutableList;
 import org.apache.iceberg.AppendFiles;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.ReachableFileUtil;
 import org.apache.iceberg.Snapshot;
+import org.apache.iceberg.Table;
 import org.apache.iceberg.data.Record;
 import org.junit.Assert;
 
@@ -56,53 +53,35 @@ public class ExecutorTestBase extends TableTestBase {
     return builder.build();
   }
 
-  public List<DataFile> writeAndCommitBaseStore(MixedTable table) {
-    UnkeyedTable baseTable =
-        table.isKeyedTable() ? table.asKeyedTable().baseTable() : table.asUnkeyedTable();
+  public List<DataFile> writeAndCommitBaseStore(Table table) {
+    Table baseTable = table;
     // write 4 file,100 records to 2 partitions(2022-1-1\2022-1-2)
-    List<DataFile> dataFiles =
-        tableTestHelper().writeBaseStore(baseTable, 0, createRecords(1, 100), false);
+    List<DataFile> dataFiles = tableTestHelper().writeDataFiles(baseTable, createRecords(1, 100));
     AppendFiles appendFiles = baseTable.newAppend();
     dataFiles.forEach(appendFiles::appendFile);
     appendFiles.commit();
     return dataFiles;
   }
 
-  public List<DataFile> writeAndCommitChangeStore(
-      KeyedTable table, long txId, ChangeAction action, List<Record> records) {
-    List<DataFile> writeFiles =
-        tableTestHelper().writeChangeStore(table, txId, action, records, false);
-    AppendFiles appendFiles = table.changeTable().newAppend();
-    writeFiles.forEach(appendFiles::appendFile);
-    appendFiles.commit();
-    return writeFiles;
+  public static void assertMetadataExists(Table table) {
+    checkMetadataExistence(table);
   }
 
-  public void writeAndCommitBaseAndChange(MixedTable table) {
-    writeAndCommitBaseStore(table);
-    writeAndCommitChangeStore(
-        table.asKeyedTable(), 2, ChangeAction.INSERT, createRecords(101, 100));
-  }
-
-  public static void assertMetadataExists(MixedTable table) {
-    if (table.isKeyedTable()) {
-      checkMetadataExistence(table.asKeyedTable().changeTable());
-    }
-    UnkeyedTable baseTable =
-        table.isKeyedTable() ? table.asKeyedTable().baseTable() : table.asUnkeyedTable();
-    checkMetadataExistence(baseTable);
-  }
-
-  public static void checkMetadataExistence(UnkeyedTable table) {
+  public static void checkMetadataExistence(Table table) {
     for (Snapshot snapshot : table.snapshots()) {
-      Assert.assertTrue(table.io().exists(snapshot.manifestListLocation()));
+      Assert.assertTrue(
+          table.io().newInputFile(String.valueOf(snapshot.manifestListLocation())).exists());
       for (ManifestFile allManifest : snapshot.allManifests(table.io())) {
-        Assert.assertTrue(table.io().exists(allManifest.path()));
+        Assert.assertTrue(table.io().newInputFile(String.valueOf(allManifest.path())).exists());
       }
     }
     for (String metadataFile : ReachableFileUtil.metadataFileLocations(table, false)) {
-      Assert.assertTrue(table.io().exists(metadataFile));
+      Assert.assertTrue(table.io().newInputFile(String.valueOf(metadataFile)).exists());
     }
-    Assert.assertTrue(table.io().exists(ReachableFileUtil.versionHintLocation(table)));
+    Assert.assertTrue(
+        table
+            .io()
+            .newInputFile(String.valueOf(ReachableFileUtil.versionHintLocation(table)))
+            .exists());
   }
 }

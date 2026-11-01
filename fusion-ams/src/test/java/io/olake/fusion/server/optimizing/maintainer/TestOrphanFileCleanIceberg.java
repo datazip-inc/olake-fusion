@@ -26,9 +26,7 @@ import io.olake.fusion.TableTestHelper;
 import io.olake.fusion.catalog.BasicCatalogTestHelper;
 import io.olake.fusion.catalog.CatalogTestHelper;
 import io.olake.fusion.formats.iceberg.maintainer.IcebergTableMaintainer;
-import io.olake.fusion.io.writer.GenericTaskWriters;
-import io.olake.fusion.io.writer.SortedPosDeleteWriter;
-import io.olake.fusion.table.UnkeyedTable;
+import io.olake.fusion.io.DataTestHelpers;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Lists;
 import org.apache.iceberg.AppendFiles;
 import org.apache.iceberg.DataFile;
@@ -78,23 +76,19 @@ public class TestOrphanFileCleanIceberg extends TestOrphanFileClean {
   public void cleanDanglingDeleteFiles() throws IOException {
     List<Record> records = Lists.newArrayListWithCapacity(3);
     records.add(tableTestHelper().generateTestRecord(1, "test1", 0, "2022-01-01T00:00:00"));
-    List<DataFile> dataFiles1 =
-        tableTestHelper().writeBaseStore(getMixedTable().asUnkeyedTable(), 1L, records, false);
-    UnkeyedTable testTable = getMixedTable().asUnkeyedTable();
+    List<DataFile> dataFiles1 = tableTestHelper().writeDataFiles(getTable(), records);
+    Table testTable = getTable();
     AppendFiles appendFiles = testTable.newAppend();
     dataFiles1.forEach(appendFiles::appendFile);
     appendFiles.commit();
     assertDanglingDeleteFiles(testTable, 0);
-    SortedPosDeleteWriter<Record> posDeleteWriter =
-        GenericTaskWriters.builderFor(testTable)
-            .buildBasePosDeleteWriter(0, 0, dataFiles1.get(0).partition());
-    posDeleteWriter.delete(dataFiles1.get(0).path(), 0);
-    List<DeleteFile> posDelete = posDeleteWriter.complete();
+    List<DeleteFile> posDelete =
+        DataTestHelpers.writePosDeletes(
+            testTable, dataFiles1.get(0), Collections.singletonList(0L));
     testTable.newRowDelta().addDeletes(posDelete.get(0)).commit();
     records.clear();
     records.add(tableTestHelper().generateTestRecord(3, "test3", 0, "2022-01-02T00:00:00"));
-    List<DataFile> dataFiles2 =
-        tableTestHelper().writeBaseStore(getMixedTable().asUnkeyedTable(), 1L, records, false);
+    List<DataFile> dataFiles2 = tableTestHelper().writeDataFiles(getTable(), records);
     testTable
         .newRewrite()
         .rewriteFiles(
@@ -105,13 +99,16 @@ public class TestOrphanFileCleanIceberg extends TestOrphanFileClean {
 
     IcebergTableMaintainer tableMaintainer =
         new IcebergTableMaintainer(
-            testTable, testTable.id(), TestTableMaintainerContext.of(testTable));
+            testTable,
+            getFusionTable().io(),
+            getFusionTable().id(),
+            TestTableMaintainerContext.of(testTable));
     tableMaintainer.doCleanDanglingDeleteFiles();
 
     assertDanglingDeleteFiles(testTable, 0);
   }
 
-  private void assertDanglingDeleteFiles(UnkeyedTable unkeyedTable, int count) {
+  private void assertDanglingDeleteFiles(Table unkeyedTable, int count) {
     TableScan tableScan = unkeyedTable.newScan();
     Set<String> files = new HashSet<>();
     for (FileScanTask task : tableScan.planFiles()) {

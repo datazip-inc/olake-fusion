@@ -23,9 +23,7 @@ package io.olake.fusion.resource;
 /**
  * The interface of internal resource container For {@link InternalResourceContainer}, resources are
  * managed by AMS, and resources are decoupled from processes, which means one process could run any
- * number of resources and a resource could run any number of processes. For {@link
- * ExternalResourceContainer} resources are managed outside(by some JobManager or application
- * master), resources and processes are one-to-one mapping.
+ * number of resources and a resource could run any number of processes.
  */
 public interface InternalResourceContainer extends ResourceContainer {
 

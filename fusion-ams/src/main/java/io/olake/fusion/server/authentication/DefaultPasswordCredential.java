@@ -20,8 +20,6 @@
 
 package io.olake.fusion.server.authentication;
 
-import io.olake.fusion.authentication.PasswordCredential;
-
 import java.util.Collections;
 import java.util.Map;
 

@@ -20,14 +20,12 @@
 
 package io.olake.fusion;
 
-import io.olake.fusion.data.ChangeAction;
-import io.olake.fusion.table.KeyedTable;
-import io.olake.fusion.table.MixedTable;
 import io.olake.fusion.table.PrimaryKeySpec;
 import io.olake.fusion.table.TableIdentifier;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.Table;
 import org.apache.iceberg.data.Record;
 import org.apache.iceberg.expressions.Expression;
 
@@ -57,26 +55,7 @@ public interface TableTestHelper {
 
   Record generateTestRecord(int id, String name, long ts, String opTime);
 
-  List<DataFile> writeChangeStore(
-      KeyedTable keyedTable,
-      Long txId,
-      ChangeAction action,
-      List<Record> records,
-      boolean orderedWrite);
+  List<DataFile> writeDataFiles(Table table, List<Record> records);
 
-  List<DataFile> writeBaseStore(
-      MixedTable keyedTable, long txId, List<Record> records, boolean orderedWrite);
-
-  List<Record> readKeyedTable(
-      KeyedTable keyedTable,
-      Expression expression,
-      Schema projectSchema,
-      boolean useDiskMap,
-      boolean readDeletedData);
-
-  List<Record> readChangeStore(
-      KeyedTable keyedTable, Expression expression, Schema projectSchema, boolean useDiskMap);
-
-  List<Record> readBaseStore(
-      MixedTable table, Expression expression, Schema projectSchema, boolean useDiskMap);
+  List<Record> readTable(Table table, Expression expression, Schema projectSchema);
 }

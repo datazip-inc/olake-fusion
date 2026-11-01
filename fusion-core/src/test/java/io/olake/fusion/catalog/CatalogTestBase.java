@@ -20,16 +20,11 @@
 
 package io.olake.fusion.catalog;
 
-import io.olake.fusion.MockAmoroManagementServer;
 import io.olake.fusion.TableFormat;
-import io.olake.fusion.TestAms;
-import io.olake.fusion.UnifiedCatalog;
 import io.olake.fusion.api.CatalogMeta;
-import io.olake.fusion.properties.CatalogMetaProperties;
+import io.olake.fusion.formats.iceberg.IcebergCatalog;
 import org.apache.commons.lang3.SystemUtils;
-import org.junit.After;
 import org.junit.Before;
-import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.rules.TemporaryFolder;
 
@@ -37,19 +32,14 @@ import java.io.IOException;
 
 public abstract class CatalogTestBase {
 
-  @ClassRule public static TestAms TEST_AMS = new TestAms();
   private final CatalogTestHelper testHelper;
   @Rule public TemporaryFolder temp = new TemporaryFolder();
-  private UnifiedCatalog unifiedCatalog;
+  private IcebergCatalog unifiedCatalog;
   private CatalogMeta catalogMeta;
   private org.apache.iceberg.catalog.Catalog icebergCatalog;
 
   public CatalogTestBase(CatalogTestHelper testHelper) {
     this.testHelper = testHelper;
-  }
-
-  public static MockAmoroManagementServer.AmsHandler getAmsHandler() {
-    return TEST_AMS.getAmsHandler();
   }
 
   @Before
@@ -59,19 +49,6 @@ public abstract class CatalogTestBase {
       baseDir = "file:/" + temp.newFolder().getPath().replace("\\", "/");
     }
     catalogMeta = testHelper.buildCatalogMeta(baseDir);
-    catalogMeta.putToCatalogProperties(CatalogMetaProperties.AMS_URI, TEST_AMS.getServerUrl());
-    getAmsHandler().createCatalog(catalogMeta);
-  }
-
-  @After
-  public void dropCatalog() {
-    if (catalogMeta != null) {
-      getAmsHandler().dropCatalog(catalogMeta.getCatalogName());
-    }
-  }
-
-  protected String getCatalogUri() {
-    return TEST_AMS.getServerUrl() + "/" + catalogMeta.getCatalogName();
   }
 
   protected CatalogMeta getCatalogMeta() {
@@ -89,9 +66,9 @@ public abstract class CatalogTestBase {
     return icebergCatalog;
   }
 
-  protected UnifiedCatalog getUnifiedCatalog() {
+  protected IcebergCatalog getFusionCatalog() {
     if (unifiedCatalog == null) {
-      unifiedCatalog = testHelper.buildUnifiedCatalog(catalogMeta);
+      unifiedCatalog = testHelper.buildFusionCatalog(catalogMeta);
     }
     return unifiedCatalog;
   }

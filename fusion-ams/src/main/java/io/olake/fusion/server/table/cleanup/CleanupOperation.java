@@ -24,7 +24,6 @@ package io.olake.fusion.server.table.cleanup;
 public enum CleanupOperation {
   DANGLING_DELETE_FILES_CLEANING,
   ORPHAN_FILES_CLEANING,
-  DATA_EXPIRING,
   SNAPSHOTS_EXPIRING,
   //  NONE indicates operation types where no cleanup process records are
   //  saved in the table_runtime_state table.

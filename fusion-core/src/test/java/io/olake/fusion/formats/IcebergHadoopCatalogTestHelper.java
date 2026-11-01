@@ -20,12 +20,10 @@
 
 package io.olake.fusion.formats;
 
-import io.olake.fusion.FusionCatalog;
 import io.olake.fusion.TableFormat;
-import io.olake.fusion.formats.iceberg.IcebergCatalogFactory;
+import io.olake.fusion.formats.iceberg.IcebergCatalog;
 import io.olake.fusion.table.TableMetaStore;
 import io.olake.fusion.utils.CatalogUtil;
-import io.olake.fusion.utils.MixedFormatCatalogUtil;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Lists;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Sets;
 import org.apache.hadoop.conf.Configuration;
@@ -74,19 +72,15 @@ public class IcebergHadoopCatalogTestHelper extends AbstractFormatCatalogTestHel
   }
 
   @Override
-  public FusionCatalog amoroCatalog() {
-    IcebergCatalogFactory icebergCatalogFactory = new IcebergCatalogFactory();
+  public IcebergCatalog amoroCatalog() {
     TableMetaStore metaStore = CatalogUtil.buildMetaStore(getCatalogMeta());
-    Map<String, String> properties =
-        icebergCatalogFactory.convertCatalogProperties(
-            catalogName, getMetastoreType(), catalogProperties);
-    return icebergCatalogFactory.create(catalogName, getMetastoreType(), properties, metaStore);
+    return new IcebergCatalog(catalogName, getMetastoreType(), catalogProperties, metaStore);
   }
 
   @Override
   public Catalog originalCatalog() {
     Map<String, String> props =
-        MixedFormatCatalogUtil.withIcebergCatalogInitializeProperties(
+        CatalogUtil.withIcebergCatalogInitializeProperties(
             catalogName, getMetastoreType(), catalogProperties);
     TableMetaStore metaStore = CatalogUtil.buildMetaStore(getCatalogMeta());
     return org.apache.iceberg.CatalogUtil.buildIcebergCatalog(

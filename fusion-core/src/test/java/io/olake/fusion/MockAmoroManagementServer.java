@@ -20,21 +20,12 @@
 
 package io.olake.fusion;
 
-import io.olake.fusion.api.AlreadyExistsException;
 import io.olake.fusion.api.AmoroException;
-import io.olake.fusion.api.AmoroTableMetastore;
-import io.olake.fusion.api.BlockableOperation;
-import io.olake.fusion.api.Blocker;
-import io.olake.fusion.api.CatalogMeta;
-import io.olake.fusion.api.NoSuchObjectException;
 import io.olake.fusion.api.OptimizerRegisterInfo;
 import io.olake.fusion.api.OptimizingService;
 import io.olake.fusion.api.OptimizingTask;
 import io.olake.fusion.api.OptimizingTaskId;
 import io.olake.fusion.api.OptimizingTaskResult;
-import io.olake.fusion.api.TableCommitMeta;
-import io.olake.fusion.api.TableIdentifier;
-import io.olake.fusion.api.TableMeta;
 import org.apache.amoro.shade.thrift.org.apache.thrift.TException;
 import org.apache.amoro.shade.thrift.org.apache.thrift.TMultiplexedProcessor;
 import org.apache.amoro.shade.thrift.org.apache.thrift.protocol.TBinaryProtocol;
@@ -49,10 +40,7 @@ import org.slf4j.LoggerFactory;
 
 import java.net.BindException;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.Base64;
-import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
@@ -60,14 +48,11 @@ import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Collectors;
 
 public class MockAmoroManagementServer implements Runnable {
   private static final Logger LOG = LoggerFactory.getLogger(MockAmoroManagementServer.class);
@@ -77,8 +62,6 @@ public class MockAmoroManagementServer implements Runnable {
   private int port;
   private int retry = 10;
   private boolean started = false;
-  private final AmsHandler amsHandler = new AmsHandler();
-
   private final OptimizerManagerHandler optimizerManagerHandler = new OptimizerManagerHandler();
 
   private TServer server;
@@ -101,14 +84,6 @@ public class MockAmoroManagementServer implements Runnable {
     return "thrift://127.0.0.1:" + port;
   }
 
-  public String getUrl() {
-    return "thrift://127.0.0.1:" + port + "/" + TEST_CATALOG_NAME;
-  }
-
-  public String getUrl(String catalogName) {
-    return "thrift://127.0.0.1:" + port + "/" + catalogName;
-  }
-
   public MockAmoroManagementServer() {
     this.port = randomPort();
   }
@@ -129,16 +104,11 @@ public class MockAmoroManagementServer implements Runnable {
     if (server != null) {
       server.stop();
     }
-    amsHandler.cleanUp();
     started = false;
   }
 
   public boolean isStarted() {
     return started;
-  }
-
-  public AmsHandler handler() {
-    return amsHandler;
   }
 
   public OptimizerManagerHandler optimizerHandler() {
@@ -154,10 +124,6 @@ public class MockAmoroManagementServer implements Runnable {
     try {
       TServerSocket socket = new TServerSocket(port);
       TMultiplexedProcessor processor = new TMultiplexedProcessor();
-      AmoroTableMetastore.Processor<AmsHandler> amsProcessor =
-          new AmoroTableMetastore.Processor<>(amsHandler);
-      processor.registerProcessor("TableMetastore", amsProcessor);
-
       OptimizingService.Processor<OptimizerManagerHandler> optimizerManProcessor =
           new OptimizingService.Processor<>(optimizerManagerHandler);
       processor.registerProcessor("OptimizeManager", optimizerManProcessor);
@@ -209,199 +175,6 @@ public class MockAmoroManagementServer implements Runnable {
       } else {
         throw new IllegalStateException(e);
       }
-    }
-  }
-
-  public static class AmsHandler implements AmoroTableMetastore.Iface {
-    private static final long DEFAULT_BLOCKER_TIMEOUT = 60_000;
-    private final ConcurrentLinkedQueue<CatalogMeta> catalogs = new ConcurrentLinkedQueue<>();
-    private final ConcurrentLinkedQueue<TableMeta> tables = new ConcurrentLinkedQueue<>();
-    private final ConcurrentHashMap<String, List<String>> databases = new ConcurrentHashMap<>();
-
-    private final Map<TableIdentifier, List<TableCommitMeta>> tableCommitMetas = new HashMap<>();
-
-    private final Map<TableIdentifier, Map<String, Blocker>> tableBlockers = new HashMap<>();
-    private final AtomicLong blockerId = new AtomicLong(1L);
-
-    public void cleanUp() {
-      catalogs.clear();
-      tables.clear();
-      databases.clear();
-      tableCommitMetas.clear();
-    }
-
-    public void createCatalog(CatalogMeta catalogMeta) {
-      dropCatalog(catalogMeta.getCatalogName());
-      catalogs.add(catalogMeta);
-    }
-
-    public void dropCatalog(String catalogName) {
-      tables.removeIf(tableMeta -> tableMeta.getTableIdentifier().getCatalog().equals(catalogName));
-      databases.remove(catalogName);
-      catalogs.removeIf(catalogMeta -> catalogMeta.getCatalogName().equals(catalogName));
-    }
-
-    public Map<TableIdentifier, List<TableCommitMeta>> getTableCommitMetas() {
-      return tableCommitMetas;
-    }
-
-    @Override
-    public void ping() {}
-
-    @Override
-    public List<CatalogMeta> getCatalogs() {
-      return new ArrayList<>(catalogs);
-    }
-
-    @Override
-    public CatalogMeta getCatalog(String name) throws TException {
-      return catalogs.stream()
-          .filter(c -> name.equals(c.getCatalogName()))
-          .findFirst()
-          .orElseThrow(
-              () -> new NoSuchObjectException("catalog with name: " + name + " non-exists."));
-    }
-
-    @Override
-    public List<String> getDatabases(String catalogName) throws TException {
-      return databases.get(catalogName) == null ? new ArrayList<>() : databases.get(catalogName);
-    }
-
-    @Override
-    public void createDatabase(String catalogName, String database) throws TException {
-      databases.computeIfAbsent(catalogName, c -> new ArrayList<>());
-      if (databases.get(catalogName).contains(database)) {
-        throw new AlreadyExistsException("database exist");
-      }
-      databases.computeIfPresent(
-          catalogName,
-          (c, dbList) -> {
-            List<String> newList = new ArrayList<>(dbList);
-            newList.add(database);
-            return newList;
-          });
-    }
-
-    @Override
-    public void dropDatabase(String catalogName, String database) throws TException {
-      List<String> dbList = databases.get(catalogName);
-      if (dbList == null || !dbList.contains(database)) {
-        throw new NoSuchObjectException();
-      }
-      databases.computeIfPresent(
-          catalogName,
-          (c, dbs) -> {
-            List<String> databaseList = new ArrayList<>(dbs);
-            databaseList.remove(database);
-            return databaseList;
-          });
-    }
-
-    @Override
-    public void createTableMeta(TableMeta tableMeta) throws TException {
-      TableIdentifier identifier = tableMeta.getTableIdentifier();
-      String catalog = identifier.getCatalog();
-      String database = identifier.getDatabase();
-      CatalogMeta catalogMeta = getCatalog(catalog);
-      if (!"hive".equalsIgnoreCase(catalogMeta.getCatalogType())
-          && (databases.get(catalog) == null || !databases.get(catalog).contains(database))) {
-        throw new NoSuchObjectException("database non-exists");
-      }
-      tables.add(tableMeta);
-    }
-
-    @Override
-    public List<TableMeta> listTables(String catalogName, String database) throws TException {
-      return tables.stream()
-          .filter(t -> catalogName.equals(t.getTableIdentifier().getCatalog()))
-          .filter(t -> database.equals(t.getTableIdentifier().getDatabase()))
-          .collect(Collectors.toList());
-    }
-
-    @Override
-    public TableMeta getTable(TableIdentifier tableIdentifier) throws TException {
-      return tables.stream()
-          .filter(t -> tableIdentifier.equals(t.getTableIdentifier()))
-          .findFirst()
-          .orElseThrow(NoSuchObjectException::new);
-    }
-
-    @Override
-    public void removeTable(TableIdentifier tableIdentifier, boolean deleteData) {
-      tables.removeIf(t -> t.getTableIdentifier().equals(tableIdentifier));
-    }
-
-    @Override
-    public void tableCommit(TableCommitMeta commit) throws TException {
-      tableCommitMetas.putIfAbsent(commit.getTableIdentifier(), new ArrayList<>());
-      tableCommitMetas.get(commit.getTableIdentifier()).add(commit);
-      if (commit.getProperties() != null) {
-        TableMeta meta = getTable(commit.getTableIdentifier());
-        meta.setProperties(commit.getProperties());
-      }
-    }
-
-    @Override
-    public long allocateTransactionId(
-        TableIdentifier tableIdentifier, String transactionSignature) {
-      throw new UnsupportedOperationException(
-          "allocate TransactionId from AMS is not supported now");
-    }
-
-    @Override
-    public Blocker block(
-        TableIdentifier tableIdentifier,
-        List<BlockableOperation> operations,
-        Map<String, String> properties)
-        throws TException {
-      Map<String, Blocker> blockers =
-          this.tableBlockers.computeIfAbsent(tableIdentifier, t -> new HashMap<>());
-      long now = System.currentTimeMillis();
-      properties.put("create.time", now + "");
-      properties.put("expiration.time", (now + DEFAULT_BLOCKER_TIMEOUT) + "");
-      properties.put("blocker.timeout", DEFAULT_BLOCKER_TIMEOUT + "");
-      Blocker blocker = new Blocker(this.blockerId.getAndIncrement() + "", operations, properties);
-      blockers.put(blocker.getBlockerId(), blocker);
-      return blocker;
-    }
-
-    @Override
-    public void releaseBlocker(TableIdentifier tableIdentifier, String blockerId) {
-      Map<String, Blocker> blockers = this.tableBlockers.get(tableIdentifier);
-      if (blockers != null) {
-        blockers.remove(blockerId);
-      }
-    }
-
-    @Override
-    public long renewBlocker(TableIdentifier tableIdentifier, String blockerId) throws TException {
-      Map<String, Blocker> blockers = this.tableBlockers.get(tableIdentifier);
-      if (blockers == null) {
-        throw new NoSuchObjectException(
-            "illegal blockerId " + blockerId + ", it may be released or expired");
-      }
-      Blocker blocker = blockers.get(blockerId);
-      if (blocker == null) {
-        throw new NoSuchObjectException(
-            "illegal blockerId " + blockerId + ", it may be released or expired");
-      }
-      long expirationTime = System.currentTimeMillis() + DEFAULT_BLOCKER_TIMEOUT;
-      blocker.getProperties().put("expiration.time", expirationTime + "");
-      return expirationTime;
-    }
-
-    @Override
-    public List<Blocker> getBlockers(TableIdentifier tableIdentifier) throws TException {
-      Map<String, Blocker> blockers = this.tableBlockers.get(tableIdentifier);
-      if (blockers == null) {
-        return Collections.emptyList();
-      } else {
-        return new ArrayList<>(blockers.values());
-      }
-    }
-
-    public void updateMeta(CatalogMeta meta, String key, String value) {
-      meta.getCatalogProperties().put(key, value);
     }
   }
 

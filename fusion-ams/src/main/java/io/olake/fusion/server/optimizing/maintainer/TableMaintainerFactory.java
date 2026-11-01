@@ -21,15 +21,11 @@
 package io.olake.fusion.server.optimizing.maintainer;
 
 import io.olake.fusion.FusionTable;
-import io.olake.fusion.TableFormat;
 import io.olake.fusion.TableRuntime;
 import io.olake.fusion.formats.iceberg.maintainer.IcebergTableMaintainer;
-import io.olake.fusion.formats.iceberg.maintainer.MixedTableMaintainer;
 import io.olake.fusion.maintainer.TableMaintainer;
 import io.olake.fusion.server.table.DefaultTableRuntime;
-import io.olake.fusion.table.MixedTable;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
-import org.apache.iceberg.Table;
 
 /** Factory for creating {@link TableMaintainer} instances. */
 public class TableMaintainerFactory {
@@ -37,14 +33,15 @@ public class TableMaintainerFactory {
   /**
    * Create an Iceberg table maintainer with AMS context.
    *
-   * @param table the Iceberg table
+   * @param table the table
    * @param tableRuntime the AMS table runtime
    * @return IcebergTableMaintainer instance
    */
   public static IcebergTableMaintainer createIcebergMaintainer(
-      Table table, DefaultTableRuntime tableRuntime) {
+      FusionTable table, DefaultTableRuntime tableRuntime) {
     return new IcebergTableMaintainer(
-        table,
+        table.table(),
+        table.io(),
         tableRuntime.getTableIdentifier().getIdentifier(),
         new DefaultTableMaintainerContext(tableRuntime));
   }
@@ -52,26 +49,13 @@ public class TableMaintainerFactory {
   /**
    * Create a {@link TableMaintainer} for the given table.
    *
-   * @param amoroTable the Amoro table
+   * @param table the table
    * @param tableRuntime the table runtime
    * @return TableMaintainer instance
    */
-  public static TableMaintainer create(FusionTable<?> amoroTable, TableRuntime tableRuntime) {
+  public static TableMaintainer create(FusionTable table, TableRuntime tableRuntime) {
     Preconditions.checkArgument(tableRuntime instanceof DefaultTableRuntime);
-    DefaultTableRuntime runtime = (DefaultTableRuntime) tableRuntime;
-    TableFormat format = amoroTable.format();
-
-    if (format.in(TableFormat.MIXED_HIVE, TableFormat.MIXED_ICEBERG)) {
-      MixedTable mixedTable = (MixedTable) amoroTable.originalTable();
-      return new MixedTableMaintainer(
-          mixedTable, new DefaultTableMaintainerContext(runtime, mixedTable));
-    } else if (TableFormat.ICEBERG.equals(format)) {
-      return new IcebergTableMaintainer(
-          (Table) amoroTable.originalTable(),
-          amoroTable.id(),
-          new DefaultTableMaintainerContext(runtime));
-    } else {
-      throw new RuntimeException("Unsupported table type" + amoroTable.originalTable().getClass());
-    }
+    return new IcebergTableMaintainer(
+        table, new DefaultTableMaintainerContext((DefaultTableRuntime) tableRuntime));
   }
 }

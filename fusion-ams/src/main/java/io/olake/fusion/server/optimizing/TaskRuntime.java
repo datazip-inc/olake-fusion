@@ -32,14 +32,18 @@ import io.olake.fusion.server.FusionServiceConstants;
 import io.olake.fusion.server.persistence.StatedPersistentBase;
 import io.olake.fusion.server.persistence.mapper.OptimizingProcessMapper;
 import io.olake.fusion.server.resource.OptimizerThread;
+import io.olake.fusion.utils.ExceptionUtil;
 import org.apache.amoro.shade.guava32.com.google.common.base.MoreObjects;
 import org.apache.amoro.shade.guava32.com.google.common.collect.ImmutableMap;
 import org.apache.amoro.shade.guava32.com.google.common.collect.ImmutableSet;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 import java.util.Set;
 
 public class TaskRuntime<T extends StagedTaskDescriptor<?, ?, ?>> extends StatedPersistentBase {
+  private static final Logger LOG = LoggerFactory.getLogger(TaskRuntime.class);
 
   private final SimpleFuture future = new SimpleFuture();
   private final TaskStatusMachine statusMachine = new TaskStatusMachine();
@@ -92,7 +96,22 @@ public class TaskRuntime<T extends StagedTaskDescriptor<?, ?, ?>> extends Stated
             failReason = result.getErrorMessage();
           } else {
             statusMachine.accept(Status.SUCCESS);
-            taskDescriptor.setOutputBytes(result.getTaskOutput());
+            try {
+              taskDescriptor.setOutputBytes(result.getTaskOutput());
+            } catch (IllegalArgumentException e) {
+              // An optimizer of another release sent an output this server cannot read. Fail the
+              // task (FAILED is reachable from ACKED like SUCCESS) so it is retried or the
+              // process fails, instead of leaving it ACKED.
+              LOG.warn("Task {} sent an output that cannot be read", taskId, e);
+              status = Status.FAILED;
+              failReason =
+                  ExceptionUtil.getErrorMessage(
+                      new IllegalStateException(
+                          "Task output cannot be read; the optimizer and Fusion server releases"
+                              + " must match",
+                          e),
+                      4000);
+            }
           }
           endTime = System.currentTimeMillis();
           costTime += endTime - startTime;

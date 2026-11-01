@@ -23,34 +23,21 @@ package io.olake.fusion.server.optimizing;
 import io.olake.fusion.TableTestHelper;
 import io.olake.fusion.server.utils.IcebergTableUtil;
 import io.olake.fusion.table.BasicTableSnapshot;
-import io.olake.fusion.table.KeyedTable;
-import io.olake.fusion.table.KeyedTableSnapshot;
-import io.olake.fusion.table.MixedTable;
 import io.olake.fusion.table.TableSnapshot;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Lists;
 import org.apache.iceberg.AppendFiles;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.RowDelta;
+import org.apache.iceberg.Table;
 import org.apache.iceberg.data.Record;
 
 import java.util.List;
 
 public class OptimizingTestHelpers {
-  public static TableSnapshot getCurrentTableSnapshot(MixedTable table) {
-    if (table.isKeyedTable()) {
-      return getCurrentKeyedTableSnapshot(table.asKeyedTable());
-    } else {
-      long baseSnapshotId = IcebergTableUtil.getSnapshotId(table.asUnkeyedTable(), true);
-      return new BasicTableSnapshot(baseSnapshotId);
-    }
-  }
-
-  public static KeyedTableSnapshot getCurrentKeyedTableSnapshot(KeyedTable keyedTable) {
-    long baseSnapshotId = IcebergTableUtil.getSnapshotId(keyedTable.baseTable(), true);
-    long changeSnapshotId = IcebergTableUtil.getSnapshotId(keyedTable.changeTable(), true);
-
-    return new KeyedTableSnapshot(baseSnapshotId, changeSnapshotId);
+  public static TableSnapshot getCurrentTableSnapshot(Table table) {
+    long baseSnapshotId = IcebergTableUtil.getSnapshotId(table, true);
+    return new BasicTableSnapshot(baseSnapshotId);
   }
 
   public static List<Record> generateRecord(
@@ -62,35 +49,18 @@ public class OptimizingTestHelpers {
     return newRecords;
   }
 
-  public static List<DataFile> appendBase(MixedTable mixedTable, List<DataFile> dataFiles) {
-    AppendFiles appendFiles;
-    if (mixedTable.isKeyedTable()) {
-      appendFiles = mixedTable.asKeyedTable().baseTable().newAppend();
-    } else {
-      appendFiles = mixedTable.asUnkeyedTable().newAppend();
-    }
+  public static List<DataFile> appendBase(Table mixedTable, List<DataFile> dataFiles) {
+    AppendFiles appendFiles = mixedTable.newAppend();
     dataFiles.forEach(appendFiles::appendFile);
     appendFiles.commit();
     return dataFiles;
   }
 
   public static List<DeleteFile> appendBasePosDelete(
-      MixedTable mixedTable, List<DeleteFile> deleteFiles) {
-    RowDelta rowDelta;
-    if (mixedTable.isKeyedTable()) {
-      rowDelta = mixedTable.asKeyedTable().baseTable().newRowDelta();
-    } else {
-      rowDelta = mixedTable.asUnkeyedTable().newRowDelta();
-    }
+      Table mixedTable, List<DeleteFile> deleteFiles) {
+    RowDelta rowDelta = mixedTable.newRowDelta();
     deleteFiles.forEach(rowDelta::addDeletes);
     rowDelta.commit();
     return deleteFiles;
-  }
-
-  public static List<DataFile> appendChange(KeyedTable keyedTable, List<DataFile> dataFiles) {
-    AppendFiles appendFiles = keyedTable.changeTable().newAppend();
-    dataFiles.forEach(appendFiles::appendFile);
-    appendFiles.commit();
-    return dataFiles;
   }
 }

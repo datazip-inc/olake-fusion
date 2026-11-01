@@ -20,6 +20,8 @@
 
 package io.olake.fusion;
 
+import io.olake.fusion.optimizing.RewriteFilesInput;
+
 public class OptimizerProperties {
 
   // Resource properties
@@ -30,6 +32,13 @@ public class OptimizerProperties {
   // helps identify old / new optimizers with release tag
   public static final String OPTIMIZER_TAG = "optimizer-tag";
   public static final String OPTIMIZER_TAG_VALUE = "v0.1.5";
+
+  // Format of the serialized task inputs and outputs the optimizer reads and writes. The server
+  // only accepts optimizers with its own format; an optimizer without it is from a release that
+  // used the Amoro mixed-format task input (format 1).
+  public static final String OPTIMIZER_TASK_FORMAT = "task-format-version";
+  public static final String OPTIMIZER_TASK_FORMAT_VALUE =
+      String.valueOf(RewriteFilesInput.FORMAT_VERSION);
 
   // Spark settings that the Spark optimizer reports when it registers, for telemetry
   public static final String SPARK_DRIVER_MEMORY = "spark.driver.memory";

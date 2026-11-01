@@ -22,9 +22,9 @@ package io.olake.fusion.server.optimizing.flow.checker;
 
 import io.olake.fusion.optimizing.RewriteStageTask;
 import io.olake.fusion.optimizing.plan.AbstractOptimizingPlanner;
-import io.olake.fusion.server.optimizing.UnKeyedTableCommit;
-import io.olake.fusion.table.MixedTable;
+import io.olake.fusion.server.optimizing.IcebergTableCommit;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.iceberg.Table;
 
 import javax.annotation.Nullable;
 
@@ -38,10 +38,10 @@ public class OptimizingCountChecker extends AbstractSceneCountChecker {
 
   @Override
   protected boolean internalCondition(
-      MixedTable table,
+      Table table,
       @Nullable List<RewriteStageTask> latestTaskDescriptors,
       AbstractOptimizingPlanner latestPlanner,
-      @Nullable UnKeyedTableCommit latestCommit) {
+      @Nullable IcebergTableCommit latestCommit) {
     return CollectionUtils.isNotEmpty(latestTaskDescriptors);
   }
 }

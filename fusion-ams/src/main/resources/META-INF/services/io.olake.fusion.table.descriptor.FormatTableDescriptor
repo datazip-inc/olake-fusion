@@ -17,4 +17,4 @@
 #
 # Modified by Datazip Inc. in 2026
 #
-io.olake.fusion.server.dashboard.MixedAndIcebergTableDescriptor
+io.olake.fusion.server.dashboard.IcebergTableDescriptor

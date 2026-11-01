@@ -22,12 +22,9 @@ package io.olake.fusion.server;
 
 import io.olake.fusion.config.ConfigOption;
 import io.olake.fusion.config.ConfigOptions;
-import io.olake.fusion.server.authentication.DefaultPasswdAuthenticationProvider;
 import io.olake.fusion.utils.MemorySize;
 
 import java.time.Duration;
-import java.util.Arrays;
-import java.util.List;
 
 public class FusionManagementConf {
 
@@ -54,15 +51,6 @@ public class FusionManagementConf {
           .stringType()
           .defaultValue("admin")
           .withDescription("The administrator password");
-
-  /** Enable master & slave mode, which supports horizontal scaling of AMS. */
-  public static final ConfigOption<Boolean> USE_MASTER_SLAVE_MODE =
-      ConfigOptions.key("use-master-slave-mode")
-          .booleanType()
-          .defaultValue(false)
-          .withDescription(
-              "This setting controls whether to enable the AMS horizontal scaling feature, "
-                  + "which is currently under development and testing.");
 
   public static final ConfigOption<Boolean> TELEMETRY_DISABLED =
       ConfigOptions.key("telemetry.disabled")
@@ -176,132 +164,17 @@ public class FusionManagementConf {
           .defaultValue(Duration.ofDays(1))
           .withDescription("Interval for cleaning dangling delete files.");
 
-  public static final ConfigOption<Boolean> SYNC_HIVE_TABLES_ENABLED =
-      ConfigOptions.key("sync-hive-tables.enabled")
-          .booleanType()
-          .defaultValue(false)
-          .withDescription("Enable synchronizing Hive tables.");
-
-  public static final ConfigOption<Integer> SYNC_HIVE_TABLES_THREAD_COUNT =
-      ConfigOptions.key("sync-hive-tables.thread-count")
-          .intType()
-          .defaultValue(10)
-          .withDescription("The number of threads used for synchronizing Hive tables.");
-
   public static final ConfigOption<Integer> REFRESH_TABLES_THREAD_COUNT =
       ConfigOptions.key("refresh-tables.thread-count")
           .intType()
           .defaultValue(10)
           .withDescription("The number of threads used for refreshing tables.");
 
-  public static final ConfigOption<Boolean> AUTO_CREATE_TAGS_ENABLED =
-      ConfigOptions.key("auto-create-tags.enabled")
-          .booleanType()
-          .defaultValue(false) // TODO: will be enabled with cleaning feature
-          .withDescription("Enable creating tags.");
-
-  public static final ConfigOption<Integer> AUTO_CREATE_TAGS_THREAD_COUNT =
-      ConfigOptions.key("auto-create-tags.thread-count")
-          .intType()
-          .defaultValue(3)
-          .withDescription("The number of threads used for creating tags.");
-
-  public static final ConfigOption<Duration> AUTO_CREATE_TAGS_INTERVAL =
-      ConfigOptions.key("auto-create-tags.interval")
-          .durationType()
-          .defaultValue(Duration.ofMinutes(1))
-          .withDescription("Interval for creating tags.");
-
   public static final ConfigOption<Duration> REFRESH_TABLES_INTERVAL =
       ConfigOptions.key("refresh-tables.interval")
           .durationType()
           .defaultValue(Duration.ofMinutes(1))
           .withDescription("Interval for refreshing table metadata.");
-
-  public static final ConfigOption<Integer> REFRESH_MAX_PENDING_PARTITIONS =
-      ConfigOptions.key("refresh-tables.max-pending-partition-count")
-          .intType()
-          .defaultValue(100)
-          .withDescription("Filters will not be used beyond that number of partitions.");
-
-  public static final ConfigOption<Duration> BLOCKER_TIMEOUT =
-      ConfigOptions.key("blocker.timeout")
-          .durationType()
-          .defaultValue(Duration.ofMinutes(1))
-          .withDescription("Session timeout. Default unit is milliseconds if not specified.");
-
-  public static final ConfigOption<Boolean> HA_ENABLE =
-      ConfigOptions.key("ha.enabled")
-          .booleanType()
-          .defaultValue(false)
-          .withDescription("Whether to enable high availability mode.");
-
-  public static final ConfigOption<String> HA_TYPE =
-      ConfigOptions.key("ha.type")
-          .stringType()
-          .defaultValue(FusionManagementConf.HA_TYPE_ZK)
-          .withDescription("High availability implementation type: zk or database.");
-
-  public static final ConfigOption<String> HA_CLUSTER_NAME =
-      ConfigOptions.key("ha.cluster-name")
-          .stringType()
-          .defaultValue("default")
-          .withDescription("Amoro management service cluster name.");
-
-  public static final ConfigOption<java.time.Duration> HA_HEARTBEAT_INTERVAL =
-      ConfigOptions.key("ha.heartbeat-interval")
-          .durationType()
-          .defaultValue(java.time.Duration.ofSeconds(10))
-          .withDescription("HA heartbeat interval.");
-
-  public static final ConfigOption<String> HA_ZOOKEEPER_ADDRESS =
-      ConfigOptions.key("ha.zookeeper-address")
-          .stringType()
-          .defaultValue("")
-          .withDescription("The Zookeeper address used for high availability.");
-
-  public static final ConfigOption<String> HA_ZOOKEEPER_AUTH_TYPE =
-      ConfigOptions.key("ha.zookeeper-auth-type")
-          .stringType()
-          .defaultValue("NONE")
-          .withDescription("The Zookeeper authentication type, NONE or KERBEROS.");
-
-  public static final ConfigOption<String> HA_ZOOKEEPER_AUTH_KEYTAB =
-      ConfigOptions.key("ha.zookeeper-auth-keytab")
-          .stringType()
-          .defaultValue("")
-          .withDescription(
-              "The Zookeeper authentication keytab file path when auth type is KERBEROS.");
-
-  public static final ConfigOption<String> HA_ZOOKEEPER_AUTH_PRINCIPAL =
-      ConfigOptions.key("ha.zookeeper-auth-principal")
-          .stringType()
-          .defaultValue("")
-          .withDescription("The Zookeeper authentication principal when auth type is KERBEROS.");
-
-  public static final ConfigOption<Duration> HA_ZOOKEEPER_SESSION_TIMEOUT =
-      ConfigOptions.key("ha.session-timeout")
-          .durationType()
-          .defaultValue(Duration.ofSeconds(30))
-          .withDescription("The Zookeeper session timeout in milliseconds.");
-
-  public static final ConfigOption<Duration> HA_ZOOKEEPER_CONNECTION_TIMEOUT =
-      ConfigOptions.key("ha.connection-timeout")
-          .durationType()
-          .defaultValue(Duration.ofSeconds(300))
-          .withDescription("The Zookeeper connection timeout in milliseconds.");
-
-  public static final ConfigOption<java.time.Duration> HA_LEASE_TTL =
-      ConfigOptions.key("ha.lease-ttl")
-          .durationType()
-          .defaultValue(java.time.Duration.ofSeconds(30))
-          .withDescription("TTL of HA lease.");
-
-  public static final ConfigOption<Integer> TABLE_SERVICE_THRIFT_BIND_PORT =
-      ConfigOptions.key("thrift-server.table-service.bind-port")
-          .intType()
-          .defaultValue(1260)
-          .withDescription("Port that the table service thrift server is bound to.");
 
   public static final ConfigOption<Integer> OPTIMIZING_SERVICE_THRIFT_BIND_PORT =
       ConfigOptions.key("thrift-server.optimizing-service.bind-port")
@@ -315,12 +188,6 @@ public class FusionManagementConf {
           .defaultValue(MemorySize.ofMebiBytes(100))
           .withDescription(
               "Maximum message size that the Thrift server can accept. Default unit is bytes if not specified.");
-
-  public static final ConfigOption<Integer> THRIFT_WORKER_THREADS =
-      ConfigOptions.key("thrift-server.table-service.worker-thread-count")
-          .intType()
-          .defaultValue(20)
-          .withDescription("The number of worker threads for the Thrift server.");
 
   public static final ConfigOption<Integer> THRIFT_SELECTOR_THREADS =
       ConfigOptions.key("thrift-server.selector-thread-count")
@@ -340,67 +207,20 @@ public class FusionManagementConf {
           .defaultValue(19090)
           .withDescription("Port that the Http server is bound to.");
 
+  public static final String HTTP_SERVER_REST_AUTH_TYPE_TOKEN = "token";
+
   public static final ConfigOption<String> HTTP_SERVER_REST_AUTH_TYPE =
       ConfigOptions.key("http-server.rest-auth-type")
           .stringType()
-          .defaultValue("token")
-          .withDescription("The authentication used by REST APIs, token (default), basic or jwt.");
+          .defaultValue(HTTP_SERVER_REST_AUTH_TYPE_TOKEN)
+          .withDescription(
+              "The authentication used by REST APIs. Only token (API-token signatures) is supported.");
 
   public static final ConfigOption<Duration> HTTP_SERVER_SESSION_TIMEOUT =
       ConfigOptions.key("http-server.session-timeout")
           .durationType()
           .defaultValue(Duration.ofDays(7))
           .withDescription("Timeout for http session.");
-
-  public static final ConfigOption<String> HTTP_SERVER_AUTH_BASIC_PROVIDER =
-      ConfigOptions.key("http-server.auth-basic-provider")
-          .stringType()
-          .defaultValue(DefaultPasswdAuthenticationProvider.class.getName())
-          .withDescription(
-              "User-defined password authentication implementation of"
-                  + " io.olake.fusion.authentication.PasswdAuthenticationProvider");
-
-  public static final ConfigOption<String> HTTP_SERVER_LOGIN_AUTH_PROVIDER =
-      ConfigOptions.key("http-server.login-auth-provider")
-          .stringType()
-          .defaultValue(DefaultPasswdAuthenticationProvider.class.getName())
-          .withDescription(
-              "User-defined login authentication implementation of"
-                  + " io.olake.fusion.authentication.PasswdAuthenticationProvider");
-
-  public static final ConfigOption<String> HTTP_SERVER_LOGIN_AUTH_LDAP_USER_PATTERN =
-      ConfigOptions.key("http-server.login-auth-ldap-user-pattern")
-          .stringType()
-          .noDefaultValue()
-          .withDescription(
-              "LDAP user pattern for authentication. The pattern defines how to construct the user's distinguished name (DN) in the LDAP directory. "
-                  + "Use {0} as a placeholder for the username. For example, 'cn={0},ou=people,dc=example,dc=com' will search for users in the specified organizational unit.");
-
-  public static final ConfigOption<String> HTTP_SERVER_LOGIN_AUTH_LDAP_URL =
-      ConfigOptions.key("http-server.login-auth-ldap-url")
-          .stringType()
-          .noDefaultValue()
-          .withDescription(
-              "LDAP connection URL(s), value could be a SPACE separated list of URLs to multiple LDAP servers for resiliency. URLs are tried in the order specified until the connection is successful");
-
-  public static final ConfigOption<String> HTTP_SERVER_AUTH_JWT_PROVIDER =
-      ConfigOptions.key("http-server.auth-jwt-provider")
-          .stringType()
-          .noDefaultValue()
-          .withDescription(
-              "User-defined JWT (JSON Web Token) authentication implementation"
-                  + " of io.olake.fusion.authentication.TokenAuthenticationProvider");
-
-  public static final ConfigOption<String> HTTP_SERVER_PROXY_CLIENT_IP_HEADER =
-      ConfigOptions.key("http-server.proxy-client-ip-header")
-          .stringType()
-          .defaultValue("X-Real-IP")
-          .withDescription(
-              "The HTTP header to record the real client IP address. If your server is behind a load"
-                  + " balancer or other proxy, the server will see this load balancer or proxy IP address as"
-                  + " the client IP address, to get around this common issue, most load balancers or proxies"
-                  + " offer the ability to record the real remote IP address in an HTTP header that will be"
-                  + " added to the request for other devices to use.");
 
   public static final ConfigOption<Integer> OPTIMIZING_COMMIT_THREAD_COUNT =
       ConfigOptions.key("self-optimizing.commit-thread-count")
@@ -537,19 +357,14 @@ public class FusionManagementConf {
   /** config key prefix of terminal */
   public static final String TERMINAL_PREFIX = "terminal.";
 
+  /** The only terminal backend: a local Spark session in the server. */
+  public static final String TERMINAL_BACKEND_LOCAL = "local";
+
   public static final ConfigOption<String> TERMINAL_BACKEND =
       ConfigOptions.key("terminal.backend")
           .stringType()
-          .defaultValue("local")
-          .withDescription(
-              "Terminal backend implementation. local, kyuubi and custom are valid values.");
-
-  public static final ConfigOption<String> TERMINAL_SESSION_FACTORY =
-      ConfigOptions.key("terminal.factory")
-          .stringType()
-          .noDefaultValue()
-          .withDescription(
-              "Session factory implement of terminal, `terminal.backend` must be `custom` if this is set.");
+          .defaultValue(TERMINAL_BACKEND_LOCAL)
+          .withDescription("Terminal backend implementation. Only local is supported.");
 
   public static final ConfigOption<Integer> TERMINAL_RESULT_LIMIT =
       ConfigOptions.key("terminal.result.limit")
@@ -578,29 +393,7 @@ public class FusionManagementConf {
           .withDescription(
               "Comma-separated list of sensitive conf keys used to desensitize related value.");
 
-  /** configs of data expiration */
-  public static final ConfigOption<Boolean> DATA_EXPIRATION_ENABLED =
-      ConfigOptions.key("data-expiration.enabled")
-          .booleanType()
-          .defaultValue(true)
-          .withDescription("Enable data expiration");
-
-  public static final ConfigOption<Integer> DATA_EXPIRATION_THREAD_COUNT =
-      ConfigOptions.key("data-expiration.thread-count")
-          .intType()
-          .defaultValue(10)
-          .withDescription("The number of threads used for data expiring");
-  public static final ConfigOption<Duration> DATA_EXPIRATION_INTERVAL =
-      ConfigOptions.key("data-expiration.interval")
-          .durationType()
-          .defaultValue(Duration.ofDays(1))
-          .withDescription("Execute interval for data expiration");
-
   public static final String SYSTEM_CONFIG = "ams";
-
-  public static final String CATALOG_CORE_SITE = "core-site";
-  public static final String CATALOG_HDFS_SITE = "hdfs-site";
-  public static final String CATALOG_HIVE_SITE = "hive-site";
 
   // container config
   public static final String CONTAINER_LIST = "containers";
@@ -608,20 +401,9 @@ public class FusionManagementConf {
   public static final String CONTAINER_IMPL = "container-impl";
   public static final String CONTAINER_PROPERTIES = "properties";
 
-  public static final String DB_TYPE_DERBY = "derby";
-  public static final String DB_TYPE_MYSQL = "mysql";
+  /** The only supported {@link #DB_TYPE}. */
   public static final String DB_TYPE_POSTGRES = "postgres";
-
-  // HA config
-  public static final String HA_TYPE_ZK = "zk";
-  public static final String HA_TYPE_DATABASE = "database";
-
-  // terminal config
-  public static final List<String> TERMINAL_BACKEND_VALUES =
-      Arrays.asList("local", "kyuubi", "custom");
 
   // plugin config
   public static final String METRIC_REPORTERS = "metric-reports";
-
-  public static final String EVENT_LISTENERS = "event-listeners";
 }

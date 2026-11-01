@@ -20,7 +20,6 @@
 
 package io.olake.fusion.server.dashboard;
 
-import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 
 import io.olake.fusion.FusionTable;
@@ -29,14 +28,14 @@ import io.olake.fusion.TableFormat;
 import io.olake.fusion.formats.FusionCatalogTestHelper;
 import io.olake.fusion.formats.IcebergHadoopCatalogTestHelper;
 import io.olake.fusion.formats.IcebergHiveCatalogTestHelper;
-import io.olake.fusion.formats.iceberg.IcebergTable;
+import io.olake.fusion.io.AuthenticatedFileIO;
 import io.olake.fusion.optimizing.MetricsSummary;
 import io.olake.fusion.optimizing.OptimizingType;
 import io.olake.fusion.process.ProcessStatus;
+import io.olake.fusion.server.persistence.PostgresPersistence;
 import io.olake.fusion.server.persistence.mapper.OptimizingProcessMapper;
 import io.olake.fusion.server.persistence.mapper.TableMetaMapper;
 import io.olake.fusion.server.persistence.mapper.TableProcessMapper;
-import io.olake.fusion.server.table.DerbyPersistence;
 import io.olake.fusion.table.TableIdentifier;
 import io.olake.fusion.table.descriptor.FormatTableDescriptor;
 import io.olake.fusion.table.descriptor.OptimizingProcessInfo;
@@ -57,7 +56,7 @@ import java.util.Map;
 
 @RunWith(Parameterized.class)
 public class TestIcebergServerTableDescriptor extends TestServerTableDescriptor {
-  @Rule public DerbyPersistence derbyPersistence = new DerbyPersistence();
+  @Rule public PostgresPersistence postgresPersistence = new PostgresPersistence();
 
   public TestIcebergServerTableDescriptor(FusionCatalogTestHelper<?> amoroCatalogTestHelper) {
     super(amoroCatalogTestHelper);
@@ -96,7 +95,7 @@ public class TestIcebergServerTableDescriptor extends TestServerTableDescriptor 
     icebergTable.newAppend().appendFile(file1).commit();
 
     // Get partitions using descriptor
-    MixedAndIcebergTableDescriptor descriptor = new MixedAndIcebergTableDescriptor();
+    IcebergTableDescriptor descriptor = new IcebergTableDescriptor();
     List<io.olake.fusion.table.descriptor.PartitionBaseInfo> partitions =
         descriptor.getTablePartitions(getAmoroCatalog().loadTable(TEST_DB, TEST_TABLE));
 
@@ -142,7 +141,7 @@ public class TestIcebergServerTableDescriptor extends TestServerTableDescriptor 
     icebergTable.newAppend().appendFile(file1).commit();
 
     // Use the fallback method directly
-    TestMixedAndIcebergTableDescriptor testDescriptor = new TestMixedAndIcebergTableDescriptor();
+    TestIcebergTableDescriptor testDescriptor = new TestIcebergTableDescriptor();
     List<io.olake.fusion.table.descriptor.PartitionBaseInfo> partitions =
         testDescriptor.testCollectPartitionsFromFileScan(icebergTable);
 
@@ -161,7 +160,7 @@ public class TestIcebergServerTableDescriptor extends TestServerTableDescriptor 
 
   @Test
   public void testOptimizingProcess() {
-    TestMixedAndIcebergTableDescriptor descriptor = new TestMixedAndIcebergTableDescriptor();
+    TestIcebergTableDescriptor descriptor = new TestIcebergTableDescriptor();
 
     String catalogName = "catalog1";
     String dbName = "db1";
@@ -296,11 +295,15 @@ public class TestIcebergServerTableDescriptor extends TestServerTableDescriptor 
         Collections.emptyMap(),
         Collections.emptyMap());
 
-    FusionTable<?> table = mock(IcebergTable.class);
     TableIdentifier tableIdentifier =
         TableIdentifier.of(
             identifier.getCatalog(), identifier.getDatabase(), identifier.getTableName());
-    doReturn(tableIdentifier).when(table).id();
+    FusionTable table =
+        new FusionTable(
+            tableIdentifier,
+            mock(org.apache.iceberg.Table.class),
+            mock(AuthenticatedFileIO.class),
+            null);
 
     Pair<List<OptimizingProcessInfo>, Integer> res =
         descriptor.getOptimizingProcessesInfo(table, null, null, 4, 4);
@@ -364,15 +367,15 @@ public class TestIcebergServerTableDescriptor extends TestServerTableDescriptor 
 
   @Override
   protected FormatTableDescriptor getTableDescriptor() {
-    return new MixedAndIcebergTableDescriptor();
+    return new IcebergTableDescriptor();
   }
 
   private Table getTable() {
-    return (Table) getAmoroCatalog().loadTable(TEST_DB, TEST_TABLE).originalTable();
+    return getAmoroCatalog().loadTable(TEST_DB, TEST_TABLE).table();
   }
 
   /** Test descriptor class, add insert table/optimizing process methods for test. */
-  private static class TestMixedAndIcebergTableDescriptor extends MixedAndIcebergTableDescriptor {
+  private static class TestIcebergTableDescriptor extends IcebergTableDescriptor {
 
     public List<io.olake.fusion.table.descriptor.PartitionBaseInfo>
         testCollectPartitionsFromFileScan(Table table) {

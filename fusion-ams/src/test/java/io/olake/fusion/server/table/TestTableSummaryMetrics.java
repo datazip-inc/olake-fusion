@@ -42,7 +42,7 @@ import io.olake.fusion.TableFormat;
 import io.olake.fusion.TableTestHelper;
 import io.olake.fusion.catalog.BasicCatalogTestHelper;
 import io.olake.fusion.catalog.CatalogTestHelper;
-import io.olake.fusion.io.MixedDataTestHelpers;
+import io.olake.fusion.io.DataTestHelpers;
 import io.olake.fusion.metrics.Gauge;
 import io.olake.fusion.metrics.Metric;
 import io.olake.fusion.metrics.MetricDefine;
@@ -51,13 +51,12 @@ import io.olake.fusion.server.manager.MetricManager;
 import io.olake.fusion.server.optimizing.OptimizingTestHelpers;
 import io.olake.fusion.server.scheduler.inline.TableHealthScoreExecutor;
 import io.olake.fusion.server.scheduler.inline.TableRuntimeRefreshExecutor;
-import io.olake.fusion.table.MixedTable;
-import io.olake.fusion.table.UnkeyedTable;
 import org.apache.amoro.shade.guava32.com.google.common.collect.ImmutableMap;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Lists;
 import org.apache.iceberg.AppendFiles;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
+import org.apache.iceberg.Table;
 import org.apache.iceberg.data.Record;
 import org.junit.After;
 import org.junit.Before;
@@ -103,42 +102,37 @@ public class TestTableSummaryMetrics extends AMSTableTestBase {
   }
 
   private void initTableWithFiles() {
-    UnkeyedTable table =
-        ((MixedTable) tableService().loadTable(serverTableIdentifier()).originalTable())
-            .asUnkeyedTable();
+    Table table = tableService().loadTable(serverTableIdentifier()).table();
     appendData(table);
     appendPosDelete(table);
     DefaultTableRuntime runtime = getDefaultTableRuntime(serverTableIdentifier().getId());
     runtime.refresh(tableService().loadTable(serverTableIdentifier()));
   }
 
-  private void appendData(UnkeyedTable table) {
+  private void appendData(Table table) {
     ArrayList<Record> newRc =
         Lists.newArrayList(
             tableTestHelper().generateTestRecord(1, "111", 0, "2022-01-01T12:00:00"),
             tableTestHelper().generateTestRecord(2, "222", 0, "2022-01-01T12:00:00"));
     List<DataFile> dataFiles =
-        OptimizingTestHelpers.appendBase(
-            table, tableTestHelper().writeBaseStore(table, 0L, newRc, false));
+        OptimizingTestHelpers.appendBase(table, tableTestHelper().writeDataFiles(table, newRc));
 
     AppendFiles appendFiles = table.newAppend();
     dataFiles.forEach(appendFiles::appendFile);
     appendFiles.commit();
   }
 
-  private void appendPosDelete(UnkeyedTable table) {
+  private void appendPosDelete(Table table) {
     ArrayList<Record> newRc =
         Lists.newArrayList(
             tableTestHelper().generateTestRecord(3, "333", 0, "2022-01-01T12:00:00"),
             tableTestHelper().generateTestRecord(4, "444", 0, "2022-01-01T12:00:00"));
     List<DataFile> dataFiles =
-        OptimizingTestHelpers.appendBase(
-            table, tableTestHelper().writeBaseStore(table, 0L, newRc, false));
+        OptimizingTestHelpers.appendBase(table, tableTestHelper().writeDataFiles(table, newRc));
     List<DeleteFile> posDeleteFiles = Lists.newArrayList();
     for (DataFile dataFile : dataFiles) {
       posDeleteFiles.addAll(
-          MixedDataTestHelpers.writeBaseStorePosDelete(
-              table, 0L, dataFile, Collections.singletonList(0L)));
+          DataTestHelpers.writePosDeletes(table, dataFile, Collections.singletonList(0L)));
     }
     OptimizingTestHelpers.appendBasePosDelete(table, posDeleteFiles);
   }

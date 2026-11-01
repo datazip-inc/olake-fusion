@@ -24,7 +24,7 @@ import io.olake.fusion.BasicTableTestHelper;
 import io.olake.fusion.TableFormat;
 import io.olake.fusion.catalog.BasicCatalogTestHelper;
 import io.olake.fusion.catalog.TableTestBase;
-import io.olake.fusion.io.MixedDataTestHelpers;
+import io.olake.fusion.io.DataTestHelpers;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Iterables;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Lists;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Maps;
@@ -113,24 +113,22 @@ public class IcebergRewriteExecutorTest extends TableTestBase {
   public void initDataAndReader() throws IOException {
     StructLike partitionData = getPartitionData();
     OutputFileFactory outputFileFactory =
-        OutputFileFactory.builderFor(getMixedTable().asUnkeyedTable(), 0, 1)
-            .format(fileFormat)
-            .build();
+        OutputFileFactory.builderFor(getTable(), 0, 1).format(fileFormat).build();
     DataFile dataFile =
         FileHelpers.writeDataFile(
-            getMixedTable().asUnkeyedTable(),
+            getTable(),
             outputFileFactory.newOutputFile(partitionData).encryptingOutputFile(),
             partitionData,
             Arrays.asList(
-                MixedDataTestHelpers.createRecord(1, "john", 0, "1970-01-01T08:00:00"),
-                MixedDataTestHelpers.createRecord(2, "lily", 1, "1970-01-01T08:00:00"),
-                MixedDataTestHelpers.createRecord(3, "sam", 2, "1970-01-01T08:00:00")));
+                DataTestHelpers.createRecord(1, "john", 0, "1970-01-01T08:00:00"),
+                DataTestHelpers.createRecord(2, "lily", 1, "1970-01-01T08:00:00"),
+                DataTestHelpers.createRecord(3, "sam", 2, "1970-01-01T08:00:00")));
 
     Schema idSchema = TypeUtil.select(BasicTableTestHelper.TABLE_SCHEMA, Sets.newHashSet(1));
     GenericRecord idRecord = GenericRecord.create(idSchema);
     DeleteFile eqDeleteFile =
         FileHelpers.writeDeleteFile(
-            getMixedTable().asUnkeyedTable(),
+            getTable(),
             outputFileFactory.newOutputFile(partitionData).encryptingOutputFile(),
             partitionData,
             Collections.singletonList(idRecord.copy("id", 1)),
@@ -140,7 +138,7 @@ public class IcebergRewriteExecutorTest extends TableTestBase {
     deletes.add(Pair.of(dataFile.path(), 1L));
     DeleteFile posDeleteFile =
         FileHelpers.writeDeleteFile(
-                getMixedTable().asUnkeyedTable(),
+                getTable(),
                 outputFileFactory.newOutputFile(partitionData).encryptingOutputFile(),
                 partitionData,
                 deletes)
@@ -148,28 +146,29 @@ public class IcebergRewriteExecutorTest extends TableTestBase {
 
     scanTask =
         new RewriteFilesInput(
-            new DataFile[] {MixedDataTestHelpers.wrapIcebergDataFile(dataFile, 1L)},
-            new DataFile[] {MixedDataTestHelpers.wrapIcebergDataFile(dataFile, 1L)},
+            new DataFile[] {DataTestHelpers.wrapIcebergDataFile(dataFile, 1L)},
+            new DataFile[] {DataTestHelpers.wrapIcebergDataFile(dataFile, 1L)},
             new DeleteFile[] {
-              MixedDataTestHelpers.wrapIcebergDeleteFile(eqDeleteFile, 2L),
-              MixedDataTestHelpers.wrapIcebergDeleteFile(posDeleteFile, 3L)
+              DataTestHelpers.wrapIcebergDeleteFile(eqDeleteFile, 2L),
+              DataTestHelpers.wrapIcebergDeleteFile(posDeleteFile, 3L)
             },
             new DeleteFile[] {},
-            getMixedTable());
+            getTable(),
+            null);
 
     dataScanTask =
         new RewriteFilesInput(
-            new DataFile[] {MixedDataTestHelpers.wrapIcebergDataFile(dataFile, 1L)},
-            new DataFile[] {MixedDataTestHelpers.wrapIcebergDataFile(dataFile, 1L)},
+            new DataFile[] {DataTestHelpers.wrapIcebergDataFile(dataFile, 1L)},
+            new DataFile[] {DataTestHelpers.wrapIcebergDataFile(dataFile, 1L)},
             new DeleteFile[] {},
             new DeleteFile[] {},
-            getMixedTable());
+            getTable(),
+            null);
   }
 
   @Test
   public void readAllData() throws IOException {
-    IcebergRewriteExecutor executor =
-        new IcebergRewriteExecutor(scanTask, getMixedTable(), Collections.emptyMap());
+    IcebergRewriteExecutor executor = new IcebergRewriteExecutor(scanTask, Collections.emptyMap());
 
     RewriteFilesOutput output = executor.execute();
 
@@ -177,7 +176,7 @@ public class IcebergRewriteExecutorTest extends TableTestBase {
         openFile(
             output.getDataFiles()[0].path().toString(),
             output.getDataFiles()[0].format(),
-            getMixedTable().schema(),
+            getTable().schema(),
             new HashMap<>())) {
       Assert.assertEquals(1, Iterables.size(records));
       Record record = Iterables.getFirst(records, null);
@@ -200,9 +199,8 @@ public class IcebergRewriteExecutorTest extends TableTestBase {
 
   @Test
   public void readAllDataWithPartitionEvolution() throws IOException {
-    Assume.assumeTrue(getMixedTable().spec().isPartitioned());
-    getMixedTable()
-        .asUnkeyedTable()
+    Assume.assumeTrue(getTable().spec().isPartitioned());
+    getTable()
         .updateSpec()
         .removeField("op_time_day")
         .addField(Expressions.month("op_time"))
@@ -213,7 +211,7 @@ public class IcebergRewriteExecutorTest extends TableTestBase {
   @Test
   public void readOnlyData() throws IOException {
     IcebergRewriteExecutor executor =
-        new IcebergRewriteExecutor(dataScanTask, getMixedTable(), Collections.emptyMap());
+        new IcebergRewriteExecutor(dataScanTask, Collections.emptyMap());
 
     RewriteFilesOutput output = executor.execute();
 
@@ -221,7 +219,7 @@ public class IcebergRewriteExecutorTest extends TableTestBase {
         openFile(
             output.getDataFiles()[0].path().toString(),
             output.getDataFiles()[0].format(),
-            getMixedTable().schema(),
+            getTable().schema(),
             new HashMap<>())) {
       Assert.assertEquals(3, Iterables.size(records));
     }
@@ -231,7 +229,7 @@ public class IcebergRewriteExecutorTest extends TableTestBase {
 
   private CloseableIterable<Record> openFile(
       String path, FileFormat fileFormat, Schema fileProjection, Map<Integer, ?> idToConstant) {
-    InputFile input = getMixedTable().io().newInputFile(path);
+    InputFile input = getFusionTable().io().newInputFile(path);
 
     switch (fileFormat) {
       case AVRO:

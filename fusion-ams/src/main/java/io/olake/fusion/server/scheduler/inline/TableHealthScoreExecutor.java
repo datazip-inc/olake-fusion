@@ -20,6 +20,7 @@
 
 package io.olake.fusion.server.scheduler.inline;
 
+import io.olake.fusion.FusionTable;
 import io.olake.fusion.TableFormat;
 import io.olake.fusion.TableRuntime;
 import io.olake.fusion.iceberg.Constants;
@@ -29,7 +30,6 @@ import io.olake.fusion.server.table.DefaultTableRuntime;
 import io.olake.fusion.server.table.TableService;
 import io.olake.fusion.server.utils.IcebergTableUtil;
 import io.olake.fusion.table.BasicTableSnapshot;
-import io.olake.fusion.table.MixedTable;
 
 /**
  * Calculates the health score of Iceberg tables on its own schedule and threads. A failure here
@@ -77,8 +77,8 @@ public class TableHealthScoreExecutor extends PeriodicTableScheduler {
       }
 
       // loaded fresh, so a snapshot committed since the table's last refresh is scored too
-      MixedTable table = (MixedTable) loadTable(tableRuntime).originalTable();
-      long snapshotId = IcebergTableUtil.getSnapshotId(table.asUnkeyedTable(), false);
+      FusionTable table = loadTable(tableRuntime);
+      long snapshotId = IcebergTableUtil.getSnapshotId(table.table(), false);
       // nothing to score without a snapshot, nor when this snapshot is scored already
       if (snapshotId == Constants.INVALID_SNAPSHOT_ID
           || snapshotId == runtime.getHealthScoreSnapshotId()) {

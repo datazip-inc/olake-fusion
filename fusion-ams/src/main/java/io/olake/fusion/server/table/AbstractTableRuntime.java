@@ -21,14 +21,12 @@
 package io.olake.fusion.server.table;
 
 import io.olake.fusion.ServerTableIdentifier;
-import io.olake.fusion.SupportsProcessPlugins;
 import io.olake.fusion.TableRuntime;
 import io.olake.fusion.config.TableConfiguration;
 import io.olake.fusion.server.persistence.PersistentBase;
 import io.olake.fusion.table.TableRuntimeStore;
 
-public abstract class AbstractTableRuntime extends PersistentBase
-    implements TableRuntime, SupportsProcessPlugins {
+public abstract class AbstractTableRuntime extends PersistentBase implements TableRuntime {
 
   private final TableRuntimeStore store;
 

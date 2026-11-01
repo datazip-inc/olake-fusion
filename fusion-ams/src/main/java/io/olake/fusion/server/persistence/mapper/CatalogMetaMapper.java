@@ -90,11 +90,7 @@ public interface CatalogMetaMapper {
           + " typeHandler=io.olake.fusion.server.persistence.converter.Map2StringConverter})")
   void insertCatalog(@Param("catalogMeta") CatalogMeta catalogMeta);
 
-  @Delete(
-      "DELETE FROM "
-          + TABLE_NAME
-          + " WHERE catalog_name = #{catalogName} AND database_count = 0"
-          + " AND table_count = 0")
+  @Delete("DELETE FROM " + TABLE_NAME + " WHERE catalog_name = #{catalogName}")
   int deleteCatalog(@Param("catalogName") String catalogName);
 
   @Update(
@@ -110,42 +106,6 @@ public interface CatalogMetaMapper {
           + " WHERE catalog_name = #{catalogMeta.catalogName}")
   Integer updateCatalog(@Param("catalogMeta") CatalogMeta catalogMeta);
 
-  @Select("SELECT table_count FROM " + TABLE_NAME + " WHERE catalog_name = #{catalogName}")
-  Integer selectTableCount(@Param("catalogName") String catalogName);
-
-  @Select("SELECT database_count FROM " + TABLE_NAME + " WHERE catalog_name = #{catalogName}")
-  Integer selectDatabaseCount(@Param("catalogName") String catalogName);
-
   @Select("SELECT COUNT(*) FROM " + TABLE_NAME)
   Integer selectCatalogCount();
-
-  @Update(
-      "UPDATE "
-          + TABLE_NAME
-          + " SET table_count = table_count + #{tableCount} WHERE catalog_name = #{catalogName}")
-  Integer incTableCount(
-      @Param("tableCount") Integer tableCount, @Param("catalogName") String catalogName);
-
-  @Update(
-      "UPDATE "
-          + TABLE_NAME
-          + " SET database_count = database_count + #{databaseCount}"
-          + " WHERE catalog_name = #{catalogName}")
-  Integer incDatabaseCount(
-      @Param("databaseCount") Integer databaseCount, @Param("catalogName") String catalogName);
-
-  @Update(
-      "UPDATE "
-          + TABLE_NAME
-          + " SET table_count = table_count - #{tableCount} WHERE catalog_name = #{catalogName}")
-  Integer decTableCount(
-      @Param("tableCount") Integer tableCount, @Param("catalogName") String catalogName);
-
-  @Update(
-      "UPDATE "
-          + TABLE_NAME
-          + " SET database_count = database_count - #{databaseCount}"
-          + " WHERE catalog_name = #{catalogName}")
-  Integer decDatabaseCount(
-      @Param("databaseCount") Integer databaseCount, @Param("catalogName") String catalogName);
 }

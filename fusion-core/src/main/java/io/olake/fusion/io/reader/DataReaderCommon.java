@@ -20,21 +20,15 @@
 
 package io.olake.fusion.io.reader;
 
-import io.olake.fusion.data.ChangeAction;
-import io.olake.fusion.data.DataFileType;
-import io.olake.fusion.scan.MixedFileScanTask;
 import io.olake.fusion.table.MetadataColumns;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Maps;
 import org.apache.iceberg.DataFile;
-import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.types.Type;
-import org.apache.iceberg.types.TypeUtil;
 import org.apache.iceberg.types.Types;
-import org.apache.iceberg.util.PartitionUtil;
 
 import java.util.HashMap;
 import java.util.List;
@@ -42,45 +36,6 @@ import java.util.Map;
 import java.util.function.BiFunction;
 
 public class DataReaderCommon {
-
-  public static Map<Integer, ?> getIdToConstant(
-      FileScanTask task, Schema projectedSchema, BiFunction<Type, Object, Object> convertConstant) {
-    Schema partitionSchema = TypeUtil.select(projectedSchema, task.spec().identitySourceIds());
-    Map<Integer, Object> idToConstant = new HashMap<>();
-    if (!partitionSchema.columns().isEmpty()) {
-      idToConstant.putAll(PartitionUtil.constantsMap(task, convertConstant));
-    }
-    idToConstant.put(
-        org.apache.iceberg.MetadataColumns.FILE_PATH.fieldId(),
-        convertConstant.apply(Types.StringType.get(), task.file().path().toString()));
-
-    if (task instanceof MixedFileScanTask) {
-      MixedFileScanTask mixedFileScanTask = (MixedFileScanTask) task;
-      idToConstant.put(
-          MetadataColumns.TRANSACTION_ID_FILED_ID,
-          convertConstant.apply(Types.LongType.get(), mixedFileScanTask.file().transactionId()));
-
-      idToConstant.put(
-          MetadataColumns.TREE_NODE_ID,
-          convertConstant.apply(Types.LongType.get(), mixedFileScanTask.file().node().getId()));
-
-      if (mixedFileScanTask.fileType() == DataFileType.BASE_FILE) {
-        idToConstant.put(
-            MetadataColumns.FILE_OFFSET_FILED_ID,
-            convertConstant.apply(Types.LongType.get(), Long.MAX_VALUE));
-      }
-      if (mixedFileScanTask.fileType() == DataFileType.EQ_DELETE_FILE) {
-        idToConstant.put(
-            MetadataColumns.CHANGE_ACTION_ID,
-            convertConstant.apply(Types.StringType.get(), ChangeAction.DELETE.toString()));
-      } else if (mixedFileScanTask.fileType() == DataFileType.INSERT_FILE) {
-        idToConstant.put(
-            MetadataColumns.CHANGE_ACTION_ID,
-            convertConstant.apply(Types.StringType.get(), ChangeAction.INSERT.toString()));
-      }
-    }
-    return idToConstant;
-  }
 
   protected static Map<Integer, ?> getIdToConstant(
       DataFile dataFile,

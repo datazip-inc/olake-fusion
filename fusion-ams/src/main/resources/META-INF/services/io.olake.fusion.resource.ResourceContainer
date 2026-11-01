@@ -19,6 +19,4 @@
 #
 
 io.olake.fusion.server.manager.SparkOptimizerContainer
-io.olake.fusion.server.manager.FlinkOptimizerContainer
 io.olake.fusion.server.manager.LocalOptimizerContainer
-io.olake.fusion.server.manager.KubernetesOptimizerContainer

@@ -46,9 +46,7 @@ public class DefaultTableRuntimeFactory implements TableRuntimeFactory {
   @Override
   public Optional<TableRuntimeCreator> accept(
       ServerTableIdentifier tableIdentifier, Map<String, String> tableProperties) {
-    if (tableIdentifier
-        .getFormat()
-        .in(TableFormat.MIXED_ICEBERG, TableFormat.MIXED_HIVE, TableFormat.ICEBERG)) {
+    if (TableFormat.ICEBERG.equals(tableIdentifier.getFormat())) {
       return Optional.of(new TableRuntimeCreatorImpl());
     }
     return Optional.empty();

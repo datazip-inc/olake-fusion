@@ -25,8 +25,6 @@ import io.olake.fusion.TableFormat;
 import io.olake.fusion.catalog.BasicCatalogTestHelper;
 import io.olake.fusion.catalog.TableTestBase;
 import io.olake.fusion.io.IcebergDataTestHelpers;
-import io.olake.fusion.table.MixedTable;
-import io.olake.fusion.table.UnkeyedTable;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Lists;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Sets;
 import org.apache.iceberg.AppendFiles;
@@ -34,12 +32,12 @@ import org.apache.iceberg.DataFile;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.Table;
 import org.apache.iceberg.data.Record;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.types.Types;
 import org.junit.Assert;
-import org.junit.Assume;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -65,8 +63,8 @@ public class TestUnkeyedExpressionUtil extends TableTestBase {
           Types.NestedField.optional(4, "op_time", Types.TimestampType.withoutZone()));
 
   @Override
-  protected MixedTable getMixedTable() {
-    return super.getMixedTable();
+  protected Table getTable() {
+    return super.getTable();
   }
 
   @Parameterized.Parameters(name = "{0}, {1}")
@@ -85,8 +83,7 @@ public class TestUnkeyedExpressionUtil extends TableTestBase {
 
   @Test
   public void testUnkeyedConvertPartitionStructLikeToDataFilter() throws IOException {
-    Assume.assumeTrue(getMixedTable().isUnkeyedTable());
-    UnkeyedTable table = getMixedTable().asUnkeyedTable();
+    Table table = getTable();
     ArrayList<Record> records =
         Lists.newArrayList(
             // hash("111") = -210118348, hash("222") = -699778209
@@ -104,7 +101,7 @@ public class TestUnkeyedExpressionUtil extends TableTestBase {
     for (DataFile dataFile : dataFiles) {
       Expression partitionFilter =
           ExpressionUtil.convertPartitionDataToDataFilter(
-              getMixedTable(), dataFile.specId(), Sets.newHashSet(dataFile.partition()));
+              getTable(), dataFile.specId(), Sets.newHashSet(dataFile.partition()));
       assertPlanHalfWithPartitionFilter(partitionFilter);
     }
   }
@@ -112,8 +109,7 @@ public class TestUnkeyedExpressionUtil extends TableTestBase {
   private void assertPlanHalfWithPartitionFilter(Expression partitionFilter) {
     // plan all
     Set<DataFile> baseDataFiles = Sets.newHashSet();
-    try (CloseableIterable<FileScanTask> fileScanTasks =
-        getMixedTable().asUnkeyedTable().newScan().planFiles()) {
+    try (CloseableIterable<FileScanTask> fileScanTasks = getTable().newScan().planFiles()) {
       for (FileScanTask fileScanTask : fileScanTasks) {
         baseDataFiles.add(fileScanTask.file());
       }
@@ -129,7 +125,7 @@ public class TestUnkeyedExpressionUtil extends TableTestBase {
 
     // plan with partition filter
     try (CloseableIterable<FileScanTask> fileScanTasks =
-        getMixedTable().asUnkeyedTable().newScan().filter(partitionFilter).planFiles()) {
+        getTable().newScan().filter(partitionFilter).planFiles()) {
       for (FileScanTask fileScanTask : fileScanTasks) {
         baseDataFiles.add(fileScanTask.file());
       }

@@ -23,8 +23,6 @@ package io.olake.fusion.config;
 import org.apache.amoro.shade.guava32.com.google.common.base.Objects;
 import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
-import java.util.Optional;
-
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class TableConfiguration {
   private boolean expireSnapshotEnabled;
@@ -36,8 +34,6 @@ public class TableConfiguration {
   private long orphanExistingMinutes;
   private boolean deleteDanglingDeleteFilesEnabled;
   private OptimizingConfig optimizingConfig;
-  private DataExpirationConfig expiringDataConfig;
-  private TagConfiguration tagConfiguration;
 
   public TableConfiguration() {}
 
@@ -123,24 +119,6 @@ public class TableConfiguration {
     return this;
   }
 
-  public DataExpirationConfig getExpiringDataConfig() {
-    return Optional.ofNullable(expiringDataConfig).orElse(new DataExpirationConfig());
-  }
-
-  public TableConfiguration setExpiringDataConfig(DataExpirationConfig expiringDataConfig) {
-    this.expiringDataConfig = expiringDataConfig;
-    return this;
-  }
-
-  public TagConfiguration getTagConfiguration() {
-    return Optional.ofNullable(tagConfiguration).orElse(new TagConfiguration());
-  }
-
-  public TableConfiguration setTagConfiguration(TagConfiguration tagConfiguration) {
-    this.tagConfiguration = tagConfiguration;
-    return this;
-  }
-
   @Override
   public boolean equals(Object o) {
     if (this == o) {
@@ -158,9 +136,7 @@ public class TableConfiguration {
         && cleanOrphanEnabled == that.cleanOrphanEnabled
         && orphanExistingMinutes == that.orphanExistingMinutes
         && deleteDanglingDeleteFilesEnabled == that.deleteDanglingDeleteFilesEnabled
-        && Objects.equal(optimizingConfig, that.optimizingConfig)
-        && Objects.equal(expiringDataConfig, that.expiringDataConfig)
-        && Objects.equal(tagConfiguration, that.tagConfiguration);
+        && Objects.equal(optimizingConfig, that.optimizingConfig);
   }
 
   @Override
@@ -174,8 +150,6 @@ public class TableConfiguration {
         cleanOrphanEnabled,
         orphanExistingMinutes,
         deleteDanglingDeleteFilesEnabled,
-        optimizingConfig,
-        expiringDataConfig,
-        tagConfiguration);
+        optimizingConfig);
   }
 }

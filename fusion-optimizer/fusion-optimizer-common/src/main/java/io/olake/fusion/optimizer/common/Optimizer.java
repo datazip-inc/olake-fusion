@@ -54,6 +54,8 @@ public class Optimizer {
     }
     toucher.withRegisterProperty(
         OptimizerProperties.OPTIMIZER_TAG, OptimizerProperties.OPTIMIZER_TAG_VALUE);
+    toucher.withRegisterProperty(
+        OptimizerProperties.OPTIMIZER_TASK_FORMAT, OptimizerProperties.OPTIMIZER_TASK_FORMAT_VALUE);
   }
 
   public void startOptimizing() {

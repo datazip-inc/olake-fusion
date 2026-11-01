@@ -20,32 +20,19 @@
 
 package io.olake.fusion.client;
 
-import io.olake.fusion.Constants;
-import io.olake.fusion.properties.AmsHAProperties;
-import io.olake.fusion.utils.JacksonUtil;
 import org.apache.amoro.shade.guava32.com.google.common.base.MoreObjects;
-import org.apache.amoro.shade.zookeeper3.org.apache.zookeeper.KeeperException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import javax.security.auth.Subject;
-import javax.security.auth.login.LoginContext;
-import javax.security.auth.login.LoginException;
 
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Locale;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class AmsThriftUrl {
   public static final String PARAM_SOCKET_TIMEOUT = "socketTimeout";
   public static final int DEFAULT_SOCKET_TIMEOUT = 5000;
-  public static final String ZOOKEEPER_FLAG = "zookeeper";
   public static final String THRIFT_URL_FORMAT = "thrift://%s:%d/%s%s";
-  public static final int MAX_RETRIES = 3;
   private static final Logger logger = LoggerFactory.getLogger(AmsThriftUrl.class);
-  private static final Pattern PATTERN = Pattern.compile("zookeeper://(\\S+)/([\\w-]+)");
   private final String schema;
   private final String host;
   private final int port;
@@ -77,11 +64,7 @@ public class AmsThriftUrl {
     if (url == null) {
       throw new IllegalArgumentException("thrift url is null");
     }
-    if (url.startsWith(ZOOKEEPER_FLAG)) {
-      return parserZookeeperUrl(url, serviceName);
-    } else {
-      return parserThriftUrl(url);
-    }
+    return parserThriftUrl(url);
   }
 
   private static AmsThriftUrl parserThriftUrl(String url) {
@@ -109,103 +92,6 @@ public class AmsThriftUrl {
       return new AmsThriftUrl(schema, host, port, catalogName, socketTimeout, url);
     } catch (URISyntaxException e) {
       throw new IllegalArgumentException("parse metastore url failed", e);
-    }
-  }
-
-  private static AmsThriftUrl parserZookeeperUrl(String url, String serviceName) {
-    String thriftUrl = url;
-    String query = "";
-    if (url.contains("?")) {
-      query = url.substring(url.indexOf("?"));
-      thriftUrl = url.substring(0, url.indexOf("?"));
-    }
-    Matcher m = PATTERN.matcher(thriftUrl);
-    if (m.matches()) {
-      String zkServerAddress;
-      String cluster;
-      String catalog = "";
-      if (m.group(1).contains("/")) {
-        zkServerAddress = m.group(1).substring(0, m.group(1).indexOf("/"));
-        cluster = m.group(1).substring(m.group(1).indexOf("/") + 1);
-        catalog = m.group(2);
-      } else {
-        zkServerAddress = m.group(1);
-        cluster = m.group(2);
-      }
-      int retryCount = 0;
-      while (retryCount < MAX_RETRIES) {
-        try {
-          AmsServerInfo serverInfo = findAmsServerInfo(serviceName, zkServerAddress, cluster);
-          url =
-              String.format(
-                  THRIFT_URL_FORMAT,
-                  serverInfo.getHost(),
-                  serverInfo.getThriftBindPort(),
-                  catalog,
-                  query);
-          int socketTimeout = DEFAULT_SOCKET_TIMEOUT;
-          for (String paramExpression : query.replace("?", "").split("&")) {
-            String[] paramSplit = paramExpression.split("=");
-            if (paramSplit.length == 2) {
-              if (paramSplit[0].equalsIgnoreCase(PARAM_SOCKET_TIMEOUT)) {
-                socketTimeout = Integer.parseInt(paramSplit[1]);
-              }
-            }
-          }
-          return new AmsThriftUrl(
-              "thrift",
-              serverInfo.getHost(),
-              serverInfo.getThriftBindPort(),
-              catalog.toLowerCase(),
-              socketTimeout,
-              url);
-        } catch (KeeperException.AuthFailedException authFailedException) {
-          // If kerberos authentication is not enabled on the zk,
-          // an error occurs when the thread carrying kerberos authentication information accesses
-          // the zk.
-          // Therefore, clear the authentication information and try again
-          retryCount++;
-          logger.error(
-              String.format("Caught exception, retrying... (retry count: %s)", retryCount),
-              authFailedException);
-          try {
-            Subject subject = Subject.getSubject(java.security.AccessController.getContext());
-
-            if (subject != null) {
-              LoginContext loginContext = new LoginContext("", subject);
-              loginContext.logout();
-            }
-          } catch (LoginException e) {
-            logger.error("Failed to logout", e);
-          }
-        } catch (Exception e) {
-          retryCount++;
-          logger.error(
-              String.format("Caught exception, retrying... (retry count: %s)", retryCount), e);
-          throw new RuntimeException(String.format("invalid ams url %s", url));
-        }
-      }
-    } else {
-      throw new RuntimeException(String.format("invalid ams url %s", url));
-    }
-    return null;
-  }
-
-  private static AmsServerInfo findAmsServerInfo(
-      String serviceName, String zkServerAddress, String cluster) throws Exception {
-    switch (serviceName) {
-      case Constants.THRIFT_TABLE_SERVICE_NAME:
-        return JacksonUtil.parseObject(
-            ZookeeperService.getInstance(zkServerAddress)
-                .getData(AmsHAProperties.getTableServiceMasterPath(cluster)),
-            AmsServerInfo.class);
-      case Constants.THRIFT_OPTIMIZING_SERVICE_NAME:
-        return JacksonUtil.parseObject(
-            ZookeeperService.getInstance(zkServerAddress)
-                .getData(AmsHAProperties.getOptimizingServiceMasterPath(cluster)),
-            AmsServerInfo.class);
-      default:
-        throw new RuntimeException(String.format("invalid service name %s", serviceName));
     }
   }
 

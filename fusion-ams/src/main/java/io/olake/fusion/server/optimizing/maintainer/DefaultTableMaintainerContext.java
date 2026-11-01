@@ -26,10 +26,6 @@ import io.olake.fusion.maintainer.OptimizingInfo;
 import io.olake.fusion.maintainer.TableMaintainerContext;
 import io.olake.fusion.server.table.DefaultTableRuntime;
 import io.olake.fusion.server.table.TableOrphanFilesCleaningMetrics;
-import io.olake.fusion.table.MixedTable;
-
-import java.util.Collections;
-import java.util.Set;
 
 /**
  * Default implementation of TableMaintainerContext for AMS. Adapts DefaultTableRuntime to
@@ -38,16 +34,9 @@ import java.util.Set;
 public class DefaultTableMaintainerContext implements TableMaintainerContext {
 
   private final DefaultTableRuntime tableRuntime;
-  private final MixedTable mixedTable;
 
   public DefaultTableMaintainerContext(DefaultTableRuntime tableRuntime) {
     this.tableRuntime = tableRuntime;
-    this.mixedTable = null;
-  }
-
-  public DefaultTableMaintainerContext(DefaultTableRuntime tableRuntime, MixedTable mixedTable) {
-    this.tableRuntime = tableRuntime;
-    this.mixedTable = mixedTable;
   }
 
   @Override
@@ -74,12 +63,6 @@ public class DefaultTableMaintainerContext implements TableMaintainerContext {
   @Override
   public OptimizingInfo getOptimizingInfo() {
     return new DefaultOptimizingInfo(tableRuntime);
-  }
-
-  @Override
-  public Set<String> getHiveLocationPaths() {
-    // Iceberg tables have no Hive locations
-    return Collections.emptySet();
   }
 
   /** OptimizingInfo implementation based on DefaultTableRuntime. */

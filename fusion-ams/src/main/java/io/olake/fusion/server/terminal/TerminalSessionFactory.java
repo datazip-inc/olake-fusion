@@ -56,9 +56,6 @@ public interface TerminalSessionFactory {
     public static ConfigOption<List<String>> CATALOGS =
         ConfigOptions.key("session.catalogs").stringType().asList().noDefaultValue();
 
-    public static ConfigOption<String> CATALOG_URL_BASE =
-        ConfigOptions.key("catalog-url-base").stringType().noDefaultValue();
-
     public static ConfigOption<String> catalogConnector(String catalog) {
       return ConfigOptions.key("session.catalog." + catalog + ".connector")
           .stringType()

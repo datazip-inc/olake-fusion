@@ -20,10 +20,8 @@
 
 package io.olake.fusion.io.reader;
 
-import io.olake.fusion.io.AuthenticatedFileIO;
 import io.olake.fusion.optimizing.OptimizingDataReader;
 import io.olake.fusion.optimizing.RewriteFilesInput;
-import io.olake.fusion.scan.CombinedIcebergScanTask;
 import io.olake.fusion.utils.map.StructLikeCollections;
 import org.apache.amoro.shade.guava32.com.google.common.annotations.VisibleForTesting;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
@@ -43,6 +41,7 @@ import org.apache.iceberg.encryption.EncryptedFiles;
 import org.apache.iceberg.encryption.EncryptedInputFile;
 import org.apache.iceberg.encryption.EncryptionManager;
 import org.apache.iceberg.io.CloseableIterable;
+import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.io.InputFile;
 import org.apache.iceberg.parquet.Parquet;
 import org.apache.iceberg.types.Type;
@@ -57,16 +56,15 @@ import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
 /**
- * Read data by {@link CombinedIcebergScanTask} for optimizer of native iceberg. During the
- * execution of readData and readDeleteData, delete data is read only once, thereby improving
- * performance.
+ * Read data by {@link RewriteFilesInput} for optimizer of native iceberg. During the execution of
+ * readData and readDeleteData, delete data is read only once, thereby improving performance.
  */
 public class GenericCombinedIcebergDataReader implements OptimizingDataReader {
 
   protected final Schema tableSchema;
   protected final String nameMapping;
   protected final boolean caseSensitive;
-  protected final AuthenticatedFileIO fileIO;
+  protected final FileIO fileIO;
   protected final EncryptionManager encryptionManager;
   protected final BiFunction<Type, Object, Object> convertConstant;
   protected final boolean reuseContainer;
@@ -77,7 +75,7 @@ public class GenericCombinedIcebergDataReader implements OptimizingDataReader {
   protected RewriteFilesInput input;
 
   public GenericCombinedIcebergDataReader(
-      AuthenticatedFileIO fileIO,
+      FileIO fileIO,
       Schema tableSchema,
       PartitionSpec spec,
       EncryptionManager encryptionManager,
@@ -317,7 +315,7 @@ public class GenericCombinedIcebergDataReader implements OptimizingDataReader {
     }
 
     @Override
-    protected AuthenticatedFileIO getFileIO() {
+    protected FileIO getFileIO() {
       return fileIO;
     }
   }

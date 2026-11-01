@@ -30,7 +30,6 @@ import io.olake.fusion.io.reader.GenericCombinedIcebergDataReader;
 import io.olake.fusion.io.writer.RecordWithAction;
 import io.olake.fusion.optimizing.RewriteFilesInput;
 import io.olake.fusion.table.PrimaryKeySpec;
-import io.olake.fusion.table.UnkeyedTable;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Iterables;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Lists;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Maps;
@@ -42,6 +41,7 @@ import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.RowDelta;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.Table;
 import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.data.IdentityPartitionConverters;
 import org.apache.iceberg.data.RandomGenericData;
@@ -112,7 +112,7 @@ public class TestIcebergCombinedReaderVariousTypes extends TableTestBase {
 
   @Test
   public void valid() throws IOException {
-    UnkeyedTable table = getMixedTable().asUnkeyedTable();
+    Table table = getTable();
     Record record = RandomGenericData.generate(table.schema(), 1, 1).get(0);
 
     List<RecordWithAction> list = new ArrayList<>();
@@ -135,7 +135,7 @@ public class TestIcebergCombinedReaderVariousTypes extends TableTestBase {
 
     RewriteFilesInput input =
         new RewriteFilesInput(
-            dataFiles, new DataFile[] {}, new DeleteFile[] {}, deleteFiles, table);
+            dataFiles, new DataFile[] {}, new DeleteFile[] {}, deleteFiles, table, null);
 
     CloseableIterable<Record> readData =
         new GenericCombinedIcebergDataReader(
@@ -157,7 +157,7 @@ public class TestIcebergCombinedReaderVariousTypes extends TableTestBase {
 
   @Test
   public void readDataEnableFilterEqDelete() throws IOException {
-    UnkeyedTable table = getMixedTable().asUnkeyedTable();
+    Table table = getTable();
     List<Record> records = RandomGenericData.generate(table.schema(), 50, 1);
     List<Record> deleteRecords = RandomGenericData.generate(table.schema(), 200, 1);
 
@@ -186,7 +186,7 @@ public class TestIcebergCombinedReaderVariousTypes extends TableTestBase {
 
     RewriteFilesInput input =
         new RewriteFilesInput(
-            dataFiles, new DataFile[] {}, new DeleteFile[] {}, deleteFiles, table);
+            dataFiles, new DataFile[] {}, new DeleteFile[] {}, deleteFiles, table, null);
 
     CombinedDeleteFilter.FILTER_EQ_DELETE_TRIGGER_RECORD_COUNT = 100L;
     GenericCombinedIcebergDataReader reader =
@@ -208,7 +208,7 @@ public class TestIcebergCombinedReaderVariousTypes extends TableTestBase {
     Assert.assertEquals(Iterables.size(readData), 0);
   }
 
-  private static void write(UnkeyedTable table, List<RecordWithAction> list) throws IOException {
+  private static void write(Table table, List<RecordWithAction> list) throws IOException {
     WriteResult result = IcebergDataTestHelpers.delta(table, list);
 
     RowDelta rowDelta = table.newRowDelta();

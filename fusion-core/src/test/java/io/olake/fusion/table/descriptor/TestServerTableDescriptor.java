@@ -20,9 +20,9 @@
 
 package io.olake.fusion.table.descriptor;
 
-import io.olake.fusion.FusionCatalog;
 import io.olake.fusion.FusionTable;
 import io.olake.fusion.formats.FusionCatalogTestHelper;
+import io.olake.fusion.formats.iceberg.IcebergCatalog;
 import io.olake.fusion.hive.TestHMS;
 import org.junit.After;
 import org.junit.Assert;
@@ -47,7 +47,7 @@ public abstract class TestServerTableDescriptor {
   @ClassRule public static TestHMS TEST_HMS = new TestHMS();
 
   private final FusionCatalogTestHelper<?> amoroCatalogTestHelper;
-  private FusionCatalog amoroCatalog;
+  private IcebergCatalog amoroCatalog;
   private Object originalCatalog;
 
   public TestServerTableDescriptor(FusionCatalogTestHelper<?> amoroCatalogTestHelper) {
@@ -109,7 +109,7 @@ public abstract class TestServerTableDescriptor {
     // change columns default value
     tableOperationsDropColumn();
 
-    FusionTable<?> table = amoroCatalog.loadTable(TEST_DB, TEST_TABLE);
+    FusionTable table = amoroCatalog.loadTable(TEST_DB, TEST_TABLE);
 
     List<DDLInfo> tableOperations = tableDescriptor.getTableOperations(table);
 
@@ -171,7 +171,7 @@ public abstract class TestServerTableDescriptor {
 
   protected abstract FormatTableDescriptor getTableDescriptor();
 
-  protected FusionCatalog getAmoroCatalog() {
+  protected IcebergCatalog getAmoroCatalog() {
     return amoroCatalog;
   }
 

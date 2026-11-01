@@ -24,7 +24,6 @@ import static org.apache.iceberg.TableProperties.DEFAULT_NAME_MAPPING;
 import static org.apache.iceberg.TableProperties.FORMAT_VERSION;
 
 import io.olake.fusion.properties.CatalogMetaProperties;
-import io.olake.fusion.properties.HiveTableProperties;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Sets;
 
 import java.util.HashSet;
@@ -201,27 +200,6 @@ public class TableProperties {
       "clean-dangling-delete-files.enabled";
   public static final boolean ENABLE_DANGLING_DELETE_FILES_CLEAN_DEFAULT = true;
 
-  public static final String ENABLE_DATA_EXPIRATION = "data-expire.enabled";
-  public static final boolean ENABLE_DATA_EXPIRATION_DEFAULT = false;
-
-  public static final String DATA_EXPIRATION_LEVEL = "data-expire.level";
-  public static final String DATA_EXPIRATION_LEVEL_DEFAULT = "partition";
-
-  public static final String DATA_EXPIRATION_FIELD = "data-expire.field";
-
-  public static final String DATA_EXPIRATION_DATE_STRING_PATTERN =
-      "data-expire.datetime-string-pattern";
-  public static final String DATA_EXPIRATION_DATE_STRING_PATTERN_DEFAULT = "yyyy-MM-dd";
-
-  public static final String DATA_EXPIRATION_DATE_NUMBER_FORMAT =
-      "data-expire.datetime-number-format";
-  public static final String DATA_EXPIRATION_DATE_NUMBER_FORMAT_DEFAULT = "TIMESTAMP_MS";
-
-  public static final String DATA_EXPIRATION_RETENTION_TIME = "data-expire.retention-time";
-
-  public static final String DATA_EXPIRATION_BASE_ON_RULE = "data-expire.base-on-rule";
-  public static final String DATA_EXPIRATION_BASE_ON_RULE_DEFAULT = "LAST_COMMIT_TIME";
-
   public static final String ENABLE_TABLE_TRASH = "table-trash.enabled";
   public static final boolean ENABLE_TABLE_TRASH_DEFAULT = false;
 
@@ -237,29 +215,6 @@ public class TableProperties {
           "|.*v[0-9]+\\.metadata\\.json"
           + // v123.metadata.json
           "|.*[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}-m[0-9]+\\.avro"; // UUID-m0.avro
-
-  /** table tag management related properties */
-  public static final String ENABLE_AUTO_CREATE_TAG = "tag.auto-create.enabled";
-
-  public static final boolean ENABLE_AUTO_CREATE_TAG_DEFAULT = false;
-
-  public static final String AUTO_CREATE_TAG_TRIGGER_PERIOD = "tag.auto-create.trigger.period";
-  public static final String AUTO_CREATE_TAG_TRIGGER_PERIOD_DEFAULT = "daily";
-
-  public static final String AUTO_CREATE_TAG_TRIGGER_OFFSET_MINUTES =
-      "tag.auto-create.trigger.offset.minutes";
-  public static final int AUTO_CREATE_TAG_TRIGGER_OFFSET_MINUTES_DEFAULT = 0;
-
-  public static final String AUTO_CREATE_TAG_MAX_DELAY_MINUTES =
-      "tag.auto-create.trigger.max-delay.minutes";
-  public static final int AUTO_CREATE_TAG_MAX_DELAY_MINUTES_DEFAULT = 60;
-
-  public static final String AUTO_CREATE_TAG_MAX_AGE_MS = "tag.auto-create.max-age-ms";
-  public static final int AUTO_CREATE_TAG_MAX_AGE_MS_DEFAULT = -1;
-
-  public static final String AUTO_CREATE_TAG_FORMAT = "tag.auto-create.tag-format";
-  public static final String AUTO_CREATE_TAG_FORMAT_DAILY_DEFAULT = "'tag-'yyyyMMdd";
-  public static final String AUTO_CREATE_TAG_FORMAT_HOURLY_DEFAULT = "'tag-'yyyyMMddHH";
 
   /** table write related properties */
   public static final String FILE_FORMAT_PARQUET = "parquet";
@@ -402,9 +357,5 @@ public class TableProperties {
           TableProperties.SPLIT_LOOKBACK,
           TableProperties.SPLIT_SIZE,
           // mixed format writing config keys
-          TableProperties.UPSERT_ENABLED,
-          // mixed-hive config keys
-          HiveTableProperties.AUTO_SYNC_HIVE_SCHEMA_CHANGE,
-          HiveTableProperties.AUTO_SYNC_HIVE_DATA_WRITE,
-          HiveTableProperties.HIVE_CONSISTENT_WRITE_ENABLED);
+          TableProperties.UPSERT_ENABLED);
 }

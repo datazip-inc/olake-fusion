@@ -33,7 +33,7 @@ import io.olake.fusion.server.optimizing.flow.checker.DataConcurrencyChecker;
 import io.olake.fusion.server.optimizing.flow.checker.MinorOptimizingCheck;
 import io.olake.fusion.server.optimizing.flow.checker.OptimizingCountChecker;
 import io.olake.fusion.server.optimizing.flow.view.UnKeyedTableDataView;
-import io.olake.fusion.table.MixedTable;
+import org.apache.iceberg.Table;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -59,7 +59,7 @@ public class TestUnKeyedContinuousOptimizing extends TableTestBase {
 
   @Test
   public void run() throws Exception {
-    MixedTable table = getMixedTable();
+    Table table = getTable();
 
     int partitionCount = 2;
 
@@ -84,7 +84,7 @@ public class TestUnKeyedContinuousOptimizing extends TableTestBase {
     MinorOptimizingCheck minorOptimizingCheck = new MinorOptimizingCheck();
 
     CompleteOptimizingFlow.Builder builder =
-        CompleteOptimizingFlow.builder(table, availableCore)
+        CompleteOptimizingFlow.builder(getFusionTable(), availableCore)
             .setTargetSize(selfTargetFileSize)
             .setFragmentRatio(null)
             .setDuplicateRatio(null)
@@ -128,8 +128,7 @@ public class TestUnKeyedContinuousOptimizing extends TableTestBase {
     }
   }
 
-  private static void mustFullCycle(MixedTable table, RunnableWithException runnable)
-      throws Exception {
+  private static void mustFullCycle(Table table, RunnableWithException runnable) throws Exception {
     table.updateProperties().set(SELF_OPTIMIZING_FULL_TRIGGER_CRON, "0 0 * * *").commit();
     runnable.run();
     table.updateProperties().set(SELF_OPTIMIZING_FULL_TRIGGER_CRON, "").commit();

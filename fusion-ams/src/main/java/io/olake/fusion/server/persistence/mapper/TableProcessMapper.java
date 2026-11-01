@@ -148,11 +148,4 @@ public interface TableProcessMapper {
           + "GROUP BY table_id ")
   @Lang(InListExtendedLanguageDriver.class)
   List<Long> selectTableMaxProcessIds(@Param("tables") Collection<Long> tables);
-
-  @Select(
-      "SELECT process_id, table_id, external_process_identifier, status, process_type, process_stage, execution_engine, retry_number, "
-          + "create_time, finish_time, fail_message, process_parameters, summary "
-          + "FROM table_process WHERE status in ('SUBMITTED', 'RUNNING')")
-  @ResultMap("tableProcessMap")
-  List<TableProcessMeta> selectAllActiveProcesses();
 }

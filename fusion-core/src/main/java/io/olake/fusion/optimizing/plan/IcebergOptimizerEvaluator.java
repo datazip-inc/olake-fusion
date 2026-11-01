@@ -20,9 +20,9 @@
 
 package io.olake.fusion.optimizing.plan;
 
+import io.olake.fusion.FusionTable;
 import io.olake.fusion.ServerTableIdentifier;
 import io.olake.fusion.config.OptimizingConfig;
-import io.olake.fusion.table.MixedTable;
 import io.olake.fusion.table.TableSnapshot;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.util.Pair;
@@ -31,7 +31,7 @@ public class IcebergOptimizerEvaluator extends AbstractOptimizingEvaluator {
   public IcebergOptimizerEvaluator(
       ServerTableIdentifier identifier,
       OptimizingConfig config,
-      MixedTable table,
+      FusionTable table,
       TableSnapshot currentSnapshot,
       int maxPendingPartitions,
       long lastMinorOptimizingTime,

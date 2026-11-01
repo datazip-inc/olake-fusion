@@ -32,9 +32,7 @@ import io.olake.fusion.exception.ObjectNotExistsException;
 import io.olake.fusion.hive.TestHMS;
 import io.olake.fusion.properties.CatalogMetaProperties;
 import io.olake.fusion.server.AMSServiceTestBase;
-import io.olake.fusion.server.catalog.InternalCatalog;
 import org.junit.Assert;
-import org.junit.Assume;
 import org.junit.ClassRule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -50,7 +48,7 @@ public class TestCatalogService extends AMSServiceTestBase {
 
   @Parameterized.Parameters(name = "{0}")
   public static Object[] parameters() {
-    return new Object[][] {{TestedCatalogs.internalCatalog(TableFormat.ICEBERG)}};
+    return new Object[][] {{TestedCatalogs.hadoopCatalog(TableFormat.ICEBERG)}};
   }
 
   public TestCatalogService(CatalogTestHelper catalogTestHelper) {
@@ -120,20 +118,6 @@ public class TestCatalogService extends AMSServiceTestBase {
     CATALOG_MANAGER.dropCatalog(catalogMeta.getCatalogName());
     Assert.assertThrows(
         ObjectNotExistsException.class, () -> CATALOG_MANAGER.updateCatalog(catalogMeta));
-  }
-
-  @Test
-  public void testDropCatalogWithDatabase() {
-    Assume.assumeTrue(catalogTestHelper.tableFormat().equals(TableFormat.MIXED_ICEBERG));
-    CatalogMeta catalogMeta = catalogTestHelper.buildCatalogMeta("/tmp");
-    CATALOG_MANAGER.createCatalog(catalogMeta);
-    InternalCatalog catalog = CATALOG_MANAGER.getInternalCatalog(catalogMeta.getCatalogName());
-    catalog.createDatabase("test_db");
-    Assert.assertThrows(
-        IllegalMetadataException.class,
-        () -> CATALOG_MANAGER.dropCatalog(catalogMeta.getCatalogName()));
-    catalog.dropDatabase("test_db");
-    CATALOG_MANAGER.dropCatalog(catalogMeta.getCatalogName());
   }
 
   @Test

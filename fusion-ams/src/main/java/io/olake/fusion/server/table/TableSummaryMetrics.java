@@ -27,9 +27,8 @@ import io.olake.fusion.metrics.Gauge;
 import io.olake.fusion.metrics.MetricDefine;
 import io.olake.fusion.metrics.MetricRegistry;
 import io.olake.fusion.optimizing.plan.AbstractOptimizingEvaluator;
-import io.olake.fusion.table.MixedTable;
-import io.olake.fusion.table.UnkeyedTable;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Lists;
+import org.apache.iceberg.Table;
 
 /** Table Summary metrics. */
 public class TableSummaryMetrics extends AbstractTableMetrics {
@@ -219,9 +218,7 @@ public class TableSummaryMetrics extends AbstractTableMetrics {
     this.tableSummary = tableSummary;
   }
 
-  public void refreshSnapshots(MixedTable table) {
-    UnkeyedTable unkeyedTable =
-        table.isKeyedTable() ? table.asKeyedTable().baseTable() : table.asUnkeyedTable();
-    snapshots = Lists.newArrayList(unkeyedTable.snapshots().iterator()).size();
+  public void refreshSnapshots(Table table) {
+    snapshots = Lists.newArrayList(table.snapshots().iterator()).size();
   }
 }

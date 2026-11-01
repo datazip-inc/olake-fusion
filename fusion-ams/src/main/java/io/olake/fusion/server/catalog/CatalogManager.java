@@ -59,14 +59,6 @@ public interface CatalogManager {
   ServerCatalog getServerCatalog(String catalogName);
 
   /**
-   * Retrieves the InternalCatalog with the given catalog name.
-   *
-   * @param catalogName the name of the ServerCatalog to retrieve
-   * @return the InternalCatalog object matching the catalogName, or null if no catalog exists
-   */
-  InternalCatalog getInternalCatalog(String catalogName);
-
-  /**
    * Retrieves all ExternalCatalogs.
    *
    * @return a list of ExternalCatalogs
@@ -101,5 +93,5 @@ public interface CatalogManager {
    * @param identifier managed table identifier
    * @return managed table.
    */
-  FusionTable<?> loadTable(TableIdentifier identifier);
+  FusionTable loadTable(TableIdentifier identifier);
 }

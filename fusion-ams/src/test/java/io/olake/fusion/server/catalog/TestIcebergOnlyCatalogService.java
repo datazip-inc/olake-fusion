@@ -58,6 +58,9 @@ public class TestIcebergOnlyCatalogService extends AMSServiceTestBase {
 
   @Rule public TemporaryFolder temp = new TemporaryFolder();
 
+  /** Legacy, unsupported format name; still registered so stored rows parse and are rejected. */
+  private static final TableFormat LEGACY_MIXED_ICEBERG = TableFormat.valueOf("MIXED_ICEBERG");
+
   private static CatalogMeta hadoopCatalog(String name, String warehouse, TableFormat format) {
     Map<String, String> properties = Maps.newHashMap();
     properties.put(CatalogMetaProperties.KEY_WAREHOUSE, warehouse);
@@ -69,13 +72,13 @@ public class TestIcebergOnlyCatalogService extends AMSServiceTestBase {
   public void createCatalogWithNonIcebergFormatIsRejectedAndNotPersisted() throws Exception {
     File warehouse = temp.newFolder();
     CatalogMeta meta =
-        hadoopCatalog("mixed_rejected", warehouse.getAbsolutePath(), TableFormat.MIXED_ICEBERG);
+        hadoopCatalog("mixed_rejected", warehouse.getAbsolutePath(), LEGACY_MIXED_ICEBERG);
 
     Exception e = Assert.assertThrows(Exception.class, () -> CATALOG_MANAGER.createCatalog(meta));
 
     Assert.assertTrue(
         "message should name the format, was: " + e.getMessage(),
-        e.getMessage().contains(TableFormat.MIXED_ICEBERG.name()));
+        e.getMessage().contains(LEGACY_MIXED_ICEBERG.name()));
     Assert.assertFalse(CATALOG_MANAGER.catalogExist("mixed_rejected"));
     Assert.assertFalse(
         "connection test must not run for a rejected catalog",
@@ -87,8 +90,7 @@ public class TestIcebergOnlyCatalogService extends AMSServiceTestBase {
     CatalogMeta iceberg =
         hadoopCatalog("stored_iceberg", temp.newFolder().getAbsolutePath(), TableFormat.ICEBERG);
     CatalogMeta mixed =
-        hadoopCatalog(
-            "stored_mixed", temp.newFolder().getAbsolutePath(), TableFormat.MIXED_ICEBERG);
+        hadoopCatalog("stored_mixed", temp.newFolder().getAbsolutePath(), LEGACY_MIXED_ICEBERG);
     CatalogRows rows = new CatalogRows();
     rows.insert(iceberg);
     rows.insert(mixed);

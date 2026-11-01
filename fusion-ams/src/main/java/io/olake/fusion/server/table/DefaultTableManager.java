@@ -24,19 +24,8 @@ import com.github.pagehelper.Page;
 import com.github.pagehelper.PageHelper;
 import com.github.pagehelper.PageInfo;
 import io.olake.fusion.ServerTableIdentifier;
-import io.olake.fusion.api.BlockableOperation;
-import io.olake.fusion.api.Blocker;
 import io.olake.fusion.api.TableIdentifier;
-import io.olake.fusion.config.Configurations;
-import io.olake.fusion.exception.AlreadyExistsException;
-import io.olake.fusion.exception.BlockerConflictException;
-import io.olake.fusion.exception.IllegalMetadataException;
-import io.olake.fusion.exception.ObjectNotExistsException;
-import io.olake.fusion.exception.PersistenceException;
-import io.olake.fusion.server.FusionManagementConf;
 import io.olake.fusion.server.FusionServiceConstants;
-import io.olake.fusion.server.catalog.CatalogManager;
-import io.olake.fusion.server.catalog.InternalCatalog;
 import io.olake.fusion.server.dashboard.model.TableOptimizingInfo;
 import io.olake.fusion.server.dashboard.utils.OptimizingUtil;
 import io.olake.fusion.server.optimizing.OptimizingTaskMeta;
@@ -45,18 +34,14 @@ import io.olake.fusion.server.persistence.PersistentBase;
 import io.olake.fusion.server.persistence.TableRuntimeMeta;
 import io.olake.fusion.server.persistence.mapper.OptimizerMapper;
 import io.olake.fusion.server.persistence.mapper.OptimizingProcessMapper;
-import io.olake.fusion.server.persistence.mapper.TableBlockerMapper;
 import io.olake.fusion.server.persistence.mapper.TableMetaMapper;
 import io.olake.fusion.server.persistence.mapper.TableProcessMapper;
 import io.olake.fusion.server.persistence.mapper.TableRuntimeMapper;
 import io.olake.fusion.server.process.TableProcessMeta;
 import io.olake.fusion.server.resource.OptimizerInstance;
-import io.olake.fusion.server.table.blocker.TableBlocker;
 import io.olake.fusion.server.utils.SnowflakeIdGenerator;
-import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Lists;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Maps;
-import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -64,171 +49,18 @@ import org.slf4j.LoggerFactory;
 import javax.annotation.Nullable;
 
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class DefaultTableManager extends PersistentBase implements TableManager {
 
   public static final Logger LOG = LoggerFactory.getLogger(DefaultTableManager.class);
-  private static final int TABLE_BLOCKER_RETRY = 3;
-  private final long blockerTimeout;
-
-  private final CatalogManager catalogManager;
-
-  private @Nullable TableService tableService;
-
-  public DefaultTableManager(Configurations configuration, CatalogManager catalogManager) {
-    this.catalogManager = catalogManager;
-    this.blockerTimeout = configuration.get(FusionManagementConf.BLOCKER_TIMEOUT).toMillis();
-  }
-
-  @Override
-  public void setTableService(@Nullable TableService tableService) {
-    this.tableService = tableService;
-  }
-
-  private Optional<TableService> tableService() {
-    return Optional.ofNullable(tableService);
-  }
-
-  @Override
-  public void dropTableMetadata(TableIdentifier tableIdentifier, boolean deleteData) {
-    if (StringUtils.isBlank(tableIdentifier.getTableName())) {
-      throw new IllegalMetadataException("table name is blank");
-    }
-    if (StringUtils.isBlank(tableIdentifier.getCatalog())) {
-      throw new IllegalMetadataException("catalog is blank");
-    }
-    if (StringUtils.isBlank(tableIdentifier.getDatabase())) {
-      throw new IllegalMetadataException("database is blank");
-    }
-
-    InternalCatalog internalCatalog =
-        catalogManager.getInternalCatalog(tableIdentifier.getCatalog());
-    String database = tableIdentifier.getDatabase();
-    String table = tableIdentifier.getTableName();
-    if (!internalCatalog.tableExists(database, table)) {
-      throw new ObjectNotExistsException(tableIdentifier);
-    }
-
-    ServerTableIdentifier serverTableIdentifier = internalCatalog.dropTable(database, table);
-    tableService().ifPresent(s -> s.onTableDropped(internalCatalog, serverTableIdentifier));
-  }
-
-  @Override
-  public void createTable(String catalogName, TableMetadata tableMetadata) {
-    InternalCatalog catalog = catalogManager.getInternalCatalog(catalogName);
-    String database = tableMetadata.getTableIdentifier().getDatabase();
-    String table = tableMetadata.getTableIdentifier().getTableName();
-    if (catalog.tableExists(database, table)) {
-      throw new AlreadyExistsException(
-          tableMetadata.getTableIdentifier().getIdentifier().buildTableIdentifier());
-    }
-
-    TableMetadata metadata = catalog.createTable(tableMetadata);
-    tableService().ifPresent(s -> s.onTableCreated(catalog, metadata.getTableIdentifier()));
-  }
 
   @Override
   public List<ServerTableIdentifier> listManagedTables() {
     return getAs(TableMetaMapper.class, TableMetaMapper::selectAllTableIdentifiers);
-  }
-
-  @Override
-  public Blocker block(
-      TableIdentifier tableIdentifier,
-      List<BlockableOperation> operations,
-      Map<String, String> properties) {
-    Preconditions.checkNotNull(operations, "operations should not be null");
-    Preconditions.checkArgument(!operations.isEmpty(), "operations should not be empty");
-    Preconditions.checkArgument(blockerTimeout > 0, "blocker timeout must > 0");
-    String catalog = tableIdentifier.getCatalog();
-    String database = tableIdentifier.getDatabase();
-    String table = tableIdentifier.getTableName();
-    int tryCount = 0;
-    while (tryCount++ < TABLE_BLOCKER_RETRY) {
-      long now = System.currentTimeMillis();
-      doAs(
-          TableBlockerMapper.class,
-          mapper -> mapper.deleteExpiredBlockers(catalog, database, table, now));
-      List<TableBlocker> tableBlockers =
-          getAs(
-              TableBlockerMapper.class,
-              mapper ->
-                  mapper.selectBlockers(
-                      tableIdentifier.getCatalog(),
-                      tableIdentifier.getDatabase(),
-                      tableIdentifier.getTableName(),
-                      now));
-      if (TableBlocker.conflict(operations, tableBlockers)) {
-        throw new BlockerConflictException(operations + " is conflict with " + tableBlockers);
-      }
-      Optional<Long> maxBlockerOpt =
-          tableBlockers.stream()
-              .map(TableBlocker::getBlockerId)
-              .max(Comparator.comparingLong(l -> l));
-      long prevBlockerId = maxBlockerOpt.orElse(-1L);
-
-      TableBlocker tableBlocker =
-          TableBlocker.buildTableBlocker(
-              tableIdentifier, operations, properties, now, blockerTimeout, prevBlockerId);
-      try {
-        doAs(TableBlockerMapper.class, mapper -> mapper.insert(tableBlocker));
-        if (tableBlocker.getBlockerId() > 0) {
-          return tableBlocker.buildBlocker();
-        }
-      } catch (PersistenceException e) {
-        LOG.warn("An exception occurs when creating a blocker:{}", tableBlocker, e);
-      }
-    }
-    throw new BlockerConflictException("Failed to create a blocker: conflict meet max retry");
-  }
-
-  @Override
-  public void releaseBlocker(TableIdentifier tableIdentifier, String blockerId) {
-    doAs(TableBlockerMapper.class, mapper -> mapper.deleteBlocker(Long.parseLong(blockerId)));
-  }
-
-  @Override
-  public long renewBlocker(TableIdentifier tableIdentifier, String blockerId) {
-    int retry = 0;
-    while (retry++ < TABLE_BLOCKER_RETRY) {
-      long now = System.currentTimeMillis();
-      long id = Long.parseLong(blockerId);
-      TableBlocker tableBlocker =
-          getAs(TableBlockerMapper.class, mapper -> mapper.selectBlocker(id, now));
-      if (tableBlocker == null) {
-        throw new ObjectNotExistsException("Blocker " + blockerId + " of " + tableIdentifier);
-      }
-      long current = System.currentTimeMillis();
-      long expirationTime = now + blockerTimeout;
-      long effectRow =
-          updateAs(
-              TableBlockerMapper.class, mapper -> mapper.renewBlocker(id, current, expirationTime));
-      if (effectRow > 0) {
-        return expirationTime;
-      }
-    }
-    throw new BlockerConflictException("Failed to renew a blocker: conflict meet max retry");
-  }
-
-  @Override
-  public List<Blocker> getBlockers(TableIdentifier tableIdentifier) {
-    return getAs(
-            TableBlockerMapper.class,
-            mapper ->
-                mapper.selectBlockers(
-                    tableIdentifier.getCatalog(),
-                    tableIdentifier.getDatabase(),
-                    tableIdentifier.getTableName(),
-                    System.currentTimeMillis()))
-        .stream()
-        .map(TableBlocker::buildBlocker)
-        .collect(Collectors.toList());
   }
 
   @Override

@@ -39,15 +39,15 @@ import java.util.stream.Stream;
 
 public class TestCatalogBuilder {
 
+  /** Legacy, unsupported format name; still registered so stored rows parse and are rejected. */
+  private static final TableFormat LEGACY_MIXED_ICEBERG = TableFormat.valueOf("MIXED_ICEBERG");
+
   static Stream<Arguments> nonIcebergFormats() {
     return Stream.of(
-        Arguments.of(CatalogMetaProperties.CATALOG_TYPE_HIVE, TableFormat.MIXED_ICEBERG),
-        Arguments.of(CatalogMetaProperties.CATALOG_TYPE_HIVE, TableFormat.MIXED_HIVE),
-        Arguments.of(CatalogMetaProperties.CATALOG_TYPE_HIVE, TableFormat.PAIMON),
-        Arguments.of(CatalogMetaProperties.CATALOG_TYPE_HIVE, TableFormat.HUDI),
-        Arguments.of(CatalogMetaProperties.CATALOG_TYPE_CUSTOM, TableFormat.MIXED_ICEBERG),
-        Arguments.of(CatalogMetaProperties.CATALOG_TYPE_REST, TableFormat.MIXED_ICEBERG),
-        Arguments.of(CatalogMetaProperties.CATALOG_TYPE_GLUE, TableFormat.MIXED_ICEBERG));
+        Arguments.of(CatalogMetaProperties.CATALOG_TYPE_HIVE, LEGACY_MIXED_ICEBERG),
+        Arguments.of(CatalogMetaProperties.CATALOG_TYPE_CUSTOM, LEGACY_MIXED_ICEBERG),
+        Arguments.of(CatalogMetaProperties.CATALOG_TYPE_REST, LEGACY_MIXED_ICEBERG),
+        Arguments.of(CatalogMetaProperties.CATALOG_TYPE_GLUE, LEGACY_MIXED_ICEBERG));
   }
 
   @ParameterizedTest(name = "{0} {1}")

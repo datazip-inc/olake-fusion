@@ -73,6 +73,7 @@ conf/
 # dashboard static resources
 fusion-web/src/main/resources/static/
 fusion-web/node/
+node_modules/
 
 # Hugo generated directories
 public

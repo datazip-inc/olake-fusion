@@ -26,6 +26,14 @@ import org.apache.iceberg.DeleteFile;
 import java.util.Map;
 
 public class RewriteFilesOutput implements TableOptimizing.OptimizingOutput {
+
+  /**
+   * Pinned to the value the JVM computed for this class before it was pinned, so outputs stored by
+   * earlier releases (task_runtime.rewrite_output) stay readable. Change it only together with the
+   * serialized form.
+   */
+  private static final long serialVersionUID = -3374928023776915201L;
+
   private final DataFile[] dataFiles;
   private final DeleteFile[] deleteFiles;
   private final Map<String, String> summary;

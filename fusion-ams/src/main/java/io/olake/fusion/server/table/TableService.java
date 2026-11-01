@@ -23,7 +23,6 @@ package io.olake.fusion.server.table;
 import io.olake.fusion.FusionTable;
 import io.olake.fusion.ServerTableIdentifier;
 import io.olake.fusion.TableRuntime;
-import io.olake.fusion.server.catalog.InternalCatalog;
 
 public interface TableService extends TableRuntimeHandler {
 
@@ -32,10 +31,6 @@ public interface TableService extends TableRuntimeHandler {
   void initialize();
 
   void dispose();
-
-  void onTableCreated(InternalCatalog catalog, ServerTableIdentifier identifier);
-
-  void onTableDropped(InternalCatalog catalog, ServerTableIdentifier identifier);
 
   TableRuntime getRuntime(Long tableId);
 
@@ -49,5 +44,5 @@ public interface TableService extends TableRuntimeHandler {
    * @param identifier managed table identifier
    * @return managed table.
    */
-  FusionTable<?> loadTable(ServerTableIdentifier identifier);
+  FusionTable loadTable(ServerTableIdentifier identifier);
 }

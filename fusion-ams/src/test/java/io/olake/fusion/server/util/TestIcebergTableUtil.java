@@ -20,8 +20,8 @@
 
 package io.olake.fusion.server.util;
 
+import io.olake.fusion.io.DataTestHelpers;
 import io.olake.fusion.io.IcebergDataTestHelpers;
-import io.olake.fusion.io.MixedDataTestHelpers;
 import io.olake.fusion.server.utils.IcebergTableUtil;
 import io.olake.fusion.table.PrimaryKeySpec;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Lists;
@@ -76,7 +76,7 @@ public class TestIcebergTableUtil {
     List<Record> records =
         IntStream.of(1, 100)
             .boxed()
-            .map(i -> MixedDataTestHelpers.createRecord(schema, i, UUID.randomUUID().toString()))
+            .map(i -> DataTestHelpers.createRecord(schema, i, UUID.randomUUID().toString()))
             .collect(Collectors.toList());
     for (Record r : records) {
       IcebergDataTestHelpers.append(table, Lists.newArrayList(r));

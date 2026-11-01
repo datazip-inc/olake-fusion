@@ -25,15 +25,13 @@ import static io.olake.fusion.table.TableProperties.CHANGE_FILE_FORMAT;
 import static io.olake.fusion.table.TableProperties.DEFAULT_FILE_FORMAT;
 import static io.olake.fusion.table.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
 
-import io.olake.fusion.data.ChangeAction;
-import io.olake.fusion.io.MixedDataTestHelpers;
-import io.olake.fusion.table.KeyedTable;
-import io.olake.fusion.table.MixedTable;
+import io.olake.fusion.io.DataTestHelpers;
 import io.olake.fusion.table.PrimaryKeySpec;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Maps;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.Table;
 import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.data.Record;
 import org.apache.iceberg.expressions.Expression;
@@ -133,46 +131,17 @@ public class BasicTableTestHelper implements TableTestHelper {
 
   @Override
   public Record generateTestRecord(int id, String name, long ts, String opTime) {
-    return MixedDataTestHelpers.createRecord(TABLE_SCHEMA, id, name, ts, opTime);
+    return DataTestHelpers.createRecord(TABLE_SCHEMA, id, name, ts, opTime);
   }
 
   @Override
-  public List<DataFile> writeChangeStore(
-      KeyedTable keyedTable,
-      Long txId,
-      ChangeAction action,
-      List<Record> records,
-      boolean orderedWrite) {
-    return MixedDataTestHelpers.writeChangeStore(keyedTable, txId, action, records, orderedWrite);
+  public List<DataFile> writeDataFiles(Table table, List<Record> records) {
+    return DataTestHelpers.writeDataFiles(table, records);
   }
 
   @Override
-  public List<DataFile> writeBaseStore(
-      MixedTable table, long txId, List<Record> records, boolean orderedWrite) {
-    return MixedDataTestHelpers.writeBaseStore(table, txId, records, orderedWrite);
-  }
-
-  @Override
-  public List<Record> readKeyedTable(
-      KeyedTable keyedTable,
-      Expression expression,
-      Schema projectSchema,
-      boolean useDiskMap,
-      boolean readDeletedData) {
-    return MixedDataTestHelpers.readKeyedTable(
-        keyedTable, expression, projectSchema, useDiskMap, readDeletedData);
-  }
-
-  @Override
-  public List<Record> readChangeStore(
-      KeyedTable keyedTable, Expression expression, Schema projectSchema, boolean useDiskMap) {
-    return MixedDataTestHelpers.readChangeStore(keyedTable, expression, projectSchema, useDiskMap);
-  }
-
-  @Override
-  public List<Record> readBaseStore(
-      MixedTable table, Expression expression, Schema projectSchema, boolean useDiskMap) {
-    return MixedDataTestHelpers.readBaseStore(table, expression, projectSchema, useDiskMap);
+  public List<Record> readTable(Table table, Expression expression, Schema projectSchema) {
+    return DataTestHelpers.readTable(table, expression, projectSchema);
   }
 
   @Override

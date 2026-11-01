@@ -23,10 +23,9 @@ package io.olake.fusion.catalog;
 import static org.apache.iceberg.CatalogUtil.ICEBERG_CATALOG_TYPE;
 import static org.apache.iceberg.CatalogUtil.ICEBERG_CATALOG_TYPE_HIVE;
 
-import io.olake.fusion.CommonUnifiedCatalog;
 import io.olake.fusion.TableFormat;
-import io.olake.fusion.UnifiedCatalog;
 import io.olake.fusion.api.CatalogMeta;
+import io.olake.fusion.formats.iceberg.IcebergCatalog;
 import io.olake.fusion.properties.CatalogMetaProperties;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
@@ -70,11 +69,9 @@ public class HiveCatalogTestHelper implements CatalogTestHelper {
   }
 
   @Override
-  public UnifiedCatalog buildUnifiedCatalog(CatalogMeta catalogMeta) {
-    catalogMeta
-        .getCatalogProperties()
-        .put(CatalogMetaProperties.TABLE_FORMATS, TableFormat.MIXED_HIVE.name());
-    return new CommonUnifiedCatalog(() -> catalogMeta, Maps.newHashMap());
+  public IcebergCatalog buildFusionCatalog(CatalogMeta catalogMeta) {
+    catalogMeta.getCatalogProperties().put(CatalogMetaProperties.TABLE_FORMATS, tableFormat.name());
+    return IcebergCatalog.of(catalogMeta);
   }
 
   @Override

@@ -31,7 +31,6 @@ import io.olake.fusion.server.optimizing.OptimizingStatus;
 import io.olake.fusion.server.scheduler.PeriodicTableScheduler;
 import io.olake.fusion.server.table.DefaultTableRuntime;
 import io.olake.fusion.server.table.TableService;
-import io.olake.fusion.table.MixedTable;
 import io.olake.fusion.utils.CronUtils;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
 
@@ -102,11 +101,10 @@ public class TableRuntimeRefreshExecutor extends PeriodicTableScheduler {
       Preconditions.checkArgument(tableRuntime instanceof DefaultTableRuntime);
       DefaultTableRuntime defaultTableRuntime = (DefaultTableRuntime) tableRuntime;
 
-      FusionTable<?> table = loadTable(tableRuntime);
+      FusionTable table = loadTable(tableRuntime);
       defaultTableRuntime.refresh(table);
 
-      MixedTable mixedTable = (MixedTable) table.originalTable();
-      evaluateCronTriggers(defaultTableRuntime, mixedTable);
+      evaluateCronTriggers(defaultTableRuntime);
     } catch (Throwable throwable) {
       logger.error("Refreshing table {} failed.", tableRuntime.getTableIdentifier(), throwable);
     }
@@ -118,7 +116,7 @@ public class TableRuntimeRefreshExecutor extends PeriodicTableScheduler {
    * stops. Types whose crons fired but are unnecessary get a SKIPPED process record and the loop
    * falls through to the next type.
    */
-  private void evaluateCronTriggers(DefaultTableRuntime tableRuntime, MixedTable mixedTable) {
+  private void evaluateCronTriggers(DefaultTableRuntime tableRuntime) {
     OptimizingConfig cfg = tableRuntime.getOptimizingConfig();
     if (!cfg.isEnabled()) {
       return;
@@ -131,7 +129,7 @@ public class TableRuntimeRefreshExecutor extends PeriodicTableScheduler {
       return;
     }
 
-    boolean snapshotChanged = isSnapshotChanged(tableRuntime, mixedTable);
+    boolean snapshotChanged = isSnapshotChanged(tableRuntime);
     OptimizingType lastType = tableRuntime.getLastOptimizingType();
 
     for (OptimizingType candidate :
@@ -169,14 +167,8 @@ public class TableRuntimeRefreshExecutor extends PeriodicTableScheduler {
    * Returns {@code true} when the table's current snapshot differs from the snapshot that was
    * current when the last optimization completed.
    */
-  private boolean isSnapshotChanged(DefaultTableRuntime tableRuntime, MixedTable mixedTable) {
-    long lastOptSnapshotId = tableRuntime.getLastOptimizedSnapshotId();
-    long lastOptChangeSnapshotId = tableRuntime.getLastOptimizedChangeSnapshotId();
-    if (mixedTable.isKeyedTable()) {
-      return lastOptSnapshotId != tableRuntime.getCurrentSnapshotId()
-          || lastOptChangeSnapshotId != tableRuntime.getCurrentChangeSnapshotId();
-    }
-    return lastOptSnapshotId != tableRuntime.getCurrentSnapshotId();
+  private boolean isSnapshotChanged(DefaultTableRuntime tableRuntime) {
+    return tableRuntime.getLastOptimizedSnapshotId() != tableRuntime.getCurrentSnapshotId();
   }
 
   /**

@@ -30,12 +30,11 @@ import io.olake.fusion.catalog.BasicCatalogTestHelper;
 import io.olake.fusion.catalog.CatalogTestHelper;
 import io.olake.fusion.config.Configurations;
 import io.olake.fusion.config.TableConfiguration;
-import io.olake.fusion.server.manager.EventsManager;
 import io.olake.fusion.server.manager.MetricManager;
 import io.olake.fusion.server.optimizing.OptimizingStatus;
-import io.olake.fusion.table.MixedTable;
 import io.olake.fusion.table.TableProperties;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Lists;
+import org.apache.iceberg.Table;
 import org.apache.iceberg.util.Pair;
 import org.junit.Assert;
 import org.junit.Test;
@@ -74,18 +73,14 @@ public class TestDefaultTableRuntimeHandler extends AMSTableTestBase {
     TestHandler handler = new TestHandler();
     tableService.addHandlerChain(handler);
     tableService.initialize();
-    if (!(catalogTestHelper().tableFormat().equals(TableFormat.MIXED_HIVE)
-        && TEST_HMS.getHiveClient().getDatabase(TableTestHelper.TEST_DB_NAME) != null)) {
-      createDatabase();
-    }
+    createDatabase();
     createTable();
     ServerTableIdentifier createTableId = tableManager().listManagedTables().get(0);
     Assert.assertEquals(1, handler.getAddedTables().size());
-    validateMixedTable(handler.getAddedTables().get(0).first());
+    validateTable(handler.getAddedTables().get(0).first());
     validateTableRuntime(handler.getAddedTables().get(0).second());
     tableService.dispose();
     MetricManager.dispose();
-    EventsManager.dispose();
     Assert.assertTrue(handler.isDisposed());
 
     // initialize with a history table
@@ -100,7 +95,7 @@ public class TestDefaultTableRuntimeHandler extends AMSTableTestBase {
         handler.getInitTables().get(0).getTableIdentifier().getId());
 
     // test change properties
-    MixedTable mixedTable = (MixedTable) tableService().loadTable(createTableId).originalTable();
+    Table mixedTable = tableService().loadTable(createTableId).table();
 
     mixedTable.updateProperties().set(TableProperties.ENABLE_ORPHAN_CLEAN, "true").commit();
     getDefaultTableRuntime(createTableId.getId())
@@ -132,10 +127,7 @@ public class TestDefaultTableRuntimeHandler extends AMSTableTestBase {
     TestHandler handler = new TestHandler();
     tableService.addHandlerChain(handler);
     tableService.initialize();
-    if (!(catalogTestHelper().tableFormat().equals(TableFormat.MIXED_HIVE)
-        && TEST_HMS.getHiveClient().getDatabase(TableTestHelper.TEST_DB_NAME) != null)) {
-      createDatabase();
-    }
+    createDatabase();
     createTable();
 
     ServerTableIdentifier tableId = tableManager().listManagedTables().get(0);
@@ -147,7 +139,7 @@ public class TestDefaultTableRuntimeHandler extends AMSTableTestBase {
 
     // Change optimizer group property
     String newGroupName = "new-optimizer-group";
-    MixedTable mixedTable = (MixedTable) tableService().loadTable(tableId).originalTable();
+    Table mixedTable = tableService().loadTable(tableId).table();
     mixedTable.updateProperties().set(TableProperties.SELF_OPTIMIZING_GROUP, newGroupName).commit();
 
     // Refresh the runtime
@@ -164,7 +156,6 @@ public class TestDefaultTableRuntimeHandler extends AMSTableTestBase {
     dropDatabase();
     tableService.dispose();
     MetricManager.dispose();
-    EventsManager.dispose();
     tableService = null;
   }
 
@@ -183,7 +174,7 @@ public class TestDefaultTableRuntimeHandler extends AMSTableTestBase {
         Lists.newArrayList();
     private final List<Pair<TableRuntime, TableConfiguration>> configChangedTables =
         Lists.newArrayList();
-    private final List<Pair<MixedTable, TableRuntime>> addedTables = Lists.newArrayList();
+    private final List<Pair<FusionTable, TableRuntime>> addedTables = Lists.newArrayList();
     private final List<TableRuntime> removedTables = Lists.newArrayList();
     private boolean disposed = false;
 
@@ -199,8 +190,8 @@ public class TestDefaultTableRuntimeHandler extends AMSTableTestBase {
     }
 
     @Override
-    protected void handleTableAdded(FusionTable<?> table, TableRuntime tableRuntime) {
-      addedTables.add(Pair.of((MixedTable) table.originalTable(), tableRuntime));
+    protected void handleTableAdded(FusionTable table, TableRuntime tableRuntime) {
+      addedTables.add(Pair.of(table, tableRuntime));
     }
 
     @Override
@@ -226,7 +217,7 @@ public class TestDefaultTableRuntimeHandler extends AMSTableTestBase {
       return configChangedTables;
     }
 
-    public List<Pair<MixedTable, TableRuntime>> getAddedTables() {
+    public List<Pair<FusionTable, TableRuntime>> getAddedTables() {
       return addedTables;
     }
 

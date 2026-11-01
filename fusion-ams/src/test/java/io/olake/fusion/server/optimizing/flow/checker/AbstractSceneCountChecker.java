@@ -22,9 +22,9 @@ package io.olake.fusion.server.optimizing.flow.checker;
 
 import io.olake.fusion.optimizing.RewriteStageTask;
 import io.olake.fusion.optimizing.plan.AbstractOptimizingPlanner;
-import io.olake.fusion.server.optimizing.UnKeyedTableCommit;
+import io.olake.fusion.server.optimizing.IcebergTableCommit;
 import io.olake.fusion.server.optimizing.flow.CompleteOptimizingFlow;
-import io.olake.fusion.table.MixedTable;
+import org.apache.iceberg.Table;
 
 import javax.annotation.Nullable;
 
@@ -42,10 +42,10 @@ public abstract class AbstractSceneCountChecker implements CompleteOptimizingFlo
 
   @Override
   public boolean condition(
-      MixedTable table,
+      Table table,
       @Nullable List<RewriteStageTask> latestTaskDescriptors,
       AbstractOptimizingPlanner latestPlanner,
-      @Nullable UnKeyedTableCommit latestCommit) {
+      @Nullable IcebergTableCommit latestCommit) {
     if (internalCondition(table, latestTaskDescriptors, latestPlanner, latestCommit)) {
       count++;
       return true;
@@ -54,10 +54,10 @@ public abstract class AbstractSceneCountChecker implements CompleteOptimizingFlo
   }
 
   protected abstract boolean internalCondition(
-      MixedTable table,
+      Table table,
       @Nullable List<RewriteStageTask> latestTaskDescriptors,
       AbstractOptimizingPlanner latestPlanner,
-      @Nullable UnKeyedTableCommit latestCommit);
+      @Nullable IcebergTableCommit latestCommit);
 
   @Override
   public boolean senseHasChecked() {
@@ -66,9 +66,9 @@ public abstract class AbstractSceneCountChecker implements CompleteOptimizingFlo
 
   @Override
   public void check(
-      MixedTable table,
+      Table table,
       @Nullable List<RewriteStageTask> latestTaskDescriptors,
       AbstractOptimizingPlanner latestPlanner,
-      @Nullable UnKeyedTableCommit latestCommit)
+      @Nullable IcebergTableCommit latestCommit)
       throws Exception {}
 }

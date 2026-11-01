@@ -24,7 +24,6 @@ import io.olake.fusion.config.ConfigOption;
 import io.olake.fusion.config.ConfigOptions;
 import io.olake.fusion.config.Configurations;
 import io.olake.fusion.server.FusionManagementConf;
-import io.olake.fusion.server.catalog.CatalogType;
 import io.olake.fusion.server.dashboard.utils.DesensitizationUtil;
 import io.olake.fusion.server.terminal.SparkContextUtil;
 import io.olake.fusion.server.terminal.TerminalSession;
@@ -48,8 +47,6 @@ public class LocalSessionFactory implements TerminalSessionFactory {
 
   static final Set<String> STATIC_SPARK_CONF =
       Collections.unmodifiableSet(Sets.newHashSet("spark.sql.extensions"));
-  static final Set<String> EXTERNAL_CONNECTORS =
-      Collections.unmodifiableSet(Sets.newHashSet("iceberg", "paimon"));
   static final String SPARK_CONF_PREFIX = "spark.";
 
   public static ConfigOption<Integer> SPARK_CORES =
@@ -80,9 +77,7 @@ public class LocalSessionFactory implements TerminalSessionFactory {
     Map<String, String> sparkConf = SparkContextUtil.getSparkConf(configuration);
 
     Map<String, String> finallyConf = configuration.toMap();
-    catalogs.stream()
-        .filter(c -> isExternalConnector(c, configuration) || isExternalMetastore(c, configuration))
-        .forEach(c -> setHadoopConfigToSparkSession(c, session, metaStore));
+    catalogs.forEach(c -> setHadoopConfigToSparkSession(c, session, metaStore));
 
     for (String key : sparkConf.keySet()) {
       if (STATIC_SPARK_CONF.contains(key)) {
@@ -93,20 +88,6 @@ public class LocalSessionFactory implements TerminalSessionFactory {
     }
 
     return new LocalTerminalSession(catalogs, session, initializeLogs, finallyConf);
-  }
-
-  private boolean isExternalMetastore(String catalog, Configurations configurations) {
-    String metastoreType =
-        configurations.get(SessionConfigOptions.catalogConnector(catalog)).toLowerCase();
-    return !metastoreType.equalsIgnoreCase(CatalogType.AMS.name());
-  }
-
-  private boolean isExternalConnector(String catalog, Configurations configurations) {
-    String connector =
-        configurations
-            .get(TerminalSessionFactory.SessionConfigOptions.catalogConnector(catalog))
-            .toLowerCase();
-    return EXTERNAL_CONNECTORS.contains(connector);
   }
 
   private void setHadoopConfigToSparkSession(

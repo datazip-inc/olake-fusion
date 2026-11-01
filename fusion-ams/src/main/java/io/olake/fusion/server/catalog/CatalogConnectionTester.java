@@ -25,7 +25,6 @@ import io.olake.fusion.aws.StaticAwsCredentialsProvider;
 import io.olake.fusion.properties.CatalogMetaProperties;
 import io.olake.fusion.table.TableMetaStore;
 import io.olake.fusion.utils.CatalogUtil;
-import io.olake.fusion.utils.MixedFormatCatalogUtil;
 import org.apache.iceberg.AppendFiles;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.FileFormat;
@@ -73,7 +72,7 @@ public class CatalogConnectionTester {
     // We cannot use icebergCatalog.java  because it does not support createTable operation.
     // Building raw iceberg catalog that supports createTable operation.
     Map<String, String> baseIcebergProps =
-        MixedFormatCatalogUtil.withIcebergCatalogInitializeProperties(
+        CatalogUtil.withIcebergCatalogInitializeProperties(
             catalogName, metastoreType, catalogMeta.getCatalogProperties());
     Map<String, String> icebergProps =
         CatalogMetaProperties.CATALOG_TYPE_GLUE.equalsIgnoreCase(metastoreType)

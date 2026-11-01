@@ -20,10 +20,16 @@
 
 package io.olake.fusion.formats.iceberg;
 
-import io.olake.fusion.FormatCatalog;
 import io.olake.fusion.FusionTable;
+import io.olake.fusion.TableFormat;
+import io.olake.fusion.api.CatalogMeta;
+import io.olake.fusion.aws.StaticAwsCredentialsProvider;
+import io.olake.fusion.io.AuthenticatedFileIOs;
+import io.olake.fusion.properties.CatalogMetaProperties;
 import io.olake.fusion.table.TableMetaStore;
-import io.olake.fusion.utils.MixedFormatCatalogUtil;
+import io.olake.fusion.utils.CatalogUtil;
+import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.catalog.Catalog;
 import org.apache.iceberg.catalog.Namespace;
@@ -35,23 +41,88 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-public class IcebergCatalog implements FormatCatalog {
+/**
+ * A Fusion catalog: the Iceberg {@link Catalog} built from a catalog's metastore type and
+ * properties, with the catalog's {@link TableMetaStore} for authentication. Tables are loaded as
+ * {@link FusionTable}s.
+ */
+public class IcebergCatalog {
 
-  private SupportsNamespaces asNamespaceCatalog;
-  private final Catalog icebergCatalog;
-  private final TableMetaStore metaStore;
+  private final String name;
+  private final String metastoreType;
   private final Map<String, String> properties;
+  private final TableMetaStore metaStore;
+  private final Catalog icebergCatalog;
+  private final SupportsNamespaces asNamespaceCatalog;
 
-  public IcebergCatalog(Catalog catalog, Map<String, String> properties, TableMetaStore metaStore) {
-    this.icebergCatalog = MixedFormatCatalogUtil.buildCacheCatalog(catalog, properties);
-    if (catalog instanceof SupportsNamespaces) {
-      this.asNamespaceCatalog = (SupportsNamespaces) catalog;
-    }
-    this.metaStore = metaStore;
-    this.properties = properties;
+  /** Builds the catalog described by a catalog meta. */
+  public static IcebergCatalog of(CatalogMeta meta) {
+    CatalogUtil.mergeCatalogProperties(meta, null);
+    return new IcebergCatalog(
+        meta.getCatalogName(),
+        meta.getCatalogType(),
+        meta.getCatalogProperties(),
+        CatalogUtil.buildMetaStore(meta));
   }
 
-  @Override
+  /** Returns true if a catalog with these properties serves Iceberg tables. */
+  public static boolean servesIceberg(String metastoreType, Map<String, String> catalogProperties) {
+    return CatalogUtil.tableFormats(
+            CatalogUtil.normalizeMetastoreType(metastoreType), catalogProperties)
+        .contains(TableFormat.ICEBERG);
+  }
+
+  /**
+   * Builds the Iceberg catalog.
+   *
+   * @param name catalog name
+   * @param metastoreType Fusion catalog type, such as {@code hive}, {@code glue}, {@code rest},
+   *     {@code custom} or {@code hadoop}
+   * @param catalogProperties catalog properties, including the {@code table.*} table defaults
+   * @param metaStore authentication context of the catalog
+   */
+  public IcebergCatalog(
+      String name,
+      String metastoreType,
+      Map<String, String> catalogProperties,
+      TableMetaStore metaStore) {
+    Preconditions.checkArgument(StringUtils.isNotBlank(metastoreType), "metastore type is blank");
+    String normalizedType = CatalogUtil.normalizeMetastoreType(metastoreType);
+    Map<String, String> icebergProperties =
+        CatalogUtil.withIcebergCatalogInitializeProperties(name, normalizedType, catalogProperties);
+    // apply glue credentials to glue catalog
+    if (CatalogMetaProperties.CATALOG_TYPE_GLUE.equalsIgnoreCase(normalizedType)) {
+      icebergProperties = StaticAwsCredentialsProvider.applyGlueCredentials(icebergProperties);
+    }
+    Catalog catalog =
+        org.apache.iceberg.CatalogUtil.buildIcebergCatalog(
+            name, icebergProperties, metaStore.getConfiguration());
+    this.name = name;
+    this.metastoreType = metastoreType;
+    this.properties = icebergProperties;
+    this.metaStore = metaStore;
+    this.icebergCatalog = CatalogUtil.buildCacheCatalog(catalog, icebergProperties);
+    this.asNamespaceCatalog =
+        catalog instanceof SupportsNamespaces ? (SupportsNamespaces) catalog : null;
+  }
+
+  public String name() {
+    return name;
+  }
+
+  public String metastoreType() {
+    return metastoreType;
+  }
+
+  public TableMetaStore authenticationContext() {
+    return metaStore;
+  }
+
+  /** Returns the catalog properties the Iceberg catalog was built with. */
+  public Map<String, String> properties() {
+    return properties;
+  }
+
   public List<String> listDatabases() {
     return metaStore.doAs(
         () ->
@@ -60,18 +131,15 @@ public class IcebergCatalog implements FormatCatalog {
                 .collect(Collectors.toList()));
   }
 
-  @Override
   public boolean databaseExists(String database) {
     return listDatabases().contains(database);
   }
 
-  @Override
   public boolean tableExists(String database, String table) {
     TableIdentifier identifier = TableIdentifier.of(database, table);
     return metaStore.doAs(() -> icebergCatalog.tableExists(identifier));
   }
 
-  @Override
   public void createDatabase(String database) {
     metaStore.doAs(
         () -> {
@@ -80,8 +148,10 @@ public class IcebergCatalog implements FormatCatalog {
         });
   }
 
-  @Override
   public void dropDatabase(String database) {
+    if (!listTables(database).isEmpty()) {
+      throw new IllegalStateException("Database: " + database + " is not empty.");
+    }
     metaStore.doAs(
         () -> {
           asNamespaceCatalog().dropNamespace(Namespace.of(database));
@@ -89,7 +159,7 @@ public class IcebergCatalog implements FormatCatalog {
         });
   }
 
-  @Override
+  /** Returns the names of the tables in the database. */
   public List<String> listTables(String database) {
     return metaStore.doAs(
         () ->
@@ -98,21 +168,30 @@ public class IcebergCatalog implements FormatCatalog {
                 .collect(Collectors.toList()));
   }
 
-  @Override
-  public FusionTable<?> loadTable(String database, String table) {
+  /**
+   * Loads a table.
+   *
+   * @throws io.olake.fusion.NoSuchTableException if the table does not exist
+   */
+  public FusionTable loadTable(String database, String table) {
     return metaStore.doAs(
         () -> {
           try {
             Table icebergTable = icebergCatalog.loadTable(TableIdentifier.of(database, table));
-            return IcebergTable.newIcebergTable(
-                io.olake.fusion.table.TableIdentifier.of(icebergCatalog.name(), database, table),
+            return new FusionTable(
+                io.olake.fusion.table.TableIdentifier.of(name, database, table),
                 icebergTable,
-                metaStore,
+                AuthenticatedFileIOs.buildAdaptIcebergFileIO(metaStore, icebergTable.io()),
                 properties);
           } catch (NoSuchTableException e) {
             throw new io.olake.fusion.NoSuchTableException(e);
           }
         });
+  }
+
+  public boolean dropTable(String database, String table, boolean purge) {
+    return metaStore.doAs(
+        () -> icebergCatalog.dropTable(TableIdentifier.of(database, table), purge));
   }
 
   private SupportsNamespaces asNamespaceCatalog() {
@@ -123,11 +202,5 @@ public class IcebergCatalog implements FormatCatalog {
               icebergCatalog.getClass().getName()));
     }
     return asNamespaceCatalog;
-  }
-
-  @Override
-  public boolean dropTable(String database, String table, boolean purge) {
-    return metaStore.doAs(
-        () -> icebergCatalog.dropTable(TableIdentifier.of(database, table), purge));
   }
 }

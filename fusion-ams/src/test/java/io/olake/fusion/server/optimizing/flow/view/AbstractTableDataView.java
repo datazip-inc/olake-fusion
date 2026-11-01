@@ -20,13 +20,8 @@
 
 package io.olake.fusion.server.optimizing.flow.view;
 
-import io.olake.fusion.TableFormat;
 import io.olake.fusion.data.ChangeAction;
-import io.olake.fusion.io.writer.GenericBaseTaskWriter;
-import io.olake.fusion.io.writer.GenericChangeTaskWriter;
-import io.olake.fusion.io.writer.GenericTaskWriters;
 import io.olake.fusion.io.writer.RecordWithAction;
-import io.olake.fusion.table.MixedTable;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Lists;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.PartitionKey;
@@ -53,7 +48,7 @@ import java.util.stream.Collectors;
 
 public abstract class AbstractTableDataView implements TableDataView {
 
-  protected MixedTable mixedTable;
+  protected Table mixedTable;
 
   protected Schema primary;
 
@@ -61,7 +56,7 @@ public abstract class AbstractTableDataView implements TableDataView {
 
   protected long targetFileSize;
 
-  public AbstractTableDataView(MixedTable mixedTable, Schema primary, long targetFileSize) {
+  public AbstractTableDataView(Table mixedTable, Schema primary, long targetFileSize) {
     this.mixedTable = mixedTable;
     this.primary = primary;
     this.schema = mixedTable.schema();
@@ -69,40 +64,7 @@ public abstract class AbstractTableDataView implements TableDataView {
   }
 
   protected WriteResult writeFile(List<RecordWithAction> records) throws IOException {
-    if (mixedTable.format() == TableFormat.ICEBERG) {
-      return writeIceberg(records);
-    } else if (mixedTable.isKeyedTable()) {
-      return writeKeyedTable(records);
-    } else {
-      return writeUnKeyedTable(records);
-    }
-  }
-
-  private WriteResult writeKeyedTable(List<RecordWithAction> records) throws IOException {
-    GenericChangeTaskWriter writer =
-        GenericTaskWriters.builderFor(mixedTable.asKeyedTable())
-            .withTransactionId(0L)
-            .buildChangeWriter();
-    try {
-      for (Record record : records) {
-        writer.write(record);
-      }
-    } finally {
-      writer.close();
-    }
-    return writer.complete();
-  }
-
-  private WriteResult writeUnKeyedTable(List<RecordWithAction> records) throws IOException {
-    GenericBaseTaskWriter writer = GenericTaskWriters.builderFor(mixedTable).buildBaseWriter();
-    try {
-      for (Record record : records) {
-        writer.write(record);
-      }
-    } finally {
-      writer.close();
-    }
-    return writer.complete();
+    return writeIceberg(records);
   }
 
   private WriteResult writeIceberg(List<RecordWithAction> records) throws IOException {
@@ -113,11 +75,9 @@ public abstract class AbstractTableDataView implements TableDataView {
                 .map(Types.NestedField::fieldId)
                 .collect(Collectors.toList()),
             schema,
-            mixedTable.asUnkeyedTable(),
+            mixedTable,
             FileFormat.PARQUET,
-            OutputFileFactory.builderFor(mixedTable.asUnkeyedTable(), 1, 1)
-                .format(FileFormat.PARQUET)
-                .build());
+            OutputFileFactory.builderFor(mixedTable, 1, 1).format(FileFormat.PARQUET).build());
     for (RecordWithAction record : records) {
       if (record.getAction() == ChangeAction.DELETE
           || record.getAction() == ChangeAction.UPDATE_BEFORE) {

@@ -35,21 +35,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.yaml.snakeyaml.Yaml;
 
-import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.ServiceLoader;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -170,15 +164,6 @@ public abstract class AbstractPluginManager<T extends ActivePlugin> implements P
   }
 
   /**
-   * Jars path for this plugin manager.
-   *
-   * @return plugins path.
-   */
-  protected String pluginPath() {
-    return Environments.getPluginPath() + "/" + pluginCategory();
-  }
-
-  /**
    * Get plugin manger config file path
    *
    * @return path of plugin manger config path
@@ -205,53 +190,10 @@ public abstract class AbstractPluginManager<T extends ActivePlugin> implements P
             });
   }
 
+  /** Finds the plugin implementations on the server classpath through {@link ServiceLoader}. */
   private void foundAvailablePlugins() {
     ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
-    ServiceLoader<T> buildInLoader = ServiceLoader.load(pluginType, classLoader);
-    addToFoundedPlugin(buildInLoader);
-
-    try {
-      Path pluginPath = Paths.get(pluginPath());
-      if (!Files.exists(pluginPath) || !Files.isDirectory(pluginPath)) {
-        return;
-      }
-      Files.list(pluginPath)
-          .map(Path::toFile)
-          .forEach(
-              file -> {
-                if (file.isFile() && file.getName().endsWith(".jar")) {
-                  findSingleJarExternalPlugins(file, classLoader);
-                } else if (file.isDirectory()) {
-                  findClasspathExternalPlugins(file, classLoader);
-                }
-              });
-    } catch (IOException e) {
-      throw new LoadingPluginException("Failed when discover available plugins", e);
-    }
-  }
-
-  protected void findSingleJarExternalPlugins(File pluginJarFile, ClassLoader parentClassLoader) {
-    try {
-      ClassLoader pluginClassLoader =
-          new URLClassLoader(new URL[] {pluginJarFile.toURI().toURL()}, parentClassLoader);
-      ServiceLoader<T> loader = ServiceLoader.load(pluginType, pluginClassLoader);
-      addToFoundedPlugin(loader);
-    } catch (MalformedURLException e) {
-      throw new LoadingPluginException("Failed when load plugin", e);
-    }
-  }
-
-  protected void findClasspathExternalPlugins(File pluginClasspath, ClassLoader parentClassLoader) {
-    URL[] jarFiles =
-        Optional.ofNullable(pluginClasspath.listFiles((dir, name) -> name.endsWith(".jar")))
-            .map(Arrays::asList)
-            .map(files -> files.stream().map(this::fileToURL).toArray(URL[]::new))
-            .orElse(null);
-    if (jarFiles != null) {
-      ClassLoader pluginClassLoader = new URLClassLoader(jarFiles, parentClassLoader);
-      ServiceLoader<T> loader = ServiceLoader.load(pluginType, pluginClassLoader);
-      addToFoundedPlugin(loader);
-    }
+    addToFoundedPlugin(ServiceLoader.load(pluginType, classLoader));
   }
 
   @VisibleForTesting
@@ -284,14 +226,6 @@ public abstract class AbstractPluginManager<T extends ActivePlugin> implements P
       }
     }
     return configs;
-  }
-
-  private URL fileToURL(File file) {
-    try {
-      return file.toURI().toURL();
-    } catch (MalformedURLException e) {
-      throw new RuntimeException(e);
-    }
   }
 
   private void addToFoundedPlugin(ServiceLoader<T> loader) {

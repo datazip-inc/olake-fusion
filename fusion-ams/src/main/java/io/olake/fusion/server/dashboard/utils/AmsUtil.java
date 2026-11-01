@@ -44,7 +44,6 @@ import java.util.stream.Collectors;
  */
 public class AmsUtil {
 
-  private static final String ZOOKEEPER_ADDRESS_FORMAT = "zookeeper://%s/%s";
   private static final String THRIFT_ADDRESS_FORMAT = "thrift://%s:%s";
 
   public static Long longOrNull(String value) {
@@ -126,25 +125,13 @@ public class AmsUtil {
   }
 
   public static String getAMSThriftAddress(Configurations conf, String serviceName) {
-    if (conf.getBoolean(FusionManagementConf.HA_ENABLE)) {
+    if (Constants.THRIFT_OPTIMIZING_SERVICE_NAME.equals(serviceName)) {
       return String.format(
-          ZOOKEEPER_ADDRESS_FORMAT,
-          conf.getString(FusionManagementConf.HA_ZOOKEEPER_ADDRESS),
-          conf.getString(FusionManagementConf.HA_CLUSTER_NAME));
+          THRIFT_ADDRESS_FORMAT,
+          conf.getString(FusionManagementConf.SERVER_EXPOSE_HOST),
+          conf.getInteger(FusionManagementConf.OPTIMIZING_SERVICE_THRIFT_BIND_PORT));
     } else {
-      if (Constants.THRIFT_TABLE_SERVICE_NAME.equals(serviceName)) {
-        return String.format(
-            THRIFT_ADDRESS_FORMAT,
-            conf.getString(FusionManagementConf.SERVER_EXPOSE_HOST),
-            conf.getInteger(FusionManagementConf.TABLE_SERVICE_THRIFT_BIND_PORT));
-      } else if (Constants.THRIFT_OPTIMIZING_SERVICE_NAME.equals(serviceName)) {
-        return String.format(
-            THRIFT_ADDRESS_FORMAT,
-            conf.getString(FusionManagementConf.SERVER_EXPOSE_HOST),
-            conf.getInteger(FusionManagementConf.OPTIMIZING_SERVICE_THRIFT_BIND_PORT));
-      } else {
-        throw new IllegalArgumentException(String.format("Unknown service name %s", serviceName));
-      }
+      throw new IllegalArgumentException(String.format("Unknown service name %s", serviceName));
     }
   }
 

@@ -20,19 +20,14 @@
 
 package io.olake.fusion.server.dashboard.utils;
 
-import io.olake.fusion.Constants;
 import io.olake.fusion.server.dashboard.model.SnapshotInfo;
 import io.olake.fusion.server.dashboard.model.TableStatistics;
-import io.olake.fusion.table.KeyedTable;
-import io.olake.fusion.table.MixedTable;
 import io.olake.fusion.table.TableIdentifier;
-import io.olake.fusion.table.UnkeyedTable;
 import io.olake.fusion.table.descriptor.FilesStatistics;
 import io.olake.fusion.table.descriptor.FilesStatisticsBuilder;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.SnapshotSummary;
 import org.apache.iceberg.Table;
-import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.util.PropertyUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,43 +39,6 @@ import java.util.Map;
 
 public class TableStatCollector {
   private static final Logger LOG = LoggerFactory.getLogger(TableStatCollector.class);
-
-  @Nonnull
-  public static TableStatistics collectChangeTableInfo(KeyedTable table) {
-    try {
-      UnkeyedTable internalTable = null;
-      try {
-        internalTable = table.changeTable();
-      } catch (NoSuchTableException e) {
-        LOG.warn("No related hive table found. {}", table.id(), e);
-      }
-      TableStatistics tableInfo = new TableStatistics();
-      fillTableStatistics(tableInfo, internalTable, table);
-      return tableInfo;
-    } catch (Exception e) {
-      LOG.error("failed to collect change table info of {}", table.id(), e);
-      return initEmptyTableStatistics(new TableStatistics(), table.id());
-    }
-  }
-
-  @Nonnull
-  public static TableStatistics collectBaseTableInfo(KeyedTable table) {
-    try {
-      LOG.info("start collect {} table info of {}", Constants.INNER_TABLE_BASE, table.id());
-      UnkeyedTable internalTable = null;
-      try {
-        internalTable = table.baseTable();
-      } catch (org.apache.iceberg.exceptions.NoSuchTableException e) {
-        LOG.warn("No related hive table found. {}", table.id(), e);
-      }
-      TableStatistics tableInfo = new TableStatistics();
-      fillTableStatistics(tableInfo, internalTable, table);
-      return tableInfo;
-    } catch (Exception e) {
-      LOG.error("failed to collect base table info of {}", table.id(), e);
-      return initEmptyTableStatistics(new TableStatistics(), table.id());
-    }
-  }
 
   public static TableStatistics union(
       TableStatistics changeTableInfo, TableStatistics baseTableInfo) {
@@ -149,8 +107,7 @@ public class TableStatCollector {
         PropertyUtil.propertyAsLong(snapshot.summary(), SnapshotSummary.TOTAL_RECORDS_PROP, 0));
   }
 
-  private static void fillTableSnapshotInfo(
-      TableStatistics tableStatistics, UnkeyedTable internalTable) {
+  private static void fillTableSnapshotInfo(TableStatistics tableStatistics, Table internalTable) {
     if (internalTable.currentSnapshot() == null) {
       return;
     }
@@ -216,12 +173,12 @@ public class TableStatCollector {
   }
 
   public static void fillTableStatistics(
-      TableStatistics tableStatistics, UnkeyedTable tableStore, MixedTable table) {
+      TableStatistics tableStatistics, Table tableStore, TableIdentifier tableIdentifier) {
     if (tableStore == null) {
-      initEmptyTableStatistics(tableStatistics, table.id());
+      initEmptyTableStatistics(tableStatistics, tableIdentifier);
       return;
     }
-    tableStatistics.setTableIdentifier(table.id());
+    tableStatistics.setTableIdentifier(tableIdentifier);
 
     // count current snapshot file count&size
     FilesStatisticsBuilder totalFileStatBuilder = new FilesStatisticsBuilder();

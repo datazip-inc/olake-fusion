@@ -29,9 +29,9 @@ import io.olake.fusion.api.CatalogMeta;
 import io.olake.fusion.config.Configurations;
 import io.olake.fusion.config.TableConfiguration;
 import io.olake.fusion.server.FusionManagementConf;
+import io.olake.fusion.server.catalog.CatalogBuilder;
 import io.olake.fusion.server.catalog.CatalogManager;
 import io.olake.fusion.server.catalog.ExternalCatalog;
-import io.olake.fusion.server.catalog.InternalCatalog;
 import io.olake.fusion.server.catalog.ServerCatalog;
 import io.olake.fusion.server.manager.MetricManager;
 import io.olake.fusion.server.optimizing.OptimizingStatus;
@@ -67,7 +67,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -100,32 +99,6 @@ public class DefaultTableService extends PersistentBase implements TableService 
         configuration.get(FusionManagementConf.REFRESH_EXTERNAL_CATALOGS_INTERVAL).toMillis();
     this.serverConfiguration = configuration;
     this.tableRuntimeFactoryManager = tableRuntimeFactoryManager;
-  }
-
-  @Override
-  public void onTableCreated(InternalCatalog catalog, ServerTableIdentifier identifier) {
-    triggerTableAdded(catalog, identifier);
-  }
-
-  @Override
-  public void onTableDropped(InternalCatalog catalog, ServerTableIdentifier identifier) {
-    Optional.ofNullable(tableRuntimeMap.get(identifier.getId()))
-        .ifPresent(
-            tableRuntime -> {
-              try {
-                if (headHandler != null) {
-                  headHandler.fireTableRemoved(tableRuntime);
-                }
-                tableRuntime.dispose();
-                tableRuntimeMap.remove(
-                    identifier.getId()); // remove only after successful operation
-              } catch (Exception e) {
-                LOG.error(
-                    "Error occurred while removing tableRuntime of table {}",
-                    identifier.getId(),
-                    e);
-              }
-            });
   }
 
   @Override
@@ -174,6 +147,7 @@ public class DefaultTableService extends PersistentBase implements TableService 
                     }));
 
     List<TableRuntime> tableRuntimes = new ArrayList<>(tableRuntimeMetaList.size());
+    Set<String> unsupportedCatalogs = unsupportedCatalogNames();
 
     for (TableRuntimeMeta tableRuntimeMeta : tableRuntimeMetaList) {
       ServerTableIdentifier identifier = identifierMap.get(tableRuntimeMeta.getTableId());
@@ -181,6 +155,12 @@ public class DefaultTableService extends PersistentBase implements TableService 
         LOG.warn(
             "No available table identifier found for table runtime meta id={}",
             tableRuntimeMeta.getTableId());
+        continue;
+      }
+      if (unsupportedCatalogs.contains(identifier.getCatalog())) {
+        LOG.warn(
+            "Skipping table {}: its catalog has a catalog type Fusion no longer supports",
+            identifier);
         continue;
       }
       List<TableRuntimeState> states = statesMap.get(tableRuntimeMeta.getTableId());
@@ -224,6 +204,24 @@ public class DefaultTableService extends PersistentBase implements TableService 
         this::exploreTableRuntimes, 0, externalCatalogRefreshingInterval, TimeUnit.MILLISECONDS);
   }
 
+  /**
+   * Names of stored catalogs whose type Fusion no longer supports (for example the removed {@code
+   * ams} internal catalog). Their tables are not loaded, and their stored rows are left as they
+   * are.
+   */
+  private Set<String> unsupportedCatalogNames() {
+    Set<String> names = Sets.newHashSet();
+    for (CatalogMeta catalogMeta : catalogManager.listCatalogMetas()) {
+      try {
+        CatalogBuilder.checkSupported(catalogMeta);
+      } catch (RuntimeException e) {
+        LOG.warn("Skipping catalog {}: {}", catalogMeta.getCatalogName(), e.getMessage());
+        names.add(catalogMeta.getCatalogName());
+      }
+    }
+    return names;
+  }
+
   @Override
   public TableRuntime getRuntime(Long tableId) {
     checkStarted();
@@ -243,7 +241,7 @@ public class DefaultTableService extends PersistentBase implements TableService 
   }
 
   @Override
-  public FusionTable<?> loadTable(ServerTableIdentifier identifier) {
+  public FusionTable loadTable(ServerTableIdentifier identifier) {
     return catalogManager.loadTable(identifier.getIdentifier());
   }
 
@@ -271,11 +269,7 @@ public class DefaultTableService extends PersistentBase implements TableService 
     LOG.info("Syncing server catalogs: {}", String.join(",", externalCatalogNames));
     for (ServerCatalog serverCatalog : externalCatalogs) {
       try {
-        if (serverCatalog.isInternal()) {
-          exploreInternalCatalog((InternalCatalog) serverCatalog);
-        } else {
-          exploreExternalCatalog((ExternalCatalog) serverCatalog);
-        }
+        exploreExternalCatalog((ExternalCatalog) serverCatalog);
       } catch (Throwable e) {
         LOG.error(
             "TableExplorer error when explore table runtimes for catalog:{}",
@@ -404,46 +398,6 @@ public class DefaultTableService extends PersistentBase implements TableService 
     taskFutures.forEach(CompletableFuture::join);
   }
 
-  private void exploreInternalCatalog(InternalCatalog internalCatalog) {
-    LOG.info("Start explore internal catalog {}", internalCatalog.name());
-    List<ServerTableIdentifier> identifiers =
-        getAs(
-            TableMetaMapper.class, m -> m.selectTableIdentifiersByCatalog(internalCatalog.name()));
-    AtomicInteger addedCount = new AtomicInteger();
-    identifiers.stream()
-        .filter(i -> !tableRuntimeMap.containsKey(i.getId()))
-        .peek(
-            i ->
-                LOG.info(
-                    "Found new table {} in internal catalog {}, create table runtime for it.",
-                    i,
-                    internalCatalog.name()))
-        .peek(i -> addedCount.incrementAndGet())
-        .forEach(i -> triggerTableAdded(internalCatalog, i));
-
-    Set<Long> tableIds =
-        identifiers.stream().map(ServerTableIdentifier::getId).collect(Collectors.toSet());
-    Set<ServerTableIdentifier> tablesToBeDisposed = Sets.newHashSet();
-    tableRuntimeMap.forEach(
-        (id, tableRuntime) -> {
-          if (tableRuntime.getTableIdentifier().getCatalog().equals(internalCatalog.name())) {
-            if (!tableIds.contains(id)) {
-              LOG.info(
-                  "Found table {} in internal catalog {} is removed, dispose table runtime for it.",
-                  id,
-                  internalCatalog.name());
-              tablesToBeDisposed.add(tableRuntime.getTableIdentifier());
-            }
-          }
-        });
-    tablesToBeDisposed.forEach(this::disposeTable);
-    LOG.info(
-        "Explore internal catalog {} finished, {} tables are added, {} tables are disposed.",
-        internalCatalog.name(),
-        addedCount.get(),
-        tablesToBeDisposed.size());
-  }
-
   private void checkStarted() {
     try {
       initialized.get();
@@ -483,7 +437,7 @@ public class DefaultTableService extends PersistentBase implements TableService 
 
   private boolean triggerTableAdded(
       ServerCatalog catalog, ServerTableIdentifier serverTableIdentifier) {
-    FusionTable<?> table =
+    FusionTable table =
         catalog.loadTable(
             serverTableIdentifier.getDatabase(), serverTableIdentifier.getTableName());
     if (TableFormat.ICEBERG.equals(table.format())) {

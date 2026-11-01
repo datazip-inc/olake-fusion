@@ -23,8 +23,6 @@ package io.olake.fusion.server.optimizing;
 import io.olake.fusion.optimizing.OptimizingType;
 import io.olake.fusion.properties.CatalogMetaProperties;
 import io.olake.fusion.server.AmsEnvironment;
-import io.olake.fusion.server.RestCatalogService;
-import io.olake.fusion.server.catalog.InternalCatalog;
 import io.olake.fusion.server.catalog.ServerCatalog;
 import io.olake.fusion.server.process.TableProcessMeta;
 import io.olake.fusion.table.TableMetaStore;
@@ -44,7 +42,6 @@ import org.apache.iceberg.data.GenericRecord;
 import org.apache.iceberg.data.InternalRecordWrapper;
 import org.apache.iceberg.data.Record;
 import org.apache.iceberg.hadoop.HadoopCatalog;
-import org.apache.iceberg.rest.RESTCatalog;
 import org.apache.iceberg.types.Types;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Disabled;
@@ -70,20 +67,16 @@ public class TestIcebergHadoopOptimizing extends AbstractOptimizingTest {
   private static final String TABLE = "iceberg_test_tbl";
 
   private Catalog icebergCatalog;
-  private InternalCatalog serverCatalog;
 
   @AfterEach
   public void clean() {
     if (icebergCatalog != null) {
       icebergCatalog.dropTable(TableIdentifier.of(DATABASE, TABLE), true);
     }
-    if (serverCatalog != null && serverCatalog.tableExists(DATABASE, TABLE)) {
-      serverCatalog.dropTable(DATABASE, TABLE);
-    }
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {AmsEnvironment.ICEBERG_CATALOG, AmsEnvironment.INTERNAL_ICEBERG_CATALOG})
+  @ValueSource(strings = {AmsEnvironment.ICEBERG_CATALOG})
   public void testIcebergTableOptimizing(String catalog) throws IOException {
     Table table = createIcebergTable(catalog, PartitionSpec.unpartitioned(), 2);
     BaseOptimizingChecker checker = newOptimizingChecker(catalog);
@@ -159,7 +152,7 @@ public class TestIcebergHadoopOptimizing extends AbstractOptimizingTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {AmsEnvironment.ICEBERG_CATALOG, AmsEnvironment.INTERNAL_ICEBERG_CATALOG})
+  @ValueSource(strings = {AmsEnvironment.ICEBERG_CATALOG})
   public void testV1IcebergTableOptimizing(String catalog) throws IOException {
     Table table = createIcebergTable(catalog, PartitionSpec.unpartitioned(), 1);
     BaseOptimizingChecker checker = newOptimizingChecker(catalog);
@@ -201,7 +194,7 @@ public class TestIcebergHadoopOptimizing extends AbstractOptimizingTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {AmsEnvironment.ICEBERG_CATALOG, AmsEnvironment.INTERNAL_ICEBERG_CATALOG})
+  @ValueSource(strings = {AmsEnvironment.ICEBERG_CATALOG})
   public void testPartitionIcebergTableOptimizing(String catalog) throws IOException {
     Table table = createIcebergTable(catalog, SPEC, 2);
     BaseOptimizingChecker checker = newOptimizingChecker(catalog);
@@ -274,7 +267,7 @@ public class TestIcebergHadoopOptimizing extends AbstractOptimizingTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {AmsEnvironment.ICEBERG_CATALOG, AmsEnvironment.INTERNAL_ICEBERG_CATALOG})
+  @ValueSource(strings = {AmsEnvironment.ICEBERG_CATALOG})
   public void testIcebergTableFullOptimize(String catalog) throws IOException {
     Table table = createIcebergTable(catalog, PartitionSpec.unpartitioned(), 2);
     BaseOptimizingChecker checker = newOptimizingChecker(catalog);
@@ -346,7 +339,7 @@ public class TestIcebergHadoopOptimizing extends AbstractOptimizingTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {AmsEnvironment.ICEBERG_CATALOG, AmsEnvironment.INTERNAL_ICEBERG_CATALOG})
+  @ValueSource(strings = {AmsEnvironment.ICEBERG_CATALOG})
   public void testPartitionIcebergTablePartialOptimizing(String catalog) throws IOException {
     Table table = createIcebergTable(catalog, SPEC, 2);
     BaseOptimizingChecker checker = newOptimizingChecker(catalog);
@@ -411,12 +404,6 @@ public class TestIcebergHadoopOptimizing extends AbstractOptimizingTest {
   private Table createIcebergTable(String catalog, PartitionSpec spec, int formatVersion) {
     ServerCatalog serverCatalog =
         amsEnv.serviceContainer().getCatalogManager().getServerCatalog(catalog);
-    if (serverCatalog instanceof InternalCatalog) {
-      this.serverCatalog = (InternalCatalog) serverCatalog;
-      if (!this.serverCatalog.databaseExists(DATABASE)) {
-        this.serverCatalog.createDatabase(DATABASE);
-      }
-    }
 
     String impl;
     Map<String, String> properties = Maps.newHashMap();
@@ -428,10 +415,6 @@ public class TestIcebergHadoopOptimizing extends AbstractOptimizingTest {
               .getCatalogProperties()
               .get(CatalogMetaProperties.KEY_WAREHOUSE);
       properties.put(CatalogMetaProperties.KEY_WAREHOUSE, warehouse);
-    } else if (catalog.equalsIgnoreCase(AmsEnvironment.INTERNAL_ICEBERG_CATALOG)) {
-      impl = RESTCatalog.class.getName();
-      properties.put("uri", amsEnv.getHttpUrl() + RestCatalogService.ICEBERG_REST_API_PREFIX);
-      properties.put(CatalogMetaProperties.KEY_WAREHOUSE, AmsEnvironment.INTERNAL_ICEBERG_CATALOG);
     } else {
       throw new IllegalStateException("unknown catalog");
     }

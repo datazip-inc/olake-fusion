@@ -169,7 +169,21 @@ public class DefaultOptimizingService extends StatedPersistentBase
                   maxPlanningParallelism);
           optimizingQueueByGroup.put(groupName, optimizingQueue);
         });
-    optimizers.forEach(optimizer -> registerOptimizer(optimizer, false));
+    optimizers.forEach(
+        optimizer -> {
+          if (hasCurrentTaskFormat(optimizer.getProperties())) {
+            registerOptimizer(optimizer, false);
+          } else {
+            // Registered before an upgrade that changed the task format: drop the registration so
+            // the optimizer has to register again, where it is rejected until it is upgraded.
+            LOG.warn(
+                "Dropping registration {} of optimizer {}: it uses another task format than {}",
+                optimizer.getToken(),
+                optimizer.getResourceId(),
+                OptimizerProperties.OPTIMIZER_TASK_FORMAT_VALUE);
+            doAs(OptimizerMapper.class, mapper -> mapper.deleteOptimizer(optimizer.getToken()));
+          }
+        });
     if (!optimizers.isEmpty()) {
       trackInstalledFusion();
     }
@@ -286,6 +300,7 @@ public class DefaultOptimizingService extends StatedPersistentBase
               }
             });
 
+    rejectOtherTaskFormat(registerInfo.getResourceId(), registerInfo.getProperties());
     OptimizingQueue queue = getQueueByGroup(registerInfo.getGroupName());
     retireUntaggedRegistrations(registerInfo);
     // An optimizer that Kubernetes restarted registers again under the same resource id. Retire
@@ -330,6 +345,30 @@ public class DefaultOptimizingService extends StatedPersistentBase
                   registerInfo.getResourceId());
               unregisterOptimizer(untagged.getToken());
             });
+  }
+
+  /**
+   * Rejects an optimizer that reads and writes task inputs and outputs in another format than this
+   * server, such as one of a release before the format change; it would fail every task. The
+   * optimizer exits on the rejection, so the server and the optimizer image must be upgraded
+   * together.
+   */
+  private static void rejectOtherTaskFormat(String resourceId, Map<String, String> properties) {
+    if (!hasCurrentTaskFormat(properties)) {
+      throw new ForbiddenException(
+          String.format(
+              "Optimizer %s uses task format %s, this Fusion server uses task format %s;"
+                  + " upgrade the optimizer to the server's release",
+              resourceId,
+              properties == null ? null : properties.get(OptimizerProperties.OPTIMIZER_TASK_FORMAT),
+              OptimizerProperties.OPTIMIZER_TASK_FORMAT_VALUE));
+    }
+  }
+
+  private static boolean hasCurrentTaskFormat(Map<String, String> properties) {
+    return properties != null
+        && OptimizerProperties.OPTIMIZER_TASK_FORMAT_VALUE.equals(
+            properties.get(OptimizerProperties.OPTIMIZER_TASK_FORMAT));
   }
 
   private static boolean isTagged(Map<String, String> properties) {
@@ -477,7 +516,7 @@ public class DefaultOptimizingService extends StatedPersistentBase
     }
 
     @Override
-    public void handleTableAdded(FusionTable<?> table, TableRuntime runtime) {
+    public void handleTableAdded(FusionTable table, TableRuntime runtime) {
       DefaultTableRuntime tableRuntime = (DefaultTableRuntime) runtime;
       getOptionalQueueByGroup(tableRuntime.getGroupName())
           .ifPresent(q -> q.refreshTable(tableRuntime));

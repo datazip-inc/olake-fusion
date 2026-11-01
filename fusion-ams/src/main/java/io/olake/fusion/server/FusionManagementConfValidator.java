@@ -25,8 +25,20 @@ import io.olake.fusion.config.Configurations;
 import io.olake.fusion.server.dashboard.utils.AmsUtil;
 
 import java.net.InetAddress;
+import java.util.Arrays;
+import java.util.List;
 
 public class FusionManagementConfValidator {
+
+  /** Pluggable authentication keys that Fusion no longer reads; fail fast if one is configured. */
+  private static final List<String> REMOVED_AUTH_KEYS =
+      Arrays.asList(
+          "http-server.login-auth-provider",
+          "http-server.auth-basic-provider",
+          "http-server.auth-jwt-provider",
+          "http-server.login-auth-ldap-url",
+          "http-server.login-auth-ldap-user-pattern");
+
   public static void validateConfig(Configurations configurations) {
     // SERVER_EXPOSE_HOST config
     if ("".equals(configurations.getString(FusionManagementConf.SERVER_EXPOSE_HOST))) {
@@ -37,48 +49,45 @@ public class FusionManagementConfValidator {
         AmsUtil.lookForBindHost(configurations.getString(FusionManagementConf.SERVER_EXPOSE_HOST));
     configurations.setString(FusionManagementConf.SERVER_EXPOSE_HOST, inetAddress.getHostAddress());
 
-    // mysql or postgres config
-    if (FusionManagementConf.DB_TYPE_MYSQL.equalsIgnoreCase(
-            configurations.getString(FusionManagementConf.DB_TYPE))
-        || FusionManagementConf.DB_TYPE_POSTGRES.equalsIgnoreCase(
-            configurations.getString(FusionManagementConf.DB_TYPE))) {
-      if ("".equals(configurations.getString(FusionManagementConf.DB_PASSWORD))
-          || "".equals(configurations.getString(FusionManagementConf.DB_USER_NAME))) {
+    // PostgreSQL is the only supported database
+    String dbType = configurations.getString(FusionManagementConf.DB_TYPE);
+    if (!FusionManagementConf.DB_TYPE_POSTGRES.equals(dbType)) {
+      throw new IllegalArgumentException(
+          String.format(
+              "Unsupported %s: %s, only %s is supported",
+              FusionManagementConf.DB_TYPE.key(), dbType, FusionManagementConf.DB_TYPE_POSTGRES));
+    }
+    if ("".equals(configurations.getString(FusionManagementConf.DB_PASSWORD))
+        || "".equals(configurations.getString(FusionManagementConf.DB_USER_NAME))) {
+      throw new IllegalArgumentException("database username and password must be configured");
+    }
+
+    // REST API authentication: only session login and API-token signatures are supported
+    String restAuthType = configurations.getString(FusionManagementConf.HTTP_SERVER_REST_AUTH_TYPE);
+    if (!FusionManagementConf.HTTP_SERVER_REST_AUTH_TYPE_TOKEN.equalsIgnoreCase(restAuthType)) {
+      throw new IllegalArgumentException(
+          String.format(
+              "Illegal %s: %s, only %s is supported",
+              FusionManagementConf.HTTP_SERVER_REST_AUTH_TYPE.key(),
+              restAuthType,
+              FusionManagementConf.HTTP_SERVER_REST_AUTH_TYPE_TOKEN));
+    }
+    for (String key : REMOVED_AUTH_KEYS) {
+      if (configurations.containsKey(key)) {
         throw new IllegalArgumentException(
-            "username and password must be configured if the database type is mysql or postgres");
+            String.format("configuration %s is no longer supported, remove it", key));
       }
     }
 
-    // HA config
-    if (configurations.getBoolean(FusionManagementConf.HA_ENABLE)) {
-      String type = configurations.getString(FusionManagementConf.HA_TYPE).toLowerCase();
-      if (!FusionManagementConf.HA_TYPE_ZK.equals(type)
-          && !FusionManagementConf.HA_TYPE_DATABASE.equals(type)) {
-        throw new IllegalArgumentException(
-            String.format("Illegal ha.type: %s, zk or database is available", type));
-      }
-      if (FusionManagementConf.HA_TYPE_ZK.equals(type)) {
-        if ("".equals(configurations.getString(FusionManagementConf.HA_ZOOKEEPER_ADDRESS))) {
-          throw new IllegalArgumentException(
-              FusionManagementConf.HA_ZOOKEEPER_ADDRESS.key()
-                  + " must be configured when ha.type=zk");
-        }
-      } else {
-        String dbUrl = configurations.getString(FusionManagementConf.DB_CONNECTION_URL);
-        if ("".equals(dbUrl)) {
-          throw new IllegalArgumentException(
-              "database.url must be configured when ha.type=database");
-        }
-      }
-    }
-    // terminal config
-    String terminalBackend =
-        configurations.getString(FusionManagementConf.TERMINAL_BACKEND).toLowerCase();
-    if (!FusionManagementConf.TERMINAL_BACKEND_VALUES.contains(terminalBackend)) {
+    // terminal config: the local Spark backend is the only one
+    String terminalBackend = configurations.getString(FusionManagementConf.TERMINAL_BACKEND);
+    if (!FusionManagementConf.TERMINAL_BACKEND_LOCAL.equalsIgnoreCase(terminalBackend)) {
       throw new IllegalArgumentException(
           String.format(
-              "Illegal terminal implement: %s, local, kyuubi, custom is available",
-              terminalBackend));
+              "Illegal %s: %s, only %s is supported",
+              FusionManagementConf.TERMINAL_BACKEND.key(),
+              terminalBackend,
+              FusionManagementConf.TERMINAL_BACKEND_LOCAL));
     }
 
     validateThreadCount(configurations, FusionManagementConf.REFRESH_TABLES_THREAD_COUNT);
@@ -90,9 +99,6 @@ public class FusionManagementConfValidator {
 
     if (configurations.getBoolean(FusionManagementConf.CLEAN_ORPHAN_FILES_ENABLED)) {
       validateThreadCount(configurations, FusionManagementConf.CLEAN_ORPHAN_FILES_THREAD_COUNT);
-    }
-    if (configurations.getBoolean(FusionManagementConf.SYNC_HIVE_TABLES_ENABLED)) {
-      validateThreadCount(configurations, FusionManagementConf.SYNC_HIVE_TABLES_THREAD_COUNT);
     }
   }
 

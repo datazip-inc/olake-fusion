@@ -41,7 +41,7 @@ import io.olake.fusion.api.OptimizingTaskId;
 import io.olake.fusion.api.OptimizingTaskResult;
 import io.olake.fusion.catalog.BasicCatalogTestHelper;
 import io.olake.fusion.catalog.CatalogTestHelper;
-import io.olake.fusion.io.MixedDataTestHelpers;
+import io.olake.fusion.io.DataTestHelpers;
 import io.olake.fusion.metrics.Gauge;
 import io.olake.fusion.metrics.MetricKey;
 import io.olake.fusion.metrics.MetricRegistry;
@@ -55,14 +55,13 @@ import io.olake.fusion.server.resource.OptimizerThread;
 import io.olake.fusion.server.resource.QuotaProvider;
 import io.olake.fusion.server.table.AMSTableTestBase;
 import io.olake.fusion.server.table.DefaultTableRuntime;
-import io.olake.fusion.table.MixedTable;
 import io.olake.fusion.table.TableProperties;
-import io.olake.fusion.table.UnkeyedTable;
 import io.olake.fusion.utils.SerializationUtil;
 import org.apache.amoro.shade.guava32.com.google.common.collect.ImmutableMap;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Lists;
 import org.apache.iceberg.AppendFiles;
 import org.apache.iceberg.DataFile;
+import org.apache.iceberg.Table;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.data.Record;
 import org.junit.Assert;
@@ -529,15 +528,14 @@ public class TestOptimizingQueue extends AMSTableTestBase {
   }
 
   protected DefaultTableRuntime initTableWithFiles() {
-    MixedTable mixedTable =
-        (MixedTable) tableService().loadTable(serverTableIdentifier()).originalTable();
+    Table mixedTable = tableService().loadTable(serverTableIdentifier()).table();
     mixedTable
         .updateProperties()
         .set(TableProperties.SELF_OPTIMIZING_MIN_PLAN_INTERVAL, "10")
         .set(TableProperties.SELF_OPTIMIZING_MINOR_TRIGGER_CRON, "0 0 * * *")
         .commit();
-    appendData(mixedTable.asUnkeyedTable(), 1);
-    appendData(mixedTable.asUnkeyedTable(), 2);
+    appendData(mixedTable, 1);
+    appendData(mixedTable, 2);
     DefaultTableRuntime tableRuntime =
         buildTableRuntimeMeta(OptimizingStatus.PENDING, defaultResourceGroup());
 
@@ -546,10 +544,9 @@ public class TestOptimizingQueue extends AMSTableTestBase {
   }
 
   protected DefaultTableRuntime initTableWithPartitionedFiles() {
-    MixedTable mixedTable =
-        (MixedTable) tableService().loadTable(serverTableIdentifier()).originalTable();
-    appendPartitionedData(mixedTable.asUnkeyedTable(), 1);
-    appendPartitionedData(mixedTable.asUnkeyedTable(), 2);
+    Table mixedTable = tableService().loadTable(serverTableIdentifier()).table();
+    appendPartitionedData(mixedTable, 1);
+    appendPartitionedData(mixedTable, 2);
     DefaultTableRuntime tableRuntime =
         buildTableRuntimeMeta(OptimizingStatus.PENDING, defaultResourceGroup());
 
@@ -570,27 +567,25 @@ public class TestOptimizingQueue extends AMSTableTestBase {
     return tableRuntime;
   }
 
-  private void appendPartitionedData(UnkeyedTable table, int id) {
+  private void appendPartitionedData(Table table, int id) {
     ArrayList<Record> newRecords =
         Lists.newArrayList(
-            MixedDataTestHelpers.createRecord(
-                table.schema(), id, "111", 0L, "2022-01-01T12:00:00"));
+            DataTestHelpers.createRecord(table.schema(), id, "111", 0L, "2022-01-01T12:00:00"));
     newRecords.add(
-        MixedDataTestHelpers.createRecord(table.schema(), id, "222", 0L, "2022-01-02T12:00:00"));
+        DataTestHelpers.createRecord(table.schema(), id, "222", 0L, "2022-01-02T12:00:00"));
     newRecords.add(
-        MixedDataTestHelpers.createRecord(table.schema(), id, "333", 0L, "2022-01-03T12:00:00"));
-    List<DataFile> dataFiles = MixedDataTestHelpers.writeBaseStore(table, 0L, newRecords, false);
+        DataTestHelpers.createRecord(table.schema(), id, "333", 0L, "2022-01-03T12:00:00"));
+    List<DataFile> dataFiles = DataTestHelpers.writeDataFiles(table, newRecords);
     AppendFiles appendFiles = table.newAppend();
     dataFiles.forEach(appendFiles::appendFile);
     appendFiles.commit();
   }
 
-  private void appendData(UnkeyedTable table, int id) {
+  private void appendData(Table table, int id) {
     ArrayList<Record> newRecords =
         Lists.newArrayList(
-            MixedDataTestHelpers.createRecord(
-                table.schema(), id, "111", 0L, "2022-01-01T12:00:00"));
-    List<DataFile> dataFiles = MixedDataTestHelpers.writeBaseStore(table, 0L, newRecords, false);
+            DataTestHelpers.createRecord(table.schema(), id, "111", 0L, "2022-01-01T12:00:00"));
+    List<DataFile> dataFiles = DataTestHelpers.writeDataFiles(table, newRecords);
     AppendFiles appendFiles = table.newAppend();
     dataFiles.forEach(appendFiles::appendFile);
     appendFiles.commit();
@@ -610,10 +605,9 @@ public class TestOptimizingQueue extends AMSTableTestBase {
         tableManager()
             .getServerTableIdentifier(serverTableIdentifier.getIdentifier().buildTableIdentifier());
 
-    MixedTable mixedTable =
-        (MixedTable) tableService().loadTable(serverTableIdentifier).originalTable();
-    appendPartitionedData(mixedTable.asUnkeyedTable(), 1);
-    appendPartitionedData(mixedTable.asUnkeyedTable(), 2);
+    Table mixedTable = tableService().loadTable(serverTableIdentifier).table();
+    appendPartitionedData(mixedTable, 1);
+    appendPartitionedData(mixedTable, 2);
 
     DefaultTableRuntime tableRuntime =
         (DefaultTableRuntime) tableService().getRuntime(serverTableIdentifier.getId());

@@ -20,67 +20,22 @@
 
 package io.olake.fusion.server.optimizing.flow;
 
-import io.olake.fusion.io.reader.GenericUnkeyedDataReader;
-import io.olake.fusion.table.MixedTable;
-import io.olake.fusion.table.UnkeyedTable;
-import org.apache.amoro.shade.guava32.com.google.common.collect.Iterables;
-import org.apache.iceberg.FileScanTask;
-import org.apache.iceberg.data.IdentityPartitionConverters;
+import io.olake.fusion.io.DataTestHelpers;
+import org.apache.iceberg.Table;
 import org.apache.iceberg.data.Record;
-import org.apache.iceberg.io.CloseableIterable;
+import org.apache.iceberg.expressions.Expressions;
 
-import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 
+/** Reads all rows of a table, deletes applied. */
 public class DataReader {
-  private final MixedTable table;
+  private final Table table;
 
-  public DataReader(MixedTable table) {
+  public DataReader(Table table) {
     this.table = table;
   }
 
-  public List<Record> allData() throws Exception {
-    return readIceberg(table.asUnkeyedTable());
-  }
-
-  private List<Record> readIceberg(UnkeyedTable table)
-      throws ExecutionException, InterruptedException {
-    GenericUnkeyedDataReader dataReader =
-        new GenericUnkeyedDataReader(
-            table.io(),
-            table.schema(),
-            table.schema(),
-            null,
-            false,
-            IdentityPartitionConverters::convertConstant,
-            false);
-    CloseableIterable<FileScanTask> fileScanTasks = table.newScan().planFiles();
-
-    List<CompletableFuture<List<Record>>> completableFutures = new ArrayList<>();
-    for (FileScanTask fileScanTask : fileScanTasks) {
-      completableFutures.add(
-          CompletableFuture.supplyAsync(
-              () -> {
-                CloseableIterable<Record> closeableIterable = dataReader.readData(fileScanTask);
-                List<Record> list = new ArrayList<>();
-                Iterables.addAll(list, closeableIterable);
-                try {
-                  closeableIterable.close();
-                } catch (IOException e) {
-                  throw new RuntimeException(e);
-                }
-                return list;
-              }));
-    }
-
-    List<Record> list = new ArrayList<>();
-    for (CompletableFuture<List<Record>> completableFuture : completableFutures) {
-      List<Record> records = completableFuture.get();
-      list.addAll(records);
-    }
-    return list;
+  public List<Record> allData() {
+    return DataTestHelpers.readTable(table, Expressions.alwaysTrue(), null);
   }
 }

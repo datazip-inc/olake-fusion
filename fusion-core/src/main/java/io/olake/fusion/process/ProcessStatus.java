@@ -20,7 +20,7 @@
 
 package io.olake.fusion.process;
 
-/** Status of any {@link FusionProcess}. */
+/** Status of a table process (an optimizing process). */
 public enum ProcessStatus {
   UNKNOWN,
   PLANNING,
@@ -34,9 +34,5 @@ public enum ProcessStatus {
   KILLED,
   FAILED,
   /** Cron fired but the optimization was determined unnecessary; recorded for UI visibility. */
-  SKIPPED;
-
-  public ProcessStage toStage() {
-    return new ProcessStage(name(), ordinal());
-  }
+  SKIPPED
 }

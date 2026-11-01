@@ -20,11 +20,11 @@
 
 package io.olake.fusion.optimizing.plan;
 
+import io.olake.fusion.FusionTable;
 import io.olake.fusion.ServerTableIdentifier;
 import io.olake.fusion.config.OptimizingConfig;
 import io.olake.fusion.optimizing.IcebergRewriteExecutorFactory;
 import io.olake.fusion.optimizing.TaskProperties;
-import io.olake.fusion.table.MixedTable;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Maps;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.util.Pair;
@@ -38,7 +38,7 @@ public class IcebergPartitionPlan extends AbstractPartitionPlan {
   public IcebergPartitionPlan(
       ServerTableIdentifier identifier,
       OptimizingConfig config,
-      MixedTable table,
+      FusionTable table,
       Pair<Integer, StructLike> partition,
       long planTime,
       long lastMinorOptimizingTime,

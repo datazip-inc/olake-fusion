@@ -49,10 +49,6 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>io.fabric8</groupId>
-            <artifactId>kubernetes-client</artifactId>
-        </dependency>
-        <dependency>
             <groupId>org.apache.spark</groupId>
             <artifactId>spark-core_${scala.binary.version}</artifactId>
             <version>${spark.version}</version>
@@ -69,7 +65,7 @@
                     <groupId>org.apache.logging.log4j</groupId>
                     <artifactId>log4j-slf4j2-impl</artifactId>
                 </exclusion>
-                <!-- flink-runtime brings at.yawk.lz4:lz4-java (same net.jpountz classes; 1.11.4 fixes CVE-2025-12183 and CVE-2026-106449/106450/106451/106452) -->
+                <!-- at.yawk.lz4:lz4-java is declared below instead (same net.jpountz classes; 1.11.4 fixes CVE-2025-12183 and CVE-2026-106449/106450/106451/106452) -->
                 <exclusion>
                     <groupId>org.lz4</groupId>
                     <artifactId>lz4-java</artifactId>
@@ -214,10 +210,14 @@
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
         </dependency>
+        <!-- Prometheus metric reporter (io.olake.fusion.metrics.promethues) -->
         <dependency>
-            <groupId>com.mysql</groupId>
-            <artifactId>mysql-connector-j</artifactId>
-            <scope>provided</scope>
+            <groupId>io.prometheus</groupId>
+            <artifactId>simpleclient</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.prometheus</groupId>
+            <artifactId>simpleclient_httpserver</artifactId>
         </dependency>
         <dependency>
             <groupId>org.apache.commons</groupId>
@@ -251,10 +251,6 @@
             <!-- API bridge between log4j 1 and 2 -->
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-1.2-api</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.kyuubi</groupId>
-            <artifactId>kyuubi-hive-jdbc-shaded</artifactId>
         </dependency>
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
@@ -297,20 +293,6 @@
             <artifactId>hadoop-aws</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.apache.flink</groupId>
-            <artifactId>flink-runtime-web</artifactId>
-            <exclusions>
-                <exclusion>
-                    <groupId>org.apache.flink</groupId>
-                    <artifactId>flink-rpc-akka-loader</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.apache.flink</groupId>
-                    <artifactId>flink-shaded-zookeeper-3</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <dependency>
             <groupId>org.apache.iceberg</groupId>
             <artifactId>iceberg-spark-${spark.major.version}_${scala.binary.version}</artifactId>
             <version>${iceberg.version}</version>
@@ -347,22 +329,6 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>org.apache.curator</groupId>
-            <artifactId>curator-test</artifactId>
-            <version>${curator.version}</version>
-            <scope>test</scope>
-            <exclusions>
-                <exclusion>
-                    <groupId>com.google.guava</groupId>
-                    <artifactId>guava</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.junit.jupiter</groupId>
-                    <artifactId>junit-jupiter-api</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <dependency>
             <groupId>com.github.pagehelper</groupId>
             <artifactId>pagehelper</artifactId>
             <version>${pagehelper.version}</version>
@@ -383,6 +349,7 @@
             <artifactId>swagger-ui</artifactId>
             <version>${swagger-ui.version}</version>
         </dependency>
+        <!-- Test persistence runs on PostgreSQL in a container (PostgresPersistence) -->
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>testcontainers</artifactId>
@@ -390,71 +357,11 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>org.testcontainers</groupId>
-            <artifactId>junit-jupiter</artifactId>
-            <version>1.17.2</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.kubernetes</groupId>
-            <artifactId>client-java</artifactId>
-            <version>15.0.1</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.testcontainers</groupId>
-            <artifactId>k3s</artifactId>
-            <version>1.20.1</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.testcontainers</groupId>
-            <artifactId>mysql</artifactId>
-            <version>1.19.6</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.hadoop</groupId>
-            <artifactId>hadoop-minikdc</artifactId>
-            <scope>test</scope>
-            <exclusions>
-                <exclusion>
-                    <groupId>org.apache.directory.api</groupId>
-                    <artifactId>api-all</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.directory.jdbm</groupId>
-            <artifactId>apacheds-jdbm1</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.directory.api</groupId>
-            <artifactId>api-all</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
             <version>${guava-hive.version}</version>
         </dependency>
-        <dependency>
-            <groupId>org.apache.directory.server</groupId>
-            <artifactId>apacheds-test-framework</artifactId>
-            <version>${apache-directory-server.version}</version>
-            <scope>test</scope>
-            <exclusions>
-                <exclusion>
-                    <groupId>org.apache.directory.api</groupId>
-                    <artifactId>api-ldap-schema-data</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.apache.directory.jdbm</groupId>
-                    <artifactId>apacheds-jdbm1</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
+        <!-- Embedded metastore database of the mock Hive metastore (HMSMockServer) -->
         <dependency>
             <groupId>org.apache.derby</groupId>
             <artifactId>derby</artifactId>

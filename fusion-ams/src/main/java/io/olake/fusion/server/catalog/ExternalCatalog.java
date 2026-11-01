@@ -20,18 +20,20 @@
 
 package io.olake.fusion.server.catalog;
 
-import io.olake.fusion.CommonUnifiedCatalog;
 import io.olake.fusion.FusionTable;
+import io.olake.fusion.NoSuchTableException;
 import io.olake.fusion.ServerTableIdentifier;
 import io.olake.fusion.TableFormat;
 import io.olake.fusion.TableIDWithFormat;
-import io.olake.fusion.UnifiedCatalog;
 import io.olake.fusion.api.CatalogMeta;
+import io.olake.fusion.formats.iceberg.IcebergCatalog;
 import io.olake.fusion.properties.CatalogMetaProperties;
 import io.olake.fusion.server.persistence.mapper.TableMetaMapper;
-import org.apache.amoro.shade.guava32.com.google.common.collect.Maps;
+import io.olake.fusion.table.TableIdentifier;
+import io.olake.fusion.utils.CatalogUtil;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.regex.Pattern;
@@ -39,22 +41,41 @@ import java.util.stream.Collectors;
 
 public class ExternalCatalog extends ServerCatalog {
 
-  UnifiedCatalog unifiedCatalog;
+  /** Null when the catalog does not list the Iceberg table format: it then has no tables. */
+  private volatile IcebergCatalog icebergCatalog;
+
   private Pattern tableFilterPattern;
   private Pattern databaseFilterPattern;
 
   protected ExternalCatalog(CatalogMeta metadata) {
     super(metadata);
-    this.unifiedCatalog =
-        metaStore.doAs(() -> new CommonUnifiedCatalog(this::getMetadata, Maps.newHashMap()));
     catalogMetadataChanged();
   }
 
   @Override
   protected void catalogMetadataChanged() {
-    this.unifiedCatalog.refresh();
-    updateDatabaseFilter(getMetadata());
-    updateTableFilter(getMetadata());
+    CatalogMeta meta = getMetadata();
+    CatalogUtil.mergeCatalogProperties(meta, null);
+    this.icebergCatalog =
+        IcebergCatalog.servesIceberg(meta.getCatalogType(), meta.getCatalogProperties())
+            ? metaStore.doAs(
+                () ->
+                    new IcebergCatalog(
+                        meta.getCatalogName(),
+                        meta.getCatalogType(),
+                        meta.getCatalogProperties(),
+                        metaStore))
+            : null;
+    updateDatabaseFilter(meta);
+    updateTableFilter(meta);
+  }
+
+  private IcebergCatalog icebergCatalog() {
+    IcebergCatalog catalog = icebergCatalog;
+    if (catalog == null) {
+      throw new IllegalStateException("No format catalog found.");
+    }
+    return catalog;
   }
 
   public void syncTable(String database, String tableName, TableFormat format) {
@@ -78,19 +99,19 @@ public class ExternalCatalog extends ServerCatalog {
 
   @Override
   public boolean databaseExists(String database) {
-    return doAs(() -> unifiedCatalog.databaseExists(database));
+    return doAs(() -> icebergCatalog().databaseExists(database));
   }
 
   @Override
   public boolean tableExists(String database, String tableName) {
-    return doAs(() -> unifiedCatalog.tableExists(database, tableName));
+    return doAs(() -> icebergCatalog != null && icebergCatalog.tableExists(database, tableName));
   }
 
   @Override
   public List<String> listDatabases() {
     return doAs(
         () ->
-            unifiedCatalog.listDatabases().stream()
+            icebergCatalog().listDatabases().stream()
                 .filter(
                     database ->
                         databaseFilterPattern == null
@@ -102,7 +123,7 @@ public class ExternalCatalog extends ServerCatalog {
   public List<TableIDWithFormat> listTables() {
     return doAs(
         () ->
-            unifiedCatalog.listDatabases().stream()
+            icebergCatalog().listDatabases().stream()
                 .map(this::listTables)
                 .flatMap(List::stream)
                 .collect(Collectors.toList()));
@@ -113,7 +134,7 @@ public class ExternalCatalog extends ServerCatalog {
     return doAs(
         () ->
             new ArrayList<>(
-                unifiedCatalog.listTables(database).stream()
+                icebergTables(database).stream()
                     .filter(
                         tableIDWithFormat ->
                             tableFilterPattern == null
@@ -127,8 +148,29 @@ public class ExternalCatalog extends ServerCatalog {
   }
 
   @Override
-  public FusionTable<?> loadTable(String database, String tableName) {
-    return doAs(() -> unifiedCatalog.loadTable(database, tableName));
+  public FusionTable loadTable(String database, String tableName) {
+    IcebergCatalog catalog = icebergCatalog;
+    if (catalog == null) {
+      throw new NoSuchTableException("Table: " + tableName + " does not exist.");
+    }
+    try {
+      return doAs(() -> catalog.loadTable(database, tableName));
+    } catch (NoSuchTableException e) {
+      throw new NoSuchTableException("Table: " + tableName + " does not exist.");
+    }
+  }
+
+  private List<TableIDWithFormat> icebergTables(String database) {
+    IcebergCatalog catalog = icebergCatalog;
+    if (catalog == null) {
+      return Collections.emptyList();
+    }
+    return catalog.listTables(database).stream()
+        .map(
+            table ->
+                TableIDWithFormat.of(
+                    TableIdentifier.of(catalog.name(), database, table), TableFormat.ICEBERG))
+        .collect(Collectors.toList());
   }
 
   private void updateDatabaseFilter(CatalogMeta metadata) {

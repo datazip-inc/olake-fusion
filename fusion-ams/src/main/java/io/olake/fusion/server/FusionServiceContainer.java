@@ -20,14 +20,11 @@
 
 package io.olake.fusion.server;
 
-import static io.olake.fusion.server.FusionManagementConf.USE_MASTER_SLAVE_MODE;
-
 import io.javalin.Javalin;
 import io.javalin.http.HttpCode;
 import io.javalin.http.staticfiles.Location;
 import io.olake.fusion.Constants;
 import io.olake.fusion.OptimizerProperties;
-import io.olake.fusion.api.AmoroTableMetastore;
 import io.olake.fusion.api.OptimizingService;
 import io.olake.fusion.config.ConfigurationException;
 import io.olake.fusion.config.Configurations;
@@ -40,15 +37,10 @@ import io.olake.fusion.server.dashboard.DashboardServer;
 import io.olake.fusion.server.dashboard.JavalinJsonMapper;
 import io.olake.fusion.server.dashboard.response.ErrorResponse;
 import io.olake.fusion.server.dashboard.utils.AmsUtil;
-import io.olake.fusion.server.dashboard.utils.CommonUtil;
-import io.olake.fusion.server.ha.HighAvailabilityContainer;
-import io.olake.fusion.server.ha.HighAvailabilityContainerFactory;
-import io.olake.fusion.server.manager.EventsManager;
 import io.olake.fusion.server.manager.MetricManager;
 import io.olake.fusion.server.persistence.DataSourceFactory;
 import io.olake.fusion.server.persistence.HttpSessionHandlerFactory;
 import io.olake.fusion.server.persistence.SqlSessionFactoryProvider;
-import io.olake.fusion.server.process.ProcessService;
 import io.olake.fusion.server.resource.ContainerMetadata;
 import io.olake.fusion.server.resource.Containers;
 import io.olake.fusion.server.resource.DefaultOptimizerManager;
@@ -99,6 +91,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
@@ -108,23 +101,19 @@ public class FusionServiceContainer {
   public static final Logger LOG = LoggerFactory.getLogger(FusionServiceContainer.class);
 
   public static final String SERVER_CONFIG_FILENAME = "config.yaml";
-  private static boolean IS_MASTER_SLAVE_MODE = false;
   private static volatile Map<String, Object> SPARK_CONFIG = Map.of();
   private static final String NOT_AVAILABLE = "NA";
   private static final String SPARK_CONTAINER_IMPL =
       "io.olake.fusion.server.manager.SparkOptimizerContainer";
 
-  private final HighAvailabilityContainer haContainer;
   private DataSource dataSource;
   private CatalogManager catalogManager;
   private TableManager tableManager;
   private OptimizerManager optimizerManager;
   private TableService tableService;
   private DefaultOptimizingService optimizingService;
-  private ProcessService processService;
   private TerminalManager terminalManager;
   private Configurations serviceConfig;
-  private TServer tableManagementServer;
   private TServer optimizingServiceServer;
   private Javalin httpServer;
   private AmsServiceMetrics amsServiceMetrics;
@@ -132,7 +121,6 @@ public class FusionServiceContainer {
 
   public FusionServiceContainer() throws Exception {
     initConfig();
-    haContainer = HighAvailabilityContainerFactory.create(serviceConfig);
   }
 
   public static void main(String[] args) {
@@ -147,37 +135,25 @@ public class FusionServiceContainer {
                     LOG.info("AMS service has been shut down");
                   }));
       service.startRestServices();
-      if (IS_MASTER_SLAVE_MODE) {
-        // Even if one does not become the master, it cannot block the subsequent logic.
-        service.registAndElect();
-        // Regardless of whether tp becomes the master, the service needs to be activated.
-        service.startOptimizingService();
-      } else {
-        while (true) {
-          try {
-            // Used to block AMS instances that have not acquired leadership
-            service.waitLeaderShip();
-            service.transitionToLeader();
-            // Used to block AMS instances that have acquired leadership
-            service.waitFollowerShip();
-          } catch (ConfigurationException e) {
-            LOG.error("AMS will exit...", e);
-            System.exit(1);
-          } catch (Exception e) {
-            LOG.error("AMS start error", e);
-          } finally {
-            service.transitionToFollower();
-          }
+      while (true) {
+        try {
+          service.transitionToLeader();
+          // Fusion runs a single server: once the optimizing service is up, the main thread only
+          // waits while the server threads do the work. A failed start is retried.
+          new CountDownLatch(1).await();
+        } catch (ConfigurationException e) {
+          LOG.error("AMS will exit...", e);
+          System.exit(1);
+        } catch (Exception e) {
+          LOG.error("AMS start error", e);
+        } finally {
+          service.transitionToFollower();
         }
       }
     } catch (Throwable t) {
       LOG.error("AMS encountered an unknown exception, will exit...", t);
       System.exit(1);
     }
-  }
-
-  public void registAndElect() throws Exception {
-    haContainer.registAndElect();
   }
 
   public enum HAState {
@@ -200,20 +176,11 @@ public class FusionServiceContainer {
     return haState;
   }
 
-  public void waitLeaderShip() throws Exception {
-    haContainer.waitLeaderShip();
-  }
-
-  public void waitFollowerShip() throws Exception {
-    haContainer.waitFollowerShip();
-  }
-
   public void startRestServices() throws Exception {
-    EventsManager.getInstance();
     MetricManager.getInstance();
 
     catalogManager = new DefaultCatalogManager(serviceConfig);
-    tableManager = new DefaultTableManager(serviceConfig, catalogManager);
+    tableManager = new DefaultTableManager();
     optimizerManager = new DefaultOptimizerManager(serviceConfig, catalogManager);
     terminalManager = new TerminalManager(serviceConfig, catalogManager);
 
@@ -248,25 +215,18 @@ public class FusionServiceContainer {
     optimizingService =
         new DefaultOptimizingService(serviceConfig, catalogManager, optimizerManager, tableService);
 
-    processService = new ProcessService(serviceConfig, tableService);
-
     LOG.info("Setting up AMS table executors...");
     InlineTableExecutors.getInstance().setup(tableService, serviceConfig);
     addHandlerChain(optimizingService.getTableRuntimeHandler());
-    addHandlerChain(processService.getTableHandlerChain());
-    addHandlerChain(InlineTableExecutors.getInstance().getDataExpiringExecutor());
     addHandlerChain(InlineTableExecutors.getInstance().getSnapshotsExpiringExecutor());
     addHandlerChain(InlineTableExecutors.getInstance().getOrphanFilesCleaningExecutor());
     addHandlerChain(InlineTableExecutors.getInstance().getDanglingDeleteFilesCleaningExecutor());
     addHandlerChain(InlineTableExecutors.getInstance().getOptimizingCommitExecutor());
     addHandlerChain(InlineTableExecutors.getInstance().getOptimizingExpiringExecutor());
-    addHandlerChain(InlineTableExecutors.getInstance().getBlockerExpiringExecutor());
     addHandlerChain(InlineTableExecutors.getInstance().getTableRefreshingExecutor());
-    addHandlerChain(InlineTableExecutors.getInstance().getTagsAutoCreatingExecutor());
     addHandlerChain(InlineTableExecutors.getInstance().getTableHealthScoreExecutor());
     tableService.initialize();
     LOG.info("AMS table service have been initialized");
-    tableManager.setTableService(tableService);
 
     new OptimizerBootstrap(serviceConfig, optimizerManager, optimizingService).run();
     initThriftService();
@@ -280,11 +240,6 @@ public class FusionServiceContainer {
   }
 
   public void disposeOptimizingService() {
-    if (tableManagementServer != null) {
-      LOG.info(
-          "Stopping table management server[serving:{}] ...", tableManagementServer.isServing());
-      tableManagementServer.stop();
-    }
     if (optimizingServiceServer != null) {
       LOG.info("Stopping optimizing server[serving:{}] ...", optimizingServiceServer.isServing());
       optimizingServiceServer.stop();
@@ -298,10 +253,6 @@ public class FusionServiceContainer {
       LOG.info("Stopping optimizing service...");
       optimizingService.dispose();
       optimizingService = null;
-    }
-    if (processService != null) {
-      LOG.info("Stopping process server...");
-      processService.dispose();
     }
   }
 
@@ -323,7 +274,6 @@ public class FusionServiceContainer {
       amsServiceMetrics.unregister();
     }
 
-    EventsManager.dispose();
     MetricManager.dispose();
   }
 
@@ -335,7 +285,6 @@ public class FusionServiceContainer {
   private void initConfig() throws Exception {
     LOG.info("initializing configurations...");
     new ConfigurationHelper().init();
-    IS_MASTER_SLAVE_MODE = serviceConfig.getBoolean(USE_MASTER_SLAVE_MODE);
     Telemetry.configure(serviceConfig.getBoolean(FusionManagementConf.TELEMETRY_DISABLED));
   }
 
@@ -378,7 +327,6 @@ public class FusionServiceContainer {
   }
 
   private void startThriftService() {
-    startThriftServer(tableManagementServer, "thrift-table-management-server-thread");
     startThriftServer(optimizingServiceServer, "thrift-optimizing-server-thread");
   }
 
@@ -393,7 +341,6 @@ public class FusionServiceContainer {
     DashboardServer dashboardServer =
         new DashboardServer(
             serviceConfig, catalogManager, tableManager, optimizerManager, terminalManager, this);
-    RestCatalogService restCatalogService = new RestCatalogService(catalogManager, tableManager);
 
     httpServer =
         Javalin.create(
@@ -411,43 +358,18 @@ public class FusionServiceContainer {
     httpServer.routes(
         () -> {
           dashboardServer.endpoints().addEndpoints();
-          restCatalogService.endpoints().addEndpoints();
         });
 
-    httpServer.before(
-        ctx -> {
-          String token = ctx.queryParam("token");
-          if (StringUtils.isNotEmpty(token)) {
-            CommonUtil.checkSinglePageToken(ctx);
-          } else {
-            dashboardServer.preHandleRequest(ctx);
-          }
-        });
-    httpServer.exception(
-        Exception.class,
-        (e, ctx) -> {
-          if (restCatalogService.needHandleException(ctx)) {
-            restCatalogService.handleException(e, ctx);
-          } else {
-            dashboardServer.handleException(e, ctx);
-          }
-        });
+    httpServer.before(dashboardServer::preHandleRequest);
+    httpServer.exception(Exception.class, dashboardServer::handleException);
     // default response handle
     httpServer.error(
         HttpCode.NOT_FOUND.getStatus(),
-        ctx -> {
-          if (!restCatalogService.needHandleException(ctx)) {
-            ctx.json(new ErrorResponse(HttpCode.NOT_FOUND, "page not found!", ""));
-          }
-        });
+        ctx -> ctx.json(new ErrorResponse(HttpCode.NOT_FOUND, "page not found!", "")));
 
     httpServer.error(
         HttpCode.INTERNAL_SERVER_ERROR.getStatus(),
-        ctx -> {
-          if (!restCatalogService.needHandleException(ctx)) {
-            ctx.json(new ErrorResponse(HttpCode.INTERNAL_SERVER_ERROR, "internal error!", ""));
-          }
-        });
+        ctx -> ctx.json(new ErrorResponse(HttpCode.INTERNAL_SERVER_ERROR, "internal error!", "")));
   }
 
   private void startHttpService() {
@@ -478,28 +400,9 @@ public class FusionServiceContainer {
     long maxMessageSize =
         serviceConfig.get(FusionManagementConf.THRIFT_MAX_MESSAGE_SIZE).getBytes();
     int selectorThreads = serviceConfig.getInteger(FusionManagementConf.THRIFT_SELECTOR_THREADS);
-    int workerThreads = serviceConfig.getInteger(FusionManagementConf.THRIFT_WORKER_THREADS);
     int queueSizePerSelector =
         serviceConfig.getInteger(FusionManagementConf.THRIFT_QUEUE_SIZE_PER_THREAD);
     String bindHost = serviceConfig.getString(FusionManagementConf.SERVER_BIND_HOST);
-
-    AmoroTableMetastore.Processor<AmoroTableMetastore.Iface> tableManagementProcessor =
-        new AmoroTableMetastore.Processor<>(
-            ThriftServiceProxy.createProxy(
-                AmoroTableMetastore.Iface.class,
-                new TableManagementService(catalogManager, tableManager),
-                FusionRuntimeException::normalizeCompatibly));
-    tableManagementServer =
-        createThriftServer(
-            tableManagementProcessor,
-            Constants.THRIFT_TABLE_SERVICE_NAME,
-            bindHost,
-            serviceConfig.getInteger(FusionManagementConf.TABLE_SERVICE_THRIFT_BIND_PORT),
-            Executors.newFixedThreadPool(
-                workerThreads, getThriftThreadFactory(Constants.THRIFT_TABLE_SERVICE_NAME)),
-            selectorThreads,
-            queueSizePerSelector,
-            maxMessageSize);
 
     OptimizingService.Processor<OptimizingService.Iface> optimizingProcessor =
         new OptimizingService.Processor<>(

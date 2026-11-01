@@ -20,11 +20,11 @@
 
 package io.olake.fusion.formats;
 
-import io.olake.fusion.FusionCatalog;
 import io.olake.fusion.api.CatalogMeta;
+import io.olake.fusion.formats.iceberg.IcebergCatalog;
 import org.apache.hadoop.conf.Configuration;
 
-/** Helper Interface for testing FusionCatalog. */
+/** Helper Interface for testing IcebergCatalog. */
 public interface FusionCatalogTestHelper<T> {
 
   /** Table option key when using {@link #createTable(String, String)} to create table. */
@@ -51,8 +51,8 @@ public interface FusionCatalogTestHelper<T> {
   /** Get the {@link CatalogMeta} for the catalog. */
   CatalogMeta getCatalogMeta();
 
-  /** Get the {@link FusionCatalog} for the catalog. */
-  FusionCatalog amoroCatalog();
+  /** Get the {@link IcebergCatalog} for the catalog. */
+  IcebergCatalog amoroCatalog();
 
   /**
    * Get the original catalog for the catalog. It will be paimon catalog or iceberg catalog or

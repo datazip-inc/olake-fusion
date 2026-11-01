@@ -23,8 +23,7 @@ package io.olake.fusion.maintainer;
 /**
  * API for maintaining table.
  *
- * <p>Includes: clean content files, clean metadata, clean dangling delete files, expire snapshots,
- * auto create tags.
+ * <p>Includes: clean content files, clean metadata, clean dangling delete files, expire snapshots.
  */
 public interface TableMaintainer {
 
@@ -41,13 +40,4 @@ public interface TableMaintainer {
    * not expire according to TableRuntime.
    */
   void expireSnapshots();
-
-  /**
-   * Expire historical data based on the expiration field, and data that exceeds the retention
-   * period will be purged
-   */
-  void expireData();
-
-  /** Auto create tags for table. */
-  void autoCreateTags();
 }

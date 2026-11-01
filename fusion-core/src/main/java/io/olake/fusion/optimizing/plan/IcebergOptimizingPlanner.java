@@ -20,9 +20,9 @@
 
 package io.olake.fusion.optimizing.plan;
 
+import io.olake.fusion.FusionTable;
 import io.olake.fusion.ServerTableIdentifier;
 import io.olake.fusion.config.OptimizingConfig;
-import io.olake.fusion.table.MixedTable;
 import io.olake.fusion.table.TableSnapshot;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.expressions.Expression;
@@ -32,7 +32,7 @@ public class IcebergOptimizingPlanner extends AbstractOptimizingPlanner {
   public IcebergOptimizingPlanner(
       ServerTableIdentifier identifier,
       OptimizingConfig config,
-      MixedTable table,
+      FusionTable table,
       TableSnapshot snapshot,
       Expression partitionFilter,
       long processId,
@@ -60,7 +60,7 @@ public class IcebergOptimizingPlanner extends AbstractOptimizingPlanner {
     return new IcebergPartitionPlan(
         identifier,
         config,
-        mixedTable,
+        fusionTable,
         partition,
         planTime,
         lastMinorOptimizingTime,

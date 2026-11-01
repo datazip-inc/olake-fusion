@@ -24,7 +24,7 @@ import io.olake.fusion.FusionTable;
 import io.olake.fusion.TableRuntime;
 import io.olake.fusion.config.TableConfiguration;
 import io.olake.fusion.maintainer.TableMaintainer;
-import io.olake.fusion.server.optimizing.maintainer.TableMaintainers;
+import io.olake.fusion.server.optimizing.maintainer.TableMaintainerFactory;
 import io.olake.fusion.server.scheduler.PeriodicTableScheduler;
 import io.olake.fusion.server.table.DefaultTableRuntime;
 import io.olake.fusion.server.table.TableService;
@@ -84,8 +84,8 @@ public class DanglingDeleteFilesCleaningExecutor extends PeriodicTableScheduler 
   protected void execute(TableRuntime tableRuntime) {
     try {
       LOG.info("{} start cleaning dangling delete files", tableRuntime.getTableIdentifier());
-      FusionTable<?> amoroTable = loadTable(tableRuntime);
-      TableMaintainer tableMaintainer = TableMaintainers.create(amoroTable, tableRuntime);
+      FusionTable table = loadTable(tableRuntime);
+      TableMaintainer tableMaintainer = TableMaintainerFactory.create(table, tableRuntime);
       tableMaintainer.cleanDanglingDeleteFiles();
     } catch (Throwable t) {
       LOG.error("{} failed to clean dangling delete file", tableRuntime.getTableIdentifier(), t);

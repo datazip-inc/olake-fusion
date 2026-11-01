@@ -28,18 +28,17 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.olake.fusion.BasicTableTestHelper;
-import io.olake.fusion.CommonUnifiedCatalog;
 import io.olake.fusion.ServerTableIdentifier;
 import io.olake.fusion.TableFormat;
 import io.olake.fusion.TableIDWithFormat;
 import io.olake.fusion.TableTestHelper;
 import io.olake.fusion.TestedCatalogs;
-import io.olake.fusion.UnifiedCatalog;
 import io.olake.fusion.api.CatalogMeta;
 import io.olake.fusion.api.TableIdentifier;
 import io.olake.fusion.catalog.CatalogTestHelper;
 import io.olake.fusion.catalog.CatalogTestHelpers;
 import io.olake.fusion.catalog.HiveCatalogTestHelper;
+import io.olake.fusion.formats.iceberg.IcebergCatalog;
 import io.olake.fusion.metrics.MetricRegistry;
 import io.olake.fusion.properties.CatalogMetaProperties;
 import io.olake.fusion.server.catalog.ExternalCatalog;
@@ -89,7 +88,7 @@ public class TestSyncTableOfExternalCatalog extends AMSTableTestBase {
 
   private ExternalCatalog initExternalCatalog() {
     ServerCatalog serverCatalog = catalogManager().getServerCatalog(TEST_CATALOG_NAME);
-    return catalogTestHelper().isInternalCatalog() ? null : (ExternalCatalog) serverCatalog;
+    return (ExternalCatalog) serverCatalog;
   }
 
   /** Test synchronization after creating a table. */
@@ -350,7 +349,7 @@ public class TestSyncTableOfExternalCatalog extends AMSTableTestBase {
     String newCatalogName = "new_catalog";
     String newDbName = "new_db";
     String newTableName = "new_table";
-    UnifiedCatalog newCatalog = createNewCatalogTable(newCatalogName, newDbName, newTableName);
+    IcebergCatalog newCatalog = createNewCatalogTable(newCatalogName, newDbName, newTableName);
 
     // This should not throw an exception, and log an error message "TableExplorer error when
     // explore table runtimes for catalog:test_catalog". Meanwhile, the newly added catalog can be
@@ -414,7 +413,7 @@ public class TestSyncTableOfExternalCatalog extends AMSTableTestBase {
     dropDatabase();
   }
 
-  private UnifiedCatalog createNewCatalogTable(String catalogName, String dbName, String tableName)
+  private IcebergCatalog createNewCatalogTable(String catalogName, String dbName, String tableName)
       throws IOException, TException {
     // create new catalog
     String warehouseDir = temp.newFolder().getPath();
@@ -426,7 +425,7 @@ public class TestSyncTableOfExternalCatalog extends AMSTableTestBase {
             CatalogMetaProperties.CATALOG_TYPE_HADOOP,
             properties,
             TableFormat.ICEBERG);
-    UnifiedCatalog externalCatalog = new CommonUnifiedCatalog(() -> catalogMeta, Maps.newHashMap());
+    IcebergCatalog externalCatalog = IcebergCatalog.of(catalogMeta);
     catalogManager().createCatalog(catalogMeta);
 
     // create new database
@@ -571,7 +570,7 @@ public class TestSyncTableOfExternalCatalog extends AMSTableTestBase {
   }
 
   private void disposeNewCatalogTable(
-      UnifiedCatalog externalCatalog, String catalogName, String dbName, String tableName)
+      IcebergCatalog externalCatalog, String catalogName, String dbName, String tableName)
       throws TException {
     // drop table
     externalCatalog.dropTable(dbName, tableName, true);

@@ -31,12 +31,9 @@ public class InlineTableExecutors {
   private TableRuntimeRefreshExecutor tableRefreshingExecutor;
   private OrphanFilesCleaningExecutor orphanFilesCleaningExecutor;
   private DanglingDeleteFilesCleaningExecutor danglingDeleteFilesCleaningExecutor;
-  private BlockerExpiringExecutor blockerExpiringExecutor;
   private OptimizingCommitExecutor optimizingCommitExecutor;
   private OptimizingExpiringExecutor optimizingExpiringExecutor;
-  private TagsAutoCreatingExecutor tagsAutoCreatingExecutor;
   private TableHealthScoreExecutor tableHealthScoreExecutor;
-  private DataExpiringExecutor dataExpiringExecutor;
 
   public static InlineTableExecutors getInstance() {
     return instance;
@@ -72,7 +69,6 @@ public class InlineTableExecutors {
             tableService,
             conf.getInteger(FusionManagementConf.OPTIMIZING_RUNTIME_DATA_KEEP_DAYS),
             conf.getInteger(FusionManagementConf.OPTIMIZING_RUNTIME_DATA_EXPIRE_INTERVAL_HOURS));
-    this.blockerExpiringExecutor = new BlockerExpiringExecutor(tableService);
     this.tableRefreshingExecutor =
         new TableRuntimeRefreshExecutor(
             tableService,
@@ -83,20 +79,6 @@ public class InlineTableExecutors {
             tableService,
             conf.getInteger(FusionManagementConf.REFRESH_TABLES_THREAD_COUNT),
             conf.get(FusionManagementConf.REFRESH_TABLES_INTERVAL).toMillis());
-    if (conf.getBoolean(FusionManagementConf.AUTO_CREATE_TAGS_ENABLED)) {
-      this.tagsAutoCreatingExecutor =
-          new TagsAutoCreatingExecutor(
-              tableService,
-              conf.getInteger(FusionManagementConf.AUTO_CREATE_TAGS_THREAD_COUNT),
-              conf.get(FusionManagementConf.AUTO_CREATE_TAGS_INTERVAL).toMillis());
-    }
-    if (conf.getBoolean(FusionManagementConf.DATA_EXPIRATION_ENABLED)) {
-      this.dataExpiringExecutor =
-          new DataExpiringExecutor(
-              tableService,
-              conf.getInteger(FusionManagementConf.DATA_EXPIRATION_THREAD_COUNT),
-              conf.get(FusionManagementConf.DATA_EXPIRATION_INTERVAL));
-    }
   }
 
   public SnapshotsExpiringExecutor getSnapshotsExpiringExecutor() {
@@ -115,10 +97,6 @@ public class InlineTableExecutors {
     return danglingDeleteFilesCleaningExecutor;
   }
 
-  public BlockerExpiringExecutor getBlockerExpiringExecutor() {
-    return blockerExpiringExecutor;
-  }
-
   public OptimizingCommitExecutor getOptimizingCommitExecutor() {
     return optimizingCommitExecutor;
   }
@@ -127,15 +105,7 @@ public class InlineTableExecutors {
     return optimizingExpiringExecutor;
   }
 
-  public TagsAutoCreatingExecutor getTagsAutoCreatingExecutor() {
-    return tagsAutoCreatingExecutor;
-  }
-
   public TableHealthScoreExecutor getTableHealthScoreExecutor() {
     return tableHealthScoreExecutor;
-  }
-
-  public DataExpiringExecutor getDataExpiringExecutor() {
-    return dataExpiringExecutor;
   }
 }

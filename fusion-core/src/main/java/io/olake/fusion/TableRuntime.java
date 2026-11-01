@@ -22,33 +22,12 @@ package io.olake.fusion;
 
 import io.olake.fusion.config.TableConfiguration;
 import io.olake.fusion.metrics.MetricRegistry;
-import io.olake.fusion.process.ProcessFactory;
-import io.olake.fusion.process.TableProcessStore;
-
-import java.util.List;
 
 /**
  * TableRuntime is the key interface for the AMS framework to interact with the table. Typically, it
- * is used to get the table's configuration, process states, and table identifier. The key usage is
- * {@link ProcessFactory} to create and recover Process.
+ * is used to get the table's configuration, group and table identifier.
  */
 public interface TableRuntime {
-
-  /**
-   * Get the list of process states. which belong to all running table processes. There could be
-   * more than one external process states depending on scheduler implementation.
-   *
-   * @return the list of arbitrary process states
-   */
-  List<? extends TableProcessStore> getProcessStates();
-
-  /**
-   * Get the list of process states. which belong to all running table processes. There could be
-   * more than one external process states depending on scheduler implementation.
-   *
-   * @return the list of arbitrary process states
-   */
-  List<? extends TableProcessStore> getProcessStates(Action action);
 
   /** Get the group name of the table runtime. */
   String getGroupName();

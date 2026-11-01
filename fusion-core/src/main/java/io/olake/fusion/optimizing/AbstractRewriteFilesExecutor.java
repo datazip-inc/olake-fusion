@@ -20,15 +20,10 @@
 
 package io.olake.fusion.optimizing;
 
-import static io.olake.fusion.table.MetadataColumns.TREE_NODE_NAME;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
 import static org.apache.iceberg.TableProperties.DELETE_DEFAULT_FILE_FORMAT;
 
-import io.olake.fusion.data.DataTreeNode;
-import io.olake.fusion.io.AuthenticatedFileIO;
-import io.olake.fusion.io.writer.SetTreeNode;
-import io.olake.fusion.table.MixedTable;
 import io.olake.fusion.table.TableProperties;
 import io.olake.fusion.utils.map.StructLikeCollections;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Lists;
@@ -42,6 +37,7 @@ import org.apache.iceberg.MetadataColumns;
 import org.apache.iceberg.MetricsModes;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.StructLike;
+import org.apache.iceberg.Table;
 import org.apache.iceberg.data.GenericAppenderFactory;
 import org.apache.iceberg.data.Record;
 import org.apache.iceberg.deletes.PositionDelete;
@@ -49,6 +45,7 @@ import org.apache.iceberg.encryption.EncryptionManager;
 import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.io.DeleteWriteResult;
 import org.apache.iceberg.io.FileAppenderFactory;
+import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.io.FileWriter;
 import org.apache.iceberg.io.TaskWriter;
 import org.apache.iceberg.util.PropertyUtil;
@@ -59,6 +56,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Callable;
 
 /**
  * An abstract OptimizingExecutor implementation that rewrites the rewrittenDataFiles in
@@ -73,18 +71,22 @@ public abstract class AbstractRewriteFilesExecutor
 
   protected final Map<String, String> properties;
 
-  protected MixedTable table;
+  /** The table, a read-only Iceberg {@code SerializableTable}; the server commits. */
+  protected final Table table;
+
+  /** Table properties with the catalog defaults merged in. */
+  protected final Map<String, String> tableProperties;
 
   protected OptimizingDataReader dataReader;
 
-  protected AuthenticatedFileIO io;
+  protected final FileIO io;
 
   protected StructLikeCollections structLikeCollections;
 
-  public AbstractRewriteFilesExecutor(
-      RewriteFilesInput input, MixedTable table, Map<String, String> properties) {
+  public AbstractRewriteFilesExecutor(RewriteFilesInput input, Map<String, String> properties) {
     this.input = input;
-    this.table = table;
+    this.table = input.getTable();
+    this.tableProperties = input.getTableProperties();
     this.io = table.io();
     this.properties = properties;
     this.structLikeCollections = TaskProperties.getStructLikeCollections(properties);
@@ -107,11 +109,11 @@ public abstract class AbstractRewriteFilesExecutor
     long startTime = System.currentTimeMillis();
     try {
       if (!ArrayUtils.isEmpty(input.rePosDeletedDataFiles())) {
-        deleteFiles = io.doAs(this::equalityToPosition);
+        deleteFiles = call(this::equalityToPosition);
       }
 
       if (!ArrayUtils.isEmpty(input.rewrittenDataFiles())) {
-        dataFiles = io.doAs(this::rewriterDataFiles);
+        dataFiles = call(this::rewriterDataFiles);
       }
     } finally {
       dataReader.close();
@@ -133,10 +135,6 @@ public abstract class AbstractRewriteFilesExecutor
         String filePath = (String) record.getField(MetadataColumns.FILE_PATH.name());
         Long rowPosition = (Long) record.getField(MetadataColumns.ROW_POSITION.name());
         positionDelete.set(filePath, rowPosition, null);
-        if (posDeleteWriter instanceof SetTreeNode) {
-          DataTreeNode dataTreeNode = DataTreeNode.ofId((Long) record.getField(TREE_NODE_NAME));
-          ((SetTreeNode) posDeleteWriter).setTreeNode(dataTreeNode);
-        }
         posDeleteWriter.write(positionDelete);
       }
     } finally {
@@ -164,23 +162,33 @@ public abstract class AbstractRewriteFilesExecutor
     return result;
   }
 
+  private static <T> T call(Callable<T> callable) {
+    try {
+      return callable.call();
+    } catch (RuntimeException e) {
+      throw e;
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
+
   protected FileFormat dataFileFormat() {
     String formatAsString =
-        table.properties().getOrDefault(DEFAULT_FILE_FORMAT, DEFAULT_FILE_FORMAT_DEFAULT);
+        tableProperties.getOrDefault(DEFAULT_FILE_FORMAT, DEFAULT_FILE_FORMAT_DEFAULT);
     return FileFormat.valueOf(formatAsString.toUpperCase());
   }
 
   protected FileFormat deleteFileFormat() {
     String dataFileFormatName =
-        table.properties().getOrDefault(DEFAULT_FILE_FORMAT, DEFAULT_FILE_FORMAT_DEFAULT);
+        tableProperties.getOrDefault(DEFAULT_FILE_FORMAT, DEFAULT_FILE_FORMAT_DEFAULT);
     String deleteFileFormatName =
-        table.properties().getOrDefault(DELETE_DEFAULT_FILE_FORMAT, dataFileFormatName);
+        tableProperties.getOrDefault(DELETE_DEFAULT_FILE_FORMAT, dataFileFormatName);
     return FileFormat.valueOf(deleteFileFormatName.toUpperCase());
   }
 
   protected FileAppenderFactory<Record> fullMetricAppenderFactory(PartitionSpec spec) {
     GenericAppenderFactory appenderFactory = new GenericAppenderFactory(table.schema(), spec);
-    appenderFactory.setAll(table.properties());
+    appenderFactory.setAll(tableProperties);
     appenderFactory.set(
         org.apache.iceberg.TableProperties.METRICS_MODE_COLUMN_CONF_PREFIX
             + MetadataColumns.DELETE_FILE_PATH.name(),
@@ -194,7 +202,7 @@ public abstract class AbstractRewriteFilesExecutor
 
   protected long targetSize() {
     return PropertyUtil.propertyAsLong(
-        table.properties(),
+        tableProperties,
         TableProperties.SELF_OPTIMIZING_TARGET_SIZE,
         TableProperties.SELF_OPTIMIZING_TARGET_SIZE_DEFAULT);
   }
@@ -205,11 +213,7 @@ public abstract class AbstractRewriteFilesExecutor
   }
 
   protected EncryptionManager encryptionManager() {
-    if (table.isKeyedTable()) {
-      return table.asKeyedTable().baseTable().encryption();
-    } else {
-      return table.asUnkeyedTable().encryption();
-    }
+    return table.encryption();
   }
 
   private Map<String, String> resolverSummary(

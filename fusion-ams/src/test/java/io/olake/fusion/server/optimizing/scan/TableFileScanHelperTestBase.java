@@ -23,10 +23,7 @@ package io.olake.fusion.server.optimizing.scan;
 import io.olake.fusion.TableTestHelper;
 import io.olake.fusion.catalog.CatalogTestHelper;
 import io.olake.fusion.catalog.TableTestBase;
-import io.olake.fusion.data.DataFileType;
-import io.olake.fusion.data.PrimaryKeyedFile;
 import io.olake.fusion.optimizing.scan.TableFileScanHelper;
-import io.olake.fusion.utils.ContentFiles;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Lists;
 import org.apache.iceberg.ContentFile;
 import org.apache.iceberg.DataFile;
@@ -71,19 +68,13 @@ public abstract class TableFileScanHelperTestBase extends TableTestBase {
         Assert.assertEquals(deleteCnt.intValue(), fileScanResult.deleteFiles().size());
       }
       for (ContentFile<?> deleteFile : fileScanResult.deleteFiles()) {
-        if (ContentFiles.isDataFile(deleteFile)) {
-          Assert.assertTrue(deleteFile instanceof PrimaryKeyedFile);
-          PrimaryKeyedFile primaryKeyedFile = (PrimaryKeyedFile) deleteFile;
-          Assert.assertEquals(DataFileType.EQ_DELETE_FILE, primaryKeyedFile.type());
-        } else {
-          Assert.assertTrue(deleteFile instanceof DeleteFile);
-        }
+        Assert.assertTrue(deleteFile instanceof DeleteFile);
       }
     }
   }
 
   protected void assertDataFileClass(DataFile file) {
-    Assert.assertTrue(file instanceof PrimaryKeyedFile);
+    // Iceberg scans return plain Iceberg data files; subclasses may add checks.
   }
 
   protected String getPartition() {

@@ -23,7 +23,6 @@ package io.olake.fusion.optimizing;
 import io.olake.fusion.io.reader.GenericCombinedIcebergDataReader;
 import io.olake.fusion.io.writer.GenericIcebergPartitionedFanoutWriter;
 import io.olake.fusion.io.writer.IcebergFanoutPosDeleteWriter;
-import io.olake.fusion.table.MixedTable;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.TableProperties;
@@ -43,9 +42,8 @@ import java.util.UUID;
 
 /** OptimizingExecutor for iceberg format. */
 public class IcebergRewriteExecutor extends AbstractRewriteFilesExecutor {
-  public IcebergRewriteExecutor(
-      RewriteFilesInput input, MixedTable table, Map<String, String> properties) {
-    super(input, table, properties);
+  public IcebergRewriteExecutor(RewriteFilesInput input, Map<String, String> properties) {
+    super(input, properties);
   }
 
   @Override
@@ -55,8 +53,8 @@ public class IcebergRewriteExecutor extends AbstractRewriteFilesExecutor {
         io,
         table.schema(),
         table.spec(),
-        table.asUnkeyedTable().encryption(),
-        table.properties().get(TableProperties.DEFAULT_NAME_MAPPING),
+        table.encryption(),
+        tableProperties.get(TableProperties.DEFAULT_NAME_MAPPING),
         false,
         IdentityPartitionConverters::convertConstant,
         false,
@@ -71,19 +69,19 @@ public class IcebergRewriteExecutor extends AbstractRewriteFilesExecutor {
         fullMetricAppenderFactory(fileSpec()),
         deleteFileFormat(),
         partition(),
-        table.io(),
-        table.asUnkeyedTable().encryption(),
+        io,
+        table.encryption(),
         UUID.randomUUID().toString());
   }
 
   @Override
   protected TaskWriter<Record> dataWriter() {
     OutputFileFactory outputFileFactory =
-        OutputFileFactory.builderFor(table.asUnkeyedTable(), table.spec().specId(), 0).build();
+        OutputFileFactory.builderFor(table, table.spec().specId(), 0).build();
 
     GenericAppenderFactory appenderFactory =
         new GenericAppenderFactory(table.schema(), table.spec());
-    appenderFactory.setAll(table.properties());
+    appenderFactory.setAll(tableProperties);
 
     if (table.spec().isUnpartitioned()) {
       return new UnpartitionedWriter<>(
@@ -112,6 +110,6 @@ public class IcebergRewriteExecutor extends AbstractRewriteFilesExecutor {
   }
 
   private PartitionSpec fileSpec() {
-    return table.asUnkeyedTable().specs().get(input.allFiles()[0].specId());
+    return table.specs().get(input.allFiles()[0].specId());
   }
 }

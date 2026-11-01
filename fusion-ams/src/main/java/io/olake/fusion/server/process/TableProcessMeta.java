@@ -21,10 +21,7 @@
 package io.olake.fusion.server.process;
 
 import io.olake.fusion.process.ProcessStatus;
-import io.olake.fusion.process.TableProcessState;
-import io.olake.fusion.process.TableProcessStore;
 
-import java.util.HashMap;
 import java.util.Map;
 
 public class TableProcessMeta {
@@ -144,92 +141,5 @@ public class TableProcessMeta {
 
   public void setProcessParameters(Map<String, String> processParameters) {
     this.processParameters = processParameters;
-  }
-
-  public TableProcessMeta copy() {
-    TableProcessMeta meta = new TableProcessMeta();
-
-    meta.setProcessId(this.processId);
-    meta.setTableId(this.tableId);
-    meta.setRetryNumber(this.retryNumber);
-    meta.setCreateTime(this.createTime);
-    meta.setFinishTime(this.finishTime);
-
-    meta.setExternalProcessIdentifier(this.externalProcessIdentifier);
-    meta.setProcessType(this.processType);
-    meta.setProcessStage(this.processStage);
-    meta.setExecutionEngine(this.executionEngine);
-    meta.setFailMessage(this.failMessage);
-
-    meta.setStatus(this.status);
-
-    if (this.processParameters != null) {
-      meta.setProcessParameters(new HashMap<>(this.processParameters));
-    }
-    if (this.summary != null) {
-      meta.setSummary(new HashMap<>(this.summary));
-    }
-
-    return meta;
-  }
-
-  public static TableProcessMeta fromTableProcessStore(TableProcessStore tableProcessStore) {
-    TableProcessMeta tableProcessMeta = new TableProcessMeta();
-    tableProcessMeta.setProcessId(tableProcessStore.getProcessId());
-    tableProcessMeta.setTableId(tableProcessStore.getTableId());
-    tableProcessMeta.setExternalProcessIdentifier(tableProcessStore.getExternalProcessIdentifier());
-    tableProcessMeta.setStatus(tableProcessStore.getStatus());
-    tableProcessMeta.setProcessType(tableProcessStore.getProcessType());
-    tableProcessMeta.setProcessStage(tableProcessStore.getProcessStage());
-    tableProcessMeta.setExecutionEngine(tableProcessStore.getExecutionEngine());
-    tableProcessMeta.setRetryNumber(tableProcessStore.getRetryNumber());
-    tableProcessMeta.setCreateTime(tableProcessStore.getCreateTime());
-    tableProcessMeta.setFinishTime(tableProcessStore.getFinishTime());
-    tableProcessMeta.setFailMessage(tableProcessStore.getFailMessage());
-    tableProcessMeta.setProcessParameters(tableProcessStore.getProcessParameters());
-    tableProcessMeta.setSummary(tableProcessStore.getSummary());
-    return tableProcessMeta;
-  }
-
-  @Deprecated
-  public static TableProcessMeta fromTableProcessState(TableProcessState tableProcessState) {
-    TableProcessMeta tableProcessMeta = new TableProcessMeta();
-    tableProcessMeta.setProcessId(tableProcessState.getId());
-    tableProcessMeta.setTableId(tableProcessState.getTableIdentifier().getId());
-    tableProcessMeta.setExternalProcessIdentifier(tableProcessState.getExternalProcessIdentifier());
-    tableProcessMeta.setStatus(tableProcessState.getStatus());
-    tableProcessMeta.setProcessType(tableProcessState.getAction().getName());
-    tableProcessMeta.setProcessStage(tableProcessState.getStage().getDesc());
-    tableProcessMeta.setExecutionEngine(tableProcessState.getExecutionEngine());
-    tableProcessMeta.setRetryNumber(tableProcessState.getRetryNumber());
-    tableProcessMeta.setCreateTime(tableProcessState.getStartTime());
-    tableProcessMeta.setFinishTime(tableProcessState.getEndTime());
-    tableProcessMeta.setFailMessage(tableProcessState.getFailedReason());
-    tableProcessMeta.setProcessParameters(tableProcessState.getProcessParameters());
-    tableProcessMeta.setSummary(tableProcessState.getSummary());
-    return tableProcessMeta;
-  }
-
-  public static TableProcessMeta of(
-      long processId,
-      long tableId,
-      String actionName,
-      String executionEngine,
-      Map<String, String> processParameters) {
-    TableProcessMeta tableProcessMeta = new TableProcessMeta();
-    tableProcessMeta.setProcessId(processId);
-    tableProcessMeta.setTableId(tableId);
-    tableProcessMeta.setExternalProcessIdentifier("");
-    tableProcessMeta.setStatus(ProcessStatus.UNKNOWN);
-    tableProcessMeta.setProcessType(actionName);
-    tableProcessMeta.setProcessStage(ProcessStatus.UNKNOWN.name());
-    tableProcessMeta.setExecutionEngine(executionEngine);
-    tableProcessMeta.setRetryNumber(0);
-    tableProcessMeta.setCreateTime(System.currentTimeMillis());
-    tableProcessMeta.setFinishTime(0);
-    tableProcessMeta.setFailMessage("");
-    tableProcessMeta.setProcessParameters(processParameters);
-    tableProcessMeta.setSummary(new HashMap<>());
-    return tableProcessMeta;
   }
 }

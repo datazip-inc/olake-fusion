@@ -20,11 +20,8 @@
 
 package io.olake.fusion.server.table;
 
-import io.olake.fusion.Action;
 import io.olake.fusion.FusionTable;
-import io.olake.fusion.SupportsProcessPlugins;
 import io.olake.fusion.TableRuntime;
-import io.olake.fusion.api.BlockableOperation;
 import io.olake.fusion.config.OptimizingConfig;
 import io.olake.fusion.config.TableConfiguration;
 import io.olake.fusion.iceberg.Constants;
@@ -32,36 +29,27 @@ import io.olake.fusion.metrics.MetricRegistry;
 import io.olake.fusion.optimizing.OptimizingType;
 import io.olake.fusion.optimizing.TableRuntimeOptimizingState;
 import io.olake.fusion.optimizing.plan.AbstractOptimizingEvaluator;
-import io.olake.fusion.process.FusionProcess;
-import io.olake.fusion.process.ProcessFactory;
 import io.olake.fusion.process.ProcessStatus;
-import io.olake.fusion.process.TableProcessStore;
 import io.olake.fusion.server.FusionServiceConstants;
 import io.olake.fusion.server.optimizing.OptimizingProcess;
 import io.olake.fusion.server.optimizing.OptimizingStatus;
 import io.olake.fusion.server.optimizing.TaskRuntime;
 import io.olake.fusion.server.persistence.mapper.OptimizerMapper;
 import io.olake.fusion.server.persistence.mapper.OptimizingProcessMapper;
-import io.olake.fusion.server.persistence.mapper.TableBlockerMapper;
 import io.olake.fusion.server.persistence.mapper.TableProcessMapper;
 import io.olake.fusion.server.process.TableProcessMeta;
 import io.olake.fusion.server.resource.OptimizerInstance;
-import io.olake.fusion.server.table.blocker.TableBlocker;
 import io.olake.fusion.server.table.cleanup.CleanupOperation;
 import io.olake.fusion.server.table.cleanup.TableRuntimeCleanupState;
 import io.olake.fusion.server.utils.IcebergTableUtil;
 import io.olake.fusion.server.utils.SnowflakeIdGenerator;
-import io.olake.fusion.table.BaseTable;
-import io.olake.fusion.table.ChangeTable;
-import io.olake.fusion.table.MixedTable;
 import io.olake.fusion.table.StateKey;
 import io.olake.fusion.table.TableRuntimeStore;
-import io.olake.fusion.table.UnkeyedTable;
 import io.olake.fusion.utils.ExceptionUtil;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Lists;
 import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
-import org.apache.amoro.shade.zookeeper3.org.apache.curator.shaded.com.google.common.collect.Maps;
 import org.apache.iceberg.Snapshot;
+import org.apache.iceberg.Table;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -79,13 +67,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
-import java.util.stream.Collectors;
 
 /** Default table runtime implementation. */
-public class DefaultTableRuntime extends AbstractTableRuntime
-    implements TableRuntime, SupportsProcessPlugins {
+public class DefaultTableRuntime extends AbstractTableRuntime implements TableRuntime {
 
   private static final Logger LOG = LoggerFactory.getLogger(DefaultTableRuntime.class);
 
@@ -116,7 +100,6 @@ public class DefaultTableRuntime extends AbstractTableRuntime
       Lists.newArrayList(
           OPTIMIZING_STATE_KEY, PENDING_INPUT_KEY, PROCESS_ID_KEY, CLEANUP_STATE_KEY);
 
-  private final Map<Action, TableProcessContainer> processContainerMap = Maps.newConcurrentMap();
   private final TableOptimizingMetrics optimizingMetrics;
   private final TableOrphanFilesCleaningMetrics orphanFilesCleaningMetrics;
   private final TableSummaryMetrics tableSummaryMetrics;
@@ -151,39 +134,6 @@ public class DefaultTableRuntime extends AbstractTableRuntime
     this.optimizingMetrics.register(metricRegistry);
     this.orphanFilesCleaningMetrics.register(metricRegistry);
     this.tableSummaryMetrics.register(metricRegistry);
-  }
-
-  @Override
-  public FusionProcess trigger(Action action) {
-    return Optional.ofNullable(processContainerMap.get(action))
-        .map(container -> container.trigger(action))
-        // Define a related exception
-        .orElseThrow(() -> new IllegalArgumentException("No ProcessFactory for action " + action));
-  }
-
-  @Override
-  public void install(Action action, ProcessFactory processFactory) {
-    if (processContainerMap.putIfAbsent(action, new TableProcessContainer(processFactory))
-        != null) {
-      throw new IllegalStateException("ProcessFactory for action " + action + " already exists");
-    }
-  }
-
-  @Override
-  public boolean enabled(Action action) {
-    return processContainerMap.get(action) != null;
-  }
-
-  @Override
-  public List<TableProcessStore> getProcessStates() {
-    return processContainerMap.values().stream()
-        .flatMap(container -> container.getProcessStates().stream())
-        .collect(Collectors.toList());
-  }
-
-  @Override
-  public List<TableProcessStore> getProcessStates(Action action) {
-    return processContainerMap.get(action).getProcessStates();
   }
 
   public TableOrphanFilesCleaningMetrics getOrphanFilesCleaningMetrics() {
@@ -355,7 +305,7 @@ public class DefaultTableRuntime extends AbstractTableRuntime
     tableSummaryMetrics.refresh(tableSummary);
   }
 
-  public DefaultTableRuntime refresh(FusionTable<?> table) {
+  public DefaultTableRuntime refresh(FusionTable table) {
     Map<String, String> tableConfig = table.properties();
     TableConfiguration newConfiguration = TableConfigurations.parseTableConfig(tableConfig);
     String newGroupName = newConfiguration.getOptimizingConfig().getOptimizerGroup();
@@ -449,8 +399,6 @@ public class DefaultTableRuntime extends AbstractTableRuntime
         return state.getLastOrphanFilesCleanTime();
       case DANGLING_DELETE_FILES_CLEANING:
         return state.getLastDanglingDeleteFilesCleanTime();
-      case DATA_EXPIRING:
-        return state.getLastDataExpiringTime();
       case SNAPSHOTS_EXPIRING:
         return state.getLastSnapshotsExpiringTime();
       default:
@@ -470,9 +418,6 @@ public class DefaultTableRuntime extends AbstractTableRuntime
                   break;
                 case DANGLING_DELETE_FILES_CLEANING:
                   state.setLastDanglingDeleteFilesCleanTime(time);
-                  break;
-                case DATA_EXPIRING:
-                  state.setLastDataExpiringTime(time);
                   break;
                 case SNAPSHOTS_EXPIRING:
                   state.setLastSnapshotsExpiringTime(time);
@@ -757,25 +702,6 @@ public class DefaultTableRuntime extends AbstractTableRuntime
     super.dispose();
   }
 
-  /**
-   * Check if operation are blocked now.
-   *
-   * @param operation - operation to check
-   * @return true if blocked
-   */
-  public boolean isBlocked(BlockableOperation operation) {
-    List<TableBlocker> tableBlockers =
-        getAs(
-            TableBlockerMapper.class,
-            mapper ->
-                mapper.selectBlockers(
-                    getTableIdentifier().getCatalog(),
-                    getTableIdentifier().getDatabase(),
-                    getTableIdentifier().getTableName(),
-                    System.currentTimeMillis()));
-    return TableBlocker.conflict(operation, tableBlockers);
-  }
-
   private long getQuotaTime() {
     long calculatingEndTime = System.currentTimeMillis();
     long calculatingStartTime = calculatingEndTime - FusionServiceConstants.QUOTA_LOOK_BACK_TIME;
@@ -804,48 +730,26 @@ public class DefaultTableRuntime extends AbstractTableRuntime
         1);
   }
 
-  private boolean refreshSnapshots(FusionTable<?> amoroTable, TableRuntimeOptimizingState state) {
+  private boolean refreshSnapshots(FusionTable fusionTable, TableRuntimeOptimizingState state) {
     OptimizingConfig optimizingConfig = this.getOptimizingConfig();
     if (!optimizingConfig.isEnabled()) {
       return true;
     }
 
-    MixedTable table = (MixedTable) amoroTable.originalTable();
+    Table table = fusionTable.table();
     tableSummaryMetrics.refreshSnapshots(table);
     long lastSnapshotId = state.getCurrentSnapshotId();
-    if (table.isKeyedTable()) {
-      long changeSnapshotId = state.getCurrentChangeSnapshotId();
-      ChangeTable changeTable = table.asKeyedTable().changeTable();
-      BaseTable baseTable = table.asKeyedTable().baseTable();
-
-      long currentChangeSnapshotId = doRefreshSnapshots(changeTable);
-      long currentSnapshotId = doRefreshSnapshots(baseTable);
-
-      if (currentSnapshotId != lastSnapshotId || currentChangeSnapshotId != changeSnapshotId) {
-        LOG.debug(
-            "Refreshing table {} with base snapshot id {} and change snapshot id {}",
-            getTableIdentifier(),
-            currentSnapshotId,
-            currentChangeSnapshotId);
-        state.setCurrentChangeSnapshotId(currentChangeSnapshotId);
-        state.setCurrentSnapshotId(currentSnapshotId);
-        return true;
-      }
-    } else {
-      long currentSnapshotId = doRefreshSnapshots((UnkeyedTable) table);
-      if (currentSnapshotId != lastSnapshotId) {
-        LOG.debug(
-            "Refreshing table {} with base snapshot id {}",
-            getTableIdentifier(),
-            currentSnapshotId);
-        state.setCurrentSnapshotId(currentSnapshotId);
-        return true;
-      }
+    long currentSnapshotId = doRefreshSnapshots(table);
+    if (currentSnapshotId != lastSnapshotId) {
+      LOG.debug(
+          "Refreshing table {} with base snapshot id {}", getTableIdentifier(), currentSnapshotId);
+      state.setCurrentSnapshotId(currentSnapshotId);
+      return true;
     }
     return false;
   }
 
-  private long doRefreshSnapshots(UnkeyedTable table) {
+  private long doRefreshSnapshots(Table table) {
     long currentSnapshotId = Constants.INVALID_SNAPSHOT_ID;
     Snapshot currentSnapshot = IcebergTableUtil.getSnapshot(table, true);
     if (currentSnapshot != null) {
@@ -857,31 +761,5 @@ public class DefaultTableRuntime extends AbstractTableRuntime
         IcebergTableUtil.findLatestOptimizingSnapshot(table).orElse(null));
 
     return currentSnapshotId;
-  }
-
-  private class TableProcessContainer {
-    private final Lock processLock = new ReentrantLock();
-    private final ProcessFactory processFactory;
-    private final Map<Long, FusionProcess> processMap = Maps.newConcurrentMap();
-
-    TableProcessContainer(ProcessFactory processFactory) {
-      this.processFactory = processFactory;
-    }
-
-    public FusionProcess trigger(Action action) {
-      processLock.lock();
-      try {
-        FusionProcess process = processFactory.create(DefaultTableRuntime.this, action);
-        process.getCompleteFuture().whenCompleted(() -> processMap.remove(process.getId()));
-        processMap.put(process.getId(), process);
-        return process;
-      } finally {
-        processLock.unlock();
-      }
-    }
-
-    public List<TableProcessStore> getProcessStates() {
-      return processMap.values().stream().map(FusionProcess::store).collect(Collectors.toList());
-    }
   }
 }

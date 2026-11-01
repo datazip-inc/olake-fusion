@@ -20,14 +20,13 @@
 
 package io.olake.fusion.optimizing.plan;
 
+import io.olake.fusion.FusionTable;
 import io.olake.fusion.ServerTableIdentifier;
 import io.olake.fusion.config.OptimizingConfig;
 import io.olake.fusion.optimizing.HealthScoreInfo;
 import io.olake.fusion.optimizing.OptimizingType;
 import io.olake.fusion.optimizing.RewriteFilesInput;
 import io.olake.fusion.optimizing.RewriteStageTask;
-import io.olake.fusion.table.MixedTable;
-import io.olake.fusion.utils.MixedTableUtil;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Lists;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Maps;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Sets;
@@ -56,7 +55,7 @@ public abstract class AbstractPartitionPlan implements PartitionEvaluator {
   protected final long lastMajorOptimizingTime;
   private CommonPartitionEvaluator evaluator;
   private TaskSplitter taskSplitter;
-  protected MixedTable tableObject;
+  protected final FusionTable tableObject;
   private Long fromSequence = null;
   private Long toSequence = null;
   protected final long planTime;
@@ -80,7 +79,7 @@ public abstract class AbstractPartitionPlan implements PartitionEvaluator {
 
   public AbstractPartitionPlan(
       ServerTableIdentifier identifier,
-      MixedTable table,
+      FusionTable table,
       OptimizingConfig config,
       Pair<Integer, StructLike> partition,
       long planTime,
@@ -331,9 +330,9 @@ public abstract class AbstractPartitionPlan implements PartitionEvaluator {
               rewritePosDataFiles.toArray(new DataFile[0]),
               readOnlyDeleteFiles.toArray(new ContentFile[0]),
               rewriteDeleteFiles.toArray(new ContentFile[0]),
-              tableObject);
-      PartitionSpec spec =
-          MixedTableUtil.getMixedTablePartitionSpecById(tableObject, partition.first());
+              tableObject.serializableTable(),
+              tableObject.serializableProperties());
+      PartitionSpec spec = tableObject.table().specs().get(partition.first());
       String partitionPath = spec.partitionToPath(partition.second());
       return new RewriteStageTask(identifier.getId(), partitionPath, input, properties);
     }

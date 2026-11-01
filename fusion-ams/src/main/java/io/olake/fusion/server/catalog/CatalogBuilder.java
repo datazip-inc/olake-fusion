@@ -20,7 +20,6 @@
 
 package io.olake.fusion.server.catalog;
 
-import static io.olake.fusion.properties.CatalogMetaProperties.CATALOG_TYPE_AMS;
 import static io.olake.fusion.properties.CatalogMetaProperties.CATALOG_TYPE_CUSTOM;
 import static io.olake.fusion.properties.CatalogMetaProperties.CATALOG_TYPE_FILESYSTEM;
 import static io.olake.fusion.properties.CatalogMetaProperties.CATALOG_TYPE_GLUE;
@@ -47,8 +46,7 @@ public class CatalogBuilder {
           CATALOG_TYPE_GLUE,
           CATALOG_TYPE_REST,
           CATALOG_TYPE_CUSTOM,
-          CATALOG_TYPE_HIVE,
-          CATALOG_TYPE_AMS);
+          CATALOG_TYPE_HIVE);
 
   private static final Set<TableFormat> SUPPORTED_TABLE_FORMATS =
       ImmutableSet.of(TableFormat.ICEBERG);
@@ -79,8 +77,6 @@ public class CatalogBuilder {
       case CATALOG_TYPE_CUSTOM:
       case CATALOG_TYPE_HIVE:
         return new ExternalCatalog(catalogMeta);
-      case CATALOG_TYPE_AMS:
-        return new InternalCatalogImpl(catalogMeta, serverConfiguration);
       default:
         throw new IllegalStateException("unsupported catalog type:" + type);
     }

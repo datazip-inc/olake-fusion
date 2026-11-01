@@ -20,7 +20,6 @@
 
 package io.olake.fusion.io.reader;
 
-import io.olake.fusion.io.AuthenticatedFileIO;
 import io.olake.fusion.io.CloseablePredicate;
 import io.olake.fusion.optimizing.RewriteFilesInput;
 import io.olake.fusion.utils.ContentFiles;
@@ -53,6 +52,7 @@ import org.apache.iceberg.data.parquet.GenericParquetReaders;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.io.DeleteSchemaUtil;
+import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.io.InputFile;
 import org.apache.iceberg.orc.ORC;
 import org.apache.iceberg.parquet.Parquet;
@@ -201,7 +201,7 @@ public abstract class CombinedDeleteFilter<T extends StructLike> {
 
   protected abstract InputFile getInputFile(ContentFile<?> contentFile);
 
-  protected abstract AuthenticatedFileIO getFileIO();
+  protected abstract FileIO getFileIO();
 
   /**
    * Get all delete ids of equality delete files

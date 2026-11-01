@@ -20,8 +20,6 @@
 
 package io.olake.fusion.server.dashboard.controller;
 
-import static io.olake.fusion.properties.CatalogMetaProperties.CATALOG_TYPE_HIVE;
-
 import io.javalin.http.Context;
 import io.olake.fusion.Constants;
 import io.olake.fusion.ServerTableIdentifier;
@@ -30,31 +28,20 @@ import io.olake.fusion.api.CatalogMeta;
 import io.olake.fusion.api.OptimizingService;
 import io.olake.fusion.client.OptimizingClientPools;
 import io.olake.fusion.config.Configurations;
-import io.olake.fusion.hive.CachedHiveClientPool;
-import io.olake.fusion.hive.HMSClientPool;
 import io.olake.fusion.process.ProcessStatus;
-import io.olake.fusion.properties.HiveTableProperties;
 import io.olake.fusion.server.catalog.CatalogManager;
 import io.olake.fusion.server.catalog.ServerCatalog;
 import io.olake.fusion.server.dashboard.ServerTableDescriptor;
-import io.olake.fusion.server.dashboard.ServerTableProperties;
-import io.olake.fusion.server.dashboard.model.HiveTableInfo;
 import io.olake.fusion.server.dashboard.model.TableMeta;
 import io.olake.fusion.server.dashboard.model.TableOperation;
-import io.olake.fusion.server.dashboard.model.UpgradeRunningInfo;
-import io.olake.fusion.server.dashboard.model.UpgradeStatus;
 import io.olake.fusion.server.dashboard.response.OkResponse;
 import io.olake.fusion.server.dashboard.response.PageResult;
 import io.olake.fusion.server.dashboard.utils.AmsUtil;
-import io.olake.fusion.server.dashboard.utils.CommonUtil;
 import io.olake.fusion.server.optimizing.OptimizingStatus;
 import io.olake.fusion.server.persistence.TableRuntimeMeta;
 import io.olake.fusion.server.process.TableProcessMeta;
 import io.olake.fusion.server.table.TableManager;
 import io.olake.fusion.table.TableIdentifier;
-import io.olake.fusion.table.TableMetaStore;
-import io.olake.fusion.table.TableProperties;
-import io.olake.fusion.table.descriptor.AMSColumnInfo;
 import io.olake.fusion.table.descriptor.ConsumerInfo;
 import io.olake.fusion.table.descriptor.DDLInfo;
 import io.olake.fusion.table.descriptor.FusionSnapshotsOfTable;
@@ -66,46 +53,31 @@ import io.olake.fusion.table.descriptor.PartitionFileBaseInfo;
 import io.olake.fusion.table.descriptor.ServerTableMeta;
 import io.olake.fusion.table.descriptor.TableSummary;
 import io.olake.fusion.table.descriptor.TagOrBranchInfo;
-import io.olake.fusion.utils.CatalogUtil;
 import org.apache.amoro.shade.guava32.com.google.common.base.Function;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
-import org.apache.amoro.shade.guava32.com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.amoro.shade.thrift.org.apache.thrift.TException;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
-import org.apache.hadoop.hive.metastore.api.FieldSchema;
-import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
-import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.iceberg.SnapshotRef;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
-import java.util.TreeMap;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.stream.Collectors;
 
 /** The controller that handles table requests. */
 public class TableController {
   private static final Logger LOG = LoggerFactory.getLogger(TableController.class);
-  private static final long UPGRADE_INFO_EXPIRE_INTERVAL = 60 * 60 * 1000;
 
   private final CatalogManager catalogManager;
   private final TableManager tableManager;
   private final ServerTableDescriptor tableDescriptor;
   private final Configurations serviceConfig;
-  private final ConcurrentHashMap<TableIdentifier, UpgradeRunningInfo> upgradeRunningInfo =
-      new ConcurrentHashMap<>();
-  private final ScheduledExecutorService tableUpgradeExecutor;
 
   public TableController(
       CatalogManager catalogManager,
@@ -116,13 +88,6 @@ public class TableController {
     this.tableManager = tableManager;
     this.tableDescriptor = tableDescriptor;
     this.serviceConfig = serviceConfig;
-    this.tableUpgradeExecutor =
-        Executors.newScheduledThreadPool(
-            0,
-            new ThreadFactoryBuilder()
-                .setDaemon(false)
-                .setNameFormat("async-hive-table-upgrade-%d")
-                .build());
   }
 
   /**
@@ -171,97 +136,6 @@ public class TableController {
       tableSummary.setOptimizingStatus(OptimizingStatus.IDLE.name());
     }
     ctx.json(OkResponse.of(serverTableMeta));
-  }
-
-  /**
-   * get hive table detail.
-   *
-   * @param ctx - context for handling the request and response
-   */
-  public void getHiveTableDetail(Context ctx) {
-    String catalog = ctx.pathParam("catalog");
-    String db = ctx.pathParam("db");
-    String table = ctx.pathParam("table");
-    Preconditions.checkArgument(
-        StringUtils.isNotBlank(catalog)
-            && StringUtils.isNotBlank(db)
-            && StringUtils.isNotBlank(table),
-        "catalog.database.tableName can not be empty in any element");
-    ServerCatalog serverCatalog = catalogManager.getServerCatalog(catalog);
-    CatalogMeta catalogMeta = serverCatalog.getMetadata();
-    TableMetaStore tableMetaStore = CatalogUtil.buildMetaStore(catalogMeta);
-    HMSClientPool hmsClientPool =
-        new CachedHiveClientPool(tableMetaStore, catalogMeta.getCatalogProperties());
-
-    TableIdentifier tableIdentifier = TableIdentifier.of(catalog, db, table);
-    HiveTableInfo hiveTableInfo;
-    Table hiveTable = loadHmsTable(hmsClientPool, tableIdentifier);
-    List<AMSColumnInfo> schema = transformHiveSchemaToAMSColumnInfo(hiveTable.getSd().getCols());
-    List<AMSColumnInfo> partitionColumnInfos =
-        transformHiveSchemaToAMSColumnInfo(hiveTable.getPartitionKeys());
-    hiveTableInfo =
-        new HiveTableInfo(
-            tableIdentifier,
-            TableMeta.TableType.HIVE,
-            schema,
-            partitionColumnInfos,
-            new HashMap<>(),
-            hiveTable.getCreateTime());
-    ctx.json(OkResponse.of(hiveTableInfo));
-  }
-
-  /**
-   * upgrade a hive table to mixed-hive table.
-   *
-   * @param ctx - context for handling the request and response
-   */
-  public void upgradeHiveTable(Context ctx) {
-    String catalog = ctx.pathParam("catalog");
-    String db = ctx.pathParam("db");
-    String table = ctx.pathParam("table");
-    Preconditions.checkArgument(
-        StringUtils.isNotBlank(catalog)
-            && StringUtils.isNotBlank(db)
-            && StringUtils.isNotBlank(table),
-        "catalog.database.tableName can not be empty in any element");
-    throw new IllegalStateException(
-        "Upgrading a Hive table to mixed-hive is not supported, Fusion manages Iceberg tables only");
-  }
-
-  public void getUpgradeStatus(Context ctx) {
-    String catalog = ctx.pathParam("catalog");
-    String db = ctx.pathParam("db");
-    String table = ctx.pathParam("table");
-    UpgradeRunningInfo info =
-        upgradeRunningInfo.containsKey(TableIdentifier.of(catalog, db, table))
-            ? upgradeRunningInfo.get(TableIdentifier.of(catalog, db, table))
-            : new UpgradeRunningInfo(UpgradeStatus.NONE.toString());
-    ctx.json(OkResponse.of(info));
-  }
-
-  /**
-   * get table properties for upgrading hive table to mixed-hive table.
-   *
-   * @param ctx - context for handling the request and response
-   */
-  public void getUpgradeHiveTableProperties(Context ctx) throws IllegalAccessException {
-    Map<String, String> keyValues = new TreeMap<>();
-    Map<String, String> tableProperties =
-        AmsUtil.getNotDeprecatedAndNotInternalStaticFields(TableProperties.class);
-    tableProperties.keySet().stream()
-        .filter(key -> !key.endsWith("_DEFAULT"))
-        .forEach(
-            key -> keyValues.put(tableProperties.get(key), tableProperties.get(key + "_DEFAULT")));
-    ServerTableProperties.HIDDEN_EXPOSED.forEach(keyValues::remove);
-    Map<String, String> hiveProperties =
-        AmsUtil.getNotDeprecatedAndNotInternalStaticFields(HiveTableProperties.class);
-
-    hiveProperties.keySet().stream()
-        .filter(key -> HiveTableProperties.EXPOSED.contains(hiveProperties.get(key)))
-        .filter(key -> !key.endsWith("_DEFAULT"))
-        .forEach(
-            key -> keyValues.put(hiveProperties.get(key), hiveProperties.get(key + "_DEFAULT")));
-    ctx.json(OkResponse.of(keyValues));
   }
 
   /**
@@ -483,16 +357,10 @@ public class TableController {
     ServerCatalog serverCatalog = catalogManager.getServerCatalog(catalog);
     Function<TableFormat, String> formatToType =
         format -> {
-          if (format.equals(TableFormat.MIXED_HIVE) || format.equals(TableFormat.MIXED_ICEBERG)) {
-            return TableMeta.TableType.ARCTIC.toString();
-          } else if (format.equals(TableFormat.PAIMON)) {
-            return TableMeta.TableType.PAIMON.toString();
-          } else if (format.equals(TableFormat.ICEBERG)) {
+          if (TableFormat.ICEBERG.equals(format)) {
             return TableMeta.TableType.ICEBERG.toString();
-          } else if (format.equals(TableFormat.HUDI)) {
-            return TableMeta.TableType.HUDI.toString();
           } else {
-            return format.toString();
+            return String.valueOf(format);
           }
         };
 
@@ -513,22 +381,6 @@ public class TableController {
                   }
                 })
             .collect(Collectors.toList());
-    String catalogType = serverCatalog.getMetadata().getCatalogType();
-    if (catalogType.equals(CATALOG_TYPE_HIVE)) {
-      CatalogMeta catalogMeta = serverCatalog.getMetadata();
-      TableMetaStore tableMetaStore = CatalogUtil.buildMetaStore(catalogMeta);
-      HMSClientPool hmsClientPool =
-          new CachedHiveClientPool(tableMetaStore, catalogMeta.getCatalogProperties());
-
-      List<String> hiveTables = listHmsTables(hmsClientPool, db);
-      Set<String> mixedHiveTables =
-          tables.stream().map(TableMeta::getName).collect(Collectors.toSet());
-      hiveTables.stream()
-          .filter(e -> !mixedHiveTables.contains(e))
-          .sorted(String::compareTo)
-          .forEach(e -> tables.add(new TableMeta(e, TableMeta.TableType.HIVE.toString())));
-    }
-
     ctx.json(
         OkResponse.of(
             tables.stream()
@@ -560,20 +412,6 @@ public class TableController {
   public void getCatalogs(Context ctx) {
     List<CatalogMeta> catalogs = catalogManager.listCatalogMetas();
     ctx.json(OkResponse.of(catalogs));
-  }
-
-  /**
-   * get single page query token.
-   *
-   * @param ctx - context for handling the request and response
-   */
-  public void getTableDetailTabToken(Context ctx) {
-    String catalog = ctx.pathParam("catalog");
-    String db = ctx.pathParam("db");
-    String table = ctx.pathParam("table");
-
-    String signCal = CommonUtil.generateTablePageToken(catalog, db, table);
-    ctx.json(OkResponse.of(signCal));
   }
 
   public void getTableTags(Context ctx) {
@@ -671,43 +509,5 @@ public class TableController {
               branchInfos.remove(mainBranch);
               branchInfos.add(0, mainBranch);
             });
-  }
-
-  private List<AMSColumnInfo> transformHiveSchemaToAMSColumnInfo(List<FieldSchema> fields) {
-    return fields.stream()
-        .map(
-            f -> {
-              AMSColumnInfo columnInfo = new AMSColumnInfo();
-              columnInfo.setField(f.getName());
-              columnInfo.setType(f.getType());
-              columnInfo.setComment(f.getComment());
-              return columnInfo;
-            })
-        .collect(Collectors.toList());
-  }
-
-  private static Table loadHmsTable(HMSClientPool hmsClientPool, TableIdentifier identifier) {
-    try {
-      return hmsClientPool.run(
-          client -> client.getTable(identifier.getDatabase(), identifier.getTableName()));
-    } catch (NoSuchObjectException e) {
-      return null;
-    } catch (org.apache.thrift.TException e) {
-      throw new RuntimeException("Metastore operation failed for " + identifier, e);
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-      throw new RuntimeException("Interrupted in call to getTable " + identifier, e);
-    }
-  }
-
-  private static List<String> listHmsTables(HMSClientPool hmsClientPool, String database) {
-    try {
-      return hmsClientPool.run(client -> client.getAllTables(database));
-    } catch (org.apache.thrift.TException e) {
-      throw new RuntimeException("Failed to get tables of database " + database, e);
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-      throw new RuntimeException("Interrupted in call to getAllTables", e);
-    }
   }
 }

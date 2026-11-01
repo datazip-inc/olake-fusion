@@ -20,21 +20,20 @@
 
 package io.olake.fusion.catalog;
 
+import io.olake.fusion.FusionTable;
 import io.olake.fusion.TableFormat;
 import io.olake.fusion.TableTestHelper;
-import io.olake.fusion.table.MixedTable;
 import io.olake.fusion.table.TableMetaStore;
-import io.olake.fusion.table.UnkeyedTable;
 import io.olake.fusion.utils.CatalogUtil;
-import io.olake.fusion.utils.MixedTableUtil;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
+import org.apache.iceberg.Table;
 import org.junit.After;
 import org.junit.Before;
 
 public abstract class TableTestBase extends CatalogTestBase {
 
   private final TableTestHelper tableTestHelper;
-  private MixedTable mixedTable;
+  private FusionTable fusionTable;
   private TableMetaStore tableMetaStore;
 
   public TableTestBase(CatalogTestHelper catalogTestHelper, TableTestHelper tableTestHelper) {
@@ -46,7 +45,7 @@ public abstract class TableTestBase extends CatalogTestBase {
   public void setupTable() {
     this.tableMetaStore = CatalogUtil.buildMetaStore(getCatalogMeta());
 
-    getUnifiedCatalog().createDatabase(TableTestHelper.TEST_DB_NAME);
+    getFusionCatalog().createDatabase(TableTestHelper.TEST_DB_NAME);
     TableFormat format = getTestFormat();
     Preconditions.checkArgument(
         TableFormat.ICEBERG.equals(format), "Unsupported test table format: %s", format);
@@ -61,39 +60,33 @@ public abstract class TableTestBase extends CatalogTestBase {
             tableTestHelper.tableSchema(),
             tableTestHelper.partitionSpec(),
             tableTestHelper.tableProperties());
-    mixedTable =
-        (MixedTable)
-            getUnifiedCatalog()
-                .loadTable(TableTestHelper.TEST_DB_NAME, TableTestHelper.TEST_TABLE_NAME)
-                .originalTable();
+    fusionTable =
+        getFusionCatalog().loadTable(TableTestHelper.TEST_DB_NAME, TableTestHelper.TEST_TABLE_NAME);
   }
 
   @After
   public void dropTable() {
-    getUnifiedCatalog()
+    getFusionCatalog()
         .dropTable(tableTestHelper.id().getDatabase(), tableTestHelper.id().getTableName(), true);
     try {
-      getUnifiedCatalog().dropDatabase(TableTestHelper.TEST_DB_NAME);
+      getFusionCatalog().dropDatabase(TableTestHelper.TEST_DB_NAME);
     } catch (Exception e) {
       e.printStackTrace();
     }
   }
 
-  protected MixedTable getMixedTable() {
-    return mixedTable;
+  /** Returns the test table as Fusion loads it: identifier, catalog defaults and file IO. */
+  protected FusionTable getFusionTable() {
+    return fusionTable;
   }
 
-  protected UnkeyedTable getBaseStore() {
-    return MixedTableUtil.baseStore(mixedTable);
+  /** Returns the Iceberg test table. */
+  protected Table getTable() {
+    return fusionTable.table();
   }
 
   protected TableMetaStore getTableMetaStore() {
     return this.tableMetaStore;
-  }
-
-  protected boolean isKeyedTable() {
-    return tableTestHelper.primaryKeySpec() != null
-        && tableTestHelper.primaryKeySpec().primaryKeyExisted();
   }
 
   protected boolean isPartitionedTable() {

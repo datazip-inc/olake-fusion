@@ -20,9 +20,6 @@
 
 package io.olake.fusion.server.authentication;
 
-import io.olake.fusion.authentication.BasicPrincipal;
-import io.olake.fusion.authentication.PasswdAuthenticationProvider;
-import io.olake.fusion.authentication.PasswordCredential;
 import io.olake.fusion.config.Configurations;
 import io.olake.fusion.exception.SignatureCheckException;
 import io.olake.fusion.server.FusionManagementConf;

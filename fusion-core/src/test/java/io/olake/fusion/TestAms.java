@@ -48,10 +48,6 @@ public class TestAms extends ExternalResource {
     return mockAms.getServerUrl();
   }
 
-  public MockAmoroManagementServer.AmsHandler getAmsHandler() {
-    return mockAms.handler();
-  }
-
   public MockAmoroManagementServer.OptimizerManagerHandler getOptimizerHandler() {
     return mockAms.optimizerHandler();
   }
