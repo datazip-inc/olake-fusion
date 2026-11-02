@@ -164,9 +164,6 @@
                 <version>${project.version}</version>
             </dependency>
 
-
-
-
             <dependency>
                 <groupId>org.apache.amoro</groupId>
                 <artifactId>amoro-shade-jackson-2</artifactId>
@@ -659,7 +656,6 @@
                 <artifactId>metrics-core</artifactId>
                 <version>${dropwizard.metrics.version}</version>
             </dependency>
-
 
             <dependency>
                 <groupId>org.roaringbitmap</groupId>
