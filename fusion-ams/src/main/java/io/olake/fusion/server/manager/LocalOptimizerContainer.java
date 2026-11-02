@@ -38,6 +38,24 @@ public class LocalOptimizerContainer extends AbstractOptimizerContainer {
 
   public static final String JOB_MEMORY_PROPERTY = "memory";
 
+  /**
+   * Container property: when {@code true}, the optimizer runs on this server's own classpath
+   * instead of the jars in {@code $AMORO_HOME/lib}. Meant for a server started from source, so that
+   * the optimizer runs the freshly compiled classes.
+   */
+  public static final String USE_SERVER_CLASSPATH_PROPERTY = "use-server-classpath";
+
+  private static final String ENV_OPTIMIZER_CLASSPATH = "FUSION_OPTIMIZER_CLASSPATH";
+
+  private boolean useServerClasspath;
+
+  @Override
+  public void init(String name, Map<String, String> containerProperties) {
+    super.init(name, containerProperties);
+    this.useServerClasspath =
+        Boolean.parseBoolean(containerProperties.get(USE_SERVER_CLASSPATH_PROPERTY));
+  }
+
   @Override
   protected Map<String, String> doScaleOut(Resource resource) {
     String startUpArgs = this.buildOptimizerStartupArgsString(resource);
@@ -52,6 +70,11 @@ public class LocalOptimizerContainer extends AbstractOptimizerContainer {
       if (StringUtils.isNotEmpty(optimizerJavaOpts)) {
         exportCommands.add(
             String.format("export %s='%s'", ENV_OPTIMIZER_JAVA_OPTS, optimizerJavaOpts));
+      }
+      if (useServerClasspath) {
+        exportCommands.add(
+            String.format(
+                "export %s='%s'", ENV_OPTIMIZER_CLASSPATH, System.getProperty("java.class.path")));
       }
 
       String exportCmd = String.join(" && ", exportCommands);

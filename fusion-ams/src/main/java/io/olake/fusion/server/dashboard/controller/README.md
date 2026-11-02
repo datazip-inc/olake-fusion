@@ -216,11 +216,11 @@ List endpoints take `page` (default 1) and `pageSize` (default 20) and return `P
 
 ## Invariants and pitfalls
 
-- `VALIDATE_CATALOGS` holds only `ICEBERG` combinations (types `ams`, `hive`, `hadoop`,
-  `filesystem`, `glue`, `custom`, `rest`). `hive` is the Hive Metastore catalog for Iceberg tables.
+- `VALIDATE_CATALOGS` holds only `ICEBERG` combinations (types `hive`, `glue`, `custom`, `rest`,
+  all with `S3` storage, plus `custom` with `Local` storage for local testing). `hive` is the Hive Metastore catalog for Iceberg tables.
   An unknown name in `tableFormatList` makes `TableFormat.valueOf` return `null`, so the request
   fails `CatalogDescriptor.validate()` ("Not support ...").
-- `getCatalogDetail` reports a `hadoop` catalog without `table-formats` as type `ams`. Loading an
+- Loading an
   `ams` catalog without `table-formats` fails in `CatalogUtil.tableFormats`; `createCatalog`
   always writes the property.
 - `getCatalogs` returns raw `CatalogMeta`, including catalog properties such as

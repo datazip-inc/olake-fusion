@@ -62,10 +62,10 @@ and calls `initializeFormatCatalogs`:
 
 1. `ServiceLoader.load(FormatCatalogFactory.class)` finds the factories. `fusion-core` registers only
    `io.olake.fusion.formats.iceberg.IcebergCatalogFactory`.
-2. `CatalogUtil#tableFormats(normalizedMetastoreType, catalogProperties)` decides which formats the
+2. `CatalogUtil#tableFormats(metastoreType, catalogProperties)` decides which formats the
    catalog has: from the `table-formats` catalog property (`CatalogMetaProperties.TABLE_FORMATS`) if
-   set (unknown names are dropped), otherwise from the catalog type (`glue`, `rest`, `custom`,
-   `hadoop`, `filesystem` and `hive` give `ICEBERG`; `ams` without `table-formats` throws
+   set (unknown names are dropped), otherwise from the catalog type (`glue`, `rest`, `custom`
+   and `hive` give `ICEBERG`; `ams` without `table-formats` throws
    `IllegalArgumentException`).
 3. For each matching factory, `convertCatalogProperties` then `create` builds the `FormatCatalog`.
 

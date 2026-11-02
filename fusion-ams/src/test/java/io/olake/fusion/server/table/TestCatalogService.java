@@ -110,7 +110,7 @@ public class TestCatalogService extends AMSServiceTestBase {
 
     // test update catalog type
     final CatalogMeta updateCatalogMeta2 = new CatalogMeta(updateCatalogMeta);
-    updateCatalogMeta2.setCatalogType(CatalogMetaProperties.CATALOG_TYPE_CUSTOM);
+    updateCatalogMeta2.setCatalogType(CatalogMetaProperties.CATALOG_TYPE_GLUE);
     Assert.assertThrows(
         IllegalMetadataException.class, () -> CATALOG_MANAGER.updateCatalog(updateCatalogMeta2));
 

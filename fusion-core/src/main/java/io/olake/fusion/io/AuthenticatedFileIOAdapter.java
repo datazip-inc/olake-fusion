@@ -90,18 +90,6 @@ public class AuthenticatedFileIOAdapter implements AuthenticatedFileIO {
   }
 
   @Override
-  public boolean supportFileSystemOperations() {
-    return io instanceof AuthenticatedFileIO
-        && ((AuthenticatedFileIO) io).supportFileSystemOperations();
-  }
-
-  @Override
-  public SupportsFileSystemOperations asFileSystemIO() {
-    Preconditions.checkArgument(this.supportFileSystemOperations());
-    return ((AuthenticatedFileIO) io).asFileSystemIO();
-  }
-
-  @Override
   public boolean supportsFileRecycle() {
     return io instanceof AuthenticatedFileIO && ((AuthenticatedFileIO) io).supportsFileRecycle();
   }

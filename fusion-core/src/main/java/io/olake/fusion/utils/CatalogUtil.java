@@ -30,11 +30,11 @@ import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Maps;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Sets;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.CachingCatalog;
 import org.apache.iceberg.CatalogProperties;
 import org.apache.iceberg.aws.glue.GlueCatalog;
 import org.apache.iceberg.catalog.Catalog;
+import org.apache.iceberg.io.ResolvingFileIO;
 import org.apache.iceberg.rest.RESTCatalog;
 import org.apache.iceberg.util.PropertyUtil;
 import org.slf4j.Logger;
@@ -82,8 +82,6 @@ public class CatalogUtil {
     switch (metastoreType) {
       case CatalogMetaProperties.CATALOG_TYPE_CUSTOM:
       case CatalogMetaProperties.CATALOG_TYPE_REST:
-      case CatalogMetaProperties.CATALOG_TYPE_HADOOP:
-      case CatalogMetaProperties.CATALOG_TYPE_FILESYSTEM:
       case CatalogMetaProperties.CATALOG_TYPE_GLUE:
       case CatalogMetaProperties.CATALOG_TYPE_HIVE:
         return Sets.newHashSet(TableFormat.ICEBERG);
@@ -164,8 +162,7 @@ public class CatalogUtil {
       String catalogName, String metastoreType, Map<String, String> properties) {
     Map<String, String> icebergCatalogProperties = Maps.newHashMap(properties);
     icebergCatalogProperties.put(
-        org.apache.iceberg.CatalogUtil.ICEBERG_CATALOG_TYPE,
-        CatalogUtil.normalizeCatalogType(metastoreType));
+        org.apache.iceberg.CatalogUtil.ICEBERG_CATALOG_TYPE, metastoreType);
     if (CatalogMetaProperties.CATALOG_TYPE_GLUE.equals(metastoreType)) {
       icebergCatalogProperties.put(CatalogProperties.CATALOG_IMPL, GlueCatalog.class.getName());
     }
@@ -182,8 +179,28 @@ public class CatalogUtil {
     if (icebergCatalogProperties.containsKey(CatalogProperties.CATALOG_IMPL)) {
       icebergCatalogProperties.remove(org.apache.iceberg.CatalogUtil.ICEBERG_CATALOG_TYPE);
     }
+    applyDefaultFileIO(metastoreType, icebergCatalogProperties);
 
     return icebergCatalogProperties;
+  }
+
+  /**
+   * Default {@code io-impl} to {@link ResolvingFileIO} for Hive and custom catalogs that do not set
+   * one. Without it, Iceberg's HiveCatalog and JdbcCatalog fall back to HadoopFileIO, which has no
+   * FileSystem for {@code s3://} paths. ResolvingFileIO uses S3FileIO for s3, s3a and s3n paths and
+   * HadoopFileIO for anything else, which matches the FileIO OLake writes its tables with. Glue and
+   * REST catalogs already pick an S3-capable FileIO and are left unchanged.
+   *
+   * @param metastoreType - metastore type
+   * @param catalogProperties - catalog properties, updated in place
+   */
+  public static void applyDefaultFileIO(
+      String metastoreType, Map<String, String> catalogProperties) {
+    if (CatalogMetaProperties.CATALOG_TYPE_HIVE.equalsIgnoreCase(metastoreType)
+        || CatalogMetaProperties.CATALOG_TYPE_CUSTOM.equalsIgnoreCase(metastoreType)) {
+      catalogProperties.putIfAbsent(
+          CatalogProperties.FILE_IO_IMPL, ResolvingFileIO.class.getName());
+    }
   }
 
   /**
@@ -226,57 +243,11 @@ public class CatalogUtil {
   }
 
   /**
-   * Build {@link TableMetaStore} from catalog meta.
-   *
-   * <p>Storage type {@code Local} uses the default Hadoop configuration without authentication.
-   * Every other storage (S3) authenticates through the catalog's FileIO properties; only the AK/SK
-   * auth type is recorded in the meta store.
+   * Build {@link TableMetaStore} from catalog meta. Every catalog uses the default Hadoop
+   * configuration; storage credentials come from the catalog's FileIO properties.
    */
   public static TableMetaStore buildMetaStore(CatalogMeta catalogMeta) {
-    TableMetaStore.Builder builder = TableMetaStore.builder();
-    Map<String, String> storageConfigs = catalogMeta.getStorageConfigs();
-    if (storageConfigs != null
-        && CatalogMetaProperties.STORAGE_CONFIGS_VALUE_TYPE_LOCAL.equalsIgnoreCase(
-            storageConfigs.get(CatalogMetaProperties.STORAGE_CONFIGS_KEY_TYPE))) {
-      return builder.withConfiguration(new Configuration()).build();
-    }
-
-    boolean loadAuthFromAMS =
-        propertyAsBoolean(
-            catalogMeta.getCatalogProperties(),
-            CatalogMetaProperties.LOAD_AUTH_FROM_AMS,
-            CatalogMetaProperties.LOAD_AUTH_FROM_AMS_DEFAULT);
-    // load auth configs from ams
-    if (loadAuthFromAMS && catalogMeta.getAuthConfigs() != null) {
-      String authType =
-          catalogMeta.getAuthConfigs().get(CatalogMetaProperties.AUTH_CONFIGS_KEY_TYPE);
-      LOG.info("TableMetaStore use auth config in catalog meta, authType is {}", authType);
-      applyAkSkAuth(builder, catalogMeta.getAuthConfigs(), storageConfigs);
-    }
-
-    // cover auth configs from ams with auth configs in properties
-    String authType =
-        catalogMeta.getCatalogProperties().get(CatalogMetaProperties.AUTH_CONFIGS_KEY_TYPE);
-    if (StringUtils.isNotEmpty(authType)) {
-      LOG.info("TableMetaStore use auth config in properties, authType is {}", authType);
-      applyAkSkAuth(builder, catalogMeta.getCatalogProperties(), storageConfigs);
-    }
-    return builder.build();
-  }
-
-  private static void applyAkSkAuth(
-      TableMetaStore.Builder builder,
-      Map<String, String> authConfigs,
-      Map<String, String> storageConfigs) {
-    if (CatalogMetaProperties.AUTH_CONFIGS_VALUE_TYPE_AK_SK.equalsIgnoreCase(
-        authConfigs.get(CatalogMetaProperties.AUTH_CONFIGS_KEY_TYPE))) {
-      builder.withAkSkAuth(
-          authConfigs.get(CatalogMetaProperties.AUTH_CONFIGS_KEY_ACCESS_KEY),
-          authConfigs.get(CatalogMetaProperties.AUTH_CONFIGS_KEY_SECRET_KEY),
-          storageConfigs == null
-              ? null
-              : storageConfigs.get(CatalogMetaProperties.STORAGE_CONFIGS_KEY_TYPE));
-    }
+    return new TableMetaStore();
   }
 
   public static io.olake.fusion.api.TableIdentifier amsTableId(TableIdentifier tableIdentifier) {
@@ -302,43 +273,5 @@ public class CatalogUtil {
     if (StringUtils.isNotEmpty(fromProperties.get(fromKey))) {
       toProperties.put(toKey, (T) fromProperties.get(fromKey));
     }
-  }
-
-  public static String normalizeMetastoreType(String type) {
-    if (type == null) {
-      return null;
-    }
-    if (CatalogMetaProperties.CATALOG_TYPE_HADOOP.equalsIgnoreCase(type)
-        || CatalogMetaProperties.CATALOG_TYPE_FILESYSTEM.equalsIgnoreCase(type)) {
-      return CatalogMetaProperties.CATALOG_TYPE_FILESYSTEM;
-    }
-    return type;
-  }
-
-  /**
-   * Normalize catalog type for client-side and factory usage.
-   *
-   * <p>Iceberg only recognizes short catalog types like "hadoop" or "hive" in its {@code
-   * CatalogUtil}, and does not recognize "filesystem" yet. To keep AMS using "filesystem" in
-   * metadata while still working with Iceberg, we normalize "filesystem" back to "hadoop" before
-   * passing it down to Iceberg.
-   */
-  public static String normalizeCatalogType(String type) {
-    if (type == null) {
-      return null;
-    }
-    if (CatalogMetaProperties.CATALOG_TYPE_FILESYSTEM.equalsIgnoreCase(type)) {
-      return CatalogMetaProperties.CATALOG_TYPE_HADOOP;
-    }
-    return type;
-  }
-
-  private static boolean propertyAsBoolean(
-      Map<String, String> properties, String property, boolean defaultValue) {
-    String value = properties.get(property);
-    if (value != null) {
-      return Boolean.parseBoolean(value);
-    }
-    return defaultValue;
   }
 }

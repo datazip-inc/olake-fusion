@@ -177,7 +177,7 @@ public class AmsEnvironment {
     CatalogMeta catalogMeta =
         CatalogTestHelpers.buildCatalogMeta(
             ICEBERG_CATALOG,
-            CatalogMetaProperties.CATALOG_TYPE_HADOOP,
+            CatalogMetaProperties.CATALOG_TYPE_CUSTOM,
             properties,
             TableFormat.ICEBERG);
     catalogManager.createCatalog(catalogMeta);

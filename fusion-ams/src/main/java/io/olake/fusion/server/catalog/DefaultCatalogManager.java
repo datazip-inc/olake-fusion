@@ -35,7 +35,6 @@ import io.olake.fusion.server.persistence.PersistentBase;
 import io.olake.fusion.server.persistence.mapper.CatalogMetaMapper;
 import io.olake.fusion.server.utils.Telemetry;
 import io.olake.fusion.table.TableIdentifier;
-import io.olake.fusion.utils.CatalogUtil;
 import org.apache.amoro.shade.guava32.com.google.common.annotations.VisibleForTesting;
 import org.apache.amoro.shade.guava32.com.google.common.cache.CacheBuilder;
 import org.apache.amoro.shade.guava32.com.google.common.cache.CacheLoader;
@@ -274,8 +273,8 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
   }
 
   private void validateCatalogUpdate(CatalogMeta oldMeta, CatalogMeta newMeta) {
-    String oldType = CatalogUtil.normalizeMetastoreType(oldMeta.getCatalogType());
-    String newType = CatalogUtil.normalizeMetastoreType(newMeta.getCatalogType());
+    String oldType = oldMeta.getCatalogType();
+    String newType = newMeta.getCatalogType();
     if (!oldType.equals(newType)) {
       throw new IllegalMetadataException("Cannot update catalog type");
     }

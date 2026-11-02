@@ -22,7 +22,6 @@ package io.olake.fusion.server.catalog;
 
 public enum CatalogType {
   HIVE,
-  HADOOP,
   GLUE,
   REST,
   CUSTOM

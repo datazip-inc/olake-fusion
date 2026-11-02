@@ -21,7 +21,6 @@
 package io.olake.fusion.formats.iceberg.utils;
 
 import io.olake.fusion.io.AuthenticatedFileIO;
-import io.olake.fusion.utils.TableFileUtil;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Sets;
 import org.apache.hadoop.fs.Path;
 import org.apache.iceberg.io.BulkDeletionFailureException;
@@ -36,7 +35,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class RollingFileCleaner {
   private final Set<String> collectedFiles = Sets.newConcurrentHashSet();
   private final Set<String> excludeFiles;
-  private final Set<String> parentDirectories = Sets.newConcurrentHashSet();
 
   private static final int CLEANED_FILE_GROUP_SIZE = 1_000;
 
@@ -62,8 +60,6 @@ public class RollingFileCleaner {
     }
 
     collectedFiles.add(filePath);
-    String parentDir = TableFileUtil.getParent(filePath);
-    parentDirectories.add(parentDir);
     int currentCount = fileCounter.incrementAndGet();
 
     if (currentCount % CLEANED_FILE_GROUP_SIZE == 0) {
@@ -111,12 +107,6 @@ public class RollingFileCleaner {
         }
       }
     }
-    // Try to delete empty parent directories
-    for (String parentDir : parentDirectories) {
-      TableFileUtil.deleteEmptyDirectory(fileIO, parentDir, excludeFiles);
-    }
-    parentDirectories.clear();
-
     LOG.debug("Cleaned expired a file group, total files: {}", collectedFiles.size());
 
     collectedFiles.clear();

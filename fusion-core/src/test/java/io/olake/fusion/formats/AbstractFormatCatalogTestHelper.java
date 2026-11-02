@@ -54,7 +54,7 @@ public abstract class AbstractFormatCatalogTestHelper<C> implements FusionCatalo
   protected abstract TableFormat format();
 
   protected String getMetastoreType() {
-    return CatalogMetaProperties.CATALOG_TYPE_HADOOP;
+    return CatalogMetaProperties.CATALOG_TYPE_CUSTOM;
   }
 
   @Override

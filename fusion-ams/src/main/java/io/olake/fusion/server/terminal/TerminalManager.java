@@ -37,7 +37,6 @@ import io.olake.fusion.utils.CatalogUtil;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Lists;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Maps;
-import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.CatalogProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -103,8 +102,8 @@ public class TerminalManager {
    */
   public String executeScript(String terminalId, String catalog, String script) {
     CatalogMeta catalogMeta = catalogManager.getCatalogMeta(catalog);
-    TableMetaStore metaStore = getCatalogTableMetaStore(catalogMeta);
-    String sessionId = getSessionId(terminalId, metaStore, catalog);
+    TableMetaStore metaStore = new TableMetaStore();
+    String sessionId = getSessionId(terminalId, catalog);
     String connectorType = catalogConnectorType(catalogMeta);
     applyClientProperties(catalogMeta);
     Configurations configuration = new Configurations();
@@ -257,21 +256,10 @@ public class TerminalManager {
     return SparkContextUtil.ICEBERG_CONNECTOR;
   }
 
-  private String getSessionId(String loginId, TableMetaStore auth, String catalog) {
-    String sessionId =
-        loginId + "-" + auth.getAuthMethod() + "-" + auth.getHadoopUsername() + "-" + catalog;
+  private String getSessionId(String loginId, String catalog) {
+    String sessionId = loginId + "-" + catalog;
     sessionId = sessionId.replace("/", "_");
     return sessionId;
-  }
-
-  private TableMetaStore getCatalogTableMetaStore(CatalogMeta catalogMeta) {
-    TableMetaStore.Builder builder = TableMetaStore.builder();
-    if (catalogMeta.getStorageConfigs() != null
-        && CatalogMetaProperties.STORAGE_CONFIGS_VALUE_TYPE_LOCAL.equalsIgnoreCase(
-            catalogMeta.getStorageConfigs().get(CatalogMetaProperties.STORAGE_CONFIGS_KEY_TYPE))) {
-      builder.withConfiguration(new Configuration());
-    }
-    return builder.build();
   }
 
   private TerminalSessionFactory loadTerminalSessionFactory(Configurations conf) {
@@ -300,11 +288,12 @@ public class TerminalManager {
 
   private void applyClientProperties(CatalogMeta catalogMeta) {
     Set<TableFormat> formats = CatalogUtil.tableFormats(catalogMeta);
-    String catalogType = CatalogUtil.normalizeCatalogType(catalogMeta.getCatalogType());
+    String catalogType = catalogMeta.getCatalogType();
     if (formats.contains(TableFormat.ICEBERG)) {
       if (!catalogMeta.getCatalogProperties().containsKey(CatalogProperties.CATALOG_IMPL)) {
         catalogMeta.putToCatalogProperties("type", catalogType);
       }
+      CatalogUtil.applyDefaultFileIO(catalogType, catalogMeta.getCatalogProperties());
       // apply glue credentials to glue catalog
       if (CatalogMetaProperties.CATALOG_TYPE_GLUE.equalsIgnoreCase(catalogType)) {
         Map<String, String> props = catalogMeta.getCatalogProperties();

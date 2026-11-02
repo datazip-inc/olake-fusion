@@ -29,7 +29,7 @@ inside the Fusion server JVM.
    starting with `spark.` (from `terminal.local.spark.*`). Created once with `getOrCreate()`.
 2. **Per session** (`create`): `context.cloneSession()`; for every catalog whose connector is
    in `EXTERNAL_CONNECTORS` (`iceberg`) or not `AMS`, copy each Hadoop config entry of the `TableMetaStore`
-   to `spark.sql.catalog.<c>.hadoop.<key>`; set every key from `SparkContextUtil.getSparkConf`
+   (a default `Configuration`, the same for every catalog) to `spark.sql.catalog.<c>.hadoop.<key>`; set every key from `SparkContextUtil.getSparkConf`
    except the static `spark.sql.extensions`, logging `key  value` (masked if the key is in
    `terminal.sensitive-conf-keys`).
 3. **Statements** (`executeStatement`): on the first statement or a catalog change, run

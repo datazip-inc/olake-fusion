@@ -78,37 +78,6 @@ public class TableFileUtil {
   }
 
   /**
-   * Try to recursiveDelete the empty directory
-   *
-   * @param io mixed-format file io
-   * @param directoryPath directory location
-   * @param exclude the directory will not be deleted
-   */
-  public static void deleteEmptyDirectory(
-      AuthenticatedFileIO io, String directoryPath, Set<String> exclude) {
-    if (directoryPath == null || directoryPath.isEmpty()) {
-      return;
-    }
-    if (!io.exists(directoryPath)) {
-      LOG.debug("The target directory {} does not exist or has been deleted", directoryPath);
-      return;
-    }
-    String parent = new Path(directoryPath).getParent().toString();
-    if (!io.asFileSystemIO().isDirectory(directoryPath)
-        || exclude.contains(directoryPath)
-        || exclude.contains(parent)) {
-      return;
-    }
-
-    LOG.debug("current path {} and parent path {} not in exclude.", directoryPath, parent);
-    if (io.asFileSystemIO().isEmptyDirectory(directoryPath)) {
-      io.asFileSystemIO().deletePrefix(directoryPath);
-      LOG.debug("success delete empty directory {}", directoryPath);
-      deleteEmptyDirectory(io, parent, exclude);
-    }
-  }
-
-  /**
    * Helper to delete files. Bulk deletion is used if possible.
    *
    * @param io mixed-format file io

@@ -72,7 +72,7 @@ public class TestCatalogBuilder {
     CatalogMeta meta =
         CatalogTestHelpers.buildCatalogMeta(
             "test_catalog",
-            CatalogMetaProperties.CATALOG_TYPE_HADOOP,
+            CatalogMetaProperties.CATALOG_TYPE_CUSTOM,
             properties,
             TableFormat.ICEBERG);
 

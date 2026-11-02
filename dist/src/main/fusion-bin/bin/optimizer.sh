@@ -27,10 +27,16 @@ if [ -z "$OPTIMIZER_LOG_CONF_FILE" ]; then
 fi
 
 LIB_PATH=$FUSION_HOME/lib
-export CLASSPATH=$FUSION_CONF_DIR/optimize:$LIB_PATH/:$(find $LIB_PATH/ -type f -name "*.jar" | paste -sd':' -)
-if [ -z "$(find $LIB_PATH/ -type f -name "*.jar" | paste -sd':' -)" ]; then
-  echo "Launching the localOptimize task lacks relevant jars, please check" >&2
-  exit 1
+if [ -n "$FUSION_OPTIMIZER_CLASSPATH" ]; then
+  # Set by a server started from source (container property use-server-classpath): run the
+  # compiled classes instead of the jars in lib/.
+  export CLASSPATH=$FUSION_CONF_DIR/optimize:$FUSION_OPTIMIZER_CLASSPATH
+else
+  export CLASSPATH=$FUSION_CONF_DIR/optimize:$LIB_PATH/:$(find $LIB_PATH/ -type f -name "*.jar" | paste -sd':' -)
+  if [ -z "$(find $LIB_PATH/ -type f -name "*.jar" | paste -sd':' -)" ]; then
+    echo "Launching the localOptimize task lacks relevant jars, please check" >&2
+    exit 1
+  fi
 fi
 
 ARGS=${@:3}

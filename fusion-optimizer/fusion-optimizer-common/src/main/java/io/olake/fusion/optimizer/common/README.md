@@ -218,9 +218,9 @@ points). The server uses `optimizer-tag` to tell current optimizers from older o
   unreachable. A long outage blocks every thread, so no new tasks start.
 - `FORBIDDEN` on `authenticate` kills the JVM with `System.exit(1)`. On Kubernetes the pod is then
   restarted and registers again.
-- The local optimizer loads jars from `dist/src/main/fusion-bin/lib/`, not from `target/classes`.
-  After editing this module, rebuild the jar with `package` and copy it there (see `CLAUDE.md`,
-  "Code that runs in the optimizer").
+- The local optimizer runs the compiled classes when started from source (`make debug-optimizer`,
+  or `localContainer` with `use-server-classpath`). After editing this module, recompile and
+  restart the optimizer (see `CLAUDE.md`, "Code that runs in the optimizer").
 
 ## Tests
 

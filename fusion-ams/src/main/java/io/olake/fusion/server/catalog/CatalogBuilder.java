@@ -21,9 +21,7 @@
 package io.olake.fusion.server.catalog;
 
 import static io.olake.fusion.properties.CatalogMetaProperties.CATALOG_TYPE_CUSTOM;
-import static io.olake.fusion.properties.CatalogMetaProperties.CATALOG_TYPE_FILESYSTEM;
 import static io.olake.fusion.properties.CatalogMetaProperties.CATALOG_TYPE_GLUE;
-import static io.olake.fusion.properties.CatalogMetaProperties.CATALOG_TYPE_HADOOP;
 import static io.olake.fusion.properties.CatalogMetaProperties.CATALOG_TYPE_HIVE;
 import static io.olake.fusion.properties.CatalogMetaProperties.CATALOG_TYPE_REST;
 
@@ -40,13 +38,7 @@ public class CatalogBuilder {
 
   /** Catalog types Fusion builds; every one holds Iceberg tables only. */
   private static final Set<String> SUPPORTED_CATALOG_TYPES =
-      ImmutableSet.of(
-          CATALOG_TYPE_HADOOP,
-          CATALOG_TYPE_FILESYSTEM,
-          CATALOG_TYPE_GLUE,
-          CATALOG_TYPE_REST,
-          CATALOG_TYPE_CUSTOM,
-          CATALOG_TYPE_HIVE);
+      ImmutableSet.of(CATALOG_TYPE_GLUE, CATALOG_TYPE_REST, CATALOG_TYPE_CUSTOM, CATALOG_TYPE_HIVE);
 
   private static final Set<TableFormat> SUPPORTED_TABLE_FORMATS =
       ImmutableSet.of(TableFormat.ICEBERG);
@@ -70,8 +62,6 @@ public class CatalogBuilder {
     String type = catalogMeta.getCatalogType();
 
     switch (type) {
-      case CATALOG_TYPE_HADOOP:
-      case CATALOG_TYPE_FILESYSTEM:
       case CATALOG_TYPE_GLUE:
       case CATALOG_TYPE_REST:
       case CATALOG_TYPE_CUSTOM:

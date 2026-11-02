@@ -63,12 +63,13 @@ something that is specific to a local JVM, as with `memorySize` and `job-id`.
 
 ## Invariants and pitfalls
 
-- **It runs jars, not compiled classes.** `optimizer.sh` loads `dist/src/main/fusion-bin/lib/*.jar`
-  when the server runs from source. After changing `fusion-core`, `fusion-optimizer-common` or this
-  module, rebuild the jar with `package` and copy it into that directory, or the optimizer keeps
-  running the old code. `make sync-libs` fills or restores the directory.
+- **Which classes it runs.** `optimizer.sh` loads `$FUSION_HOME/lib/*.jar`, unless
+  `FUSION_OPTIMIZER_CLASSPATH` is set. `LocalOptimizerContainer` sets it to the server's classpath
+  when the container property `use-server-classpath` is `true` (as in `local-test/config.yaml`), so
+  a server run from source starts the optimizer on the compiled classes. `make debug-optimizer`
+  runs this class directly on the compiled classes.
 - It is a separate process. Stopping the server does not stop it; kill it by PID
-  (`ps -eo pid,args | grep "[S]tandaloneOptimizer "`) before starting a new one with new jars.
+  (`ps -eo pid,args | grep "[S]tandaloneOptimizer "`) before starting a new one.
 - Its log directory is `dist/src/main/fusion-bin/logs/optimizer-<group>-<resourceId>/`. The server log
   line `Starting local optimizer using command` gives the id.
 - Do not use it to judge production behaviour such as memory, parallelism or retries. The Spark

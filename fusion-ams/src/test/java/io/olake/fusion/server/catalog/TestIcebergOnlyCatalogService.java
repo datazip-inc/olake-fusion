@@ -65,7 +65,7 @@ public class TestIcebergOnlyCatalogService extends AMSServiceTestBase {
     Map<String, String> properties = Maps.newHashMap();
     properties.put(CatalogMetaProperties.KEY_WAREHOUSE, warehouse);
     return CatalogTestHelpers.buildCatalogMeta(
-        name, CatalogMetaProperties.CATALOG_TYPE_HADOOP, properties, format);
+        name, CatalogMetaProperties.CATALOG_TYPE_CUSTOM, properties, format);
   }
 
   @Test

@@ -241,37 +241,35 @@ Prerequisites: Docker is running, and the repo has been fully built at least onc
 
 ### Code that runs in the optimizer
 
-The local optimizer is a separate process, started by the server through `bin/optimizer.sh` with the
-`localContainer` from `local-test/config.yaml`. It loads **jars** from
-`dist/src/main/fusion-bin/lib/`, not the compiled classes, so it keeps running old code until those
-jars are replaced. This covers the rewrite executors in `fusion-core` and the
-`fusion-optimizer-common` and `fusion-optimizer-standalone` modules.
+The optimizer runs from the compiled classes, like the server; no jars are copied into `dist/`.
+This covers the rewrite executors in `fusion-core` and the `fusion-optimizer-common` and
+`fusion-optimizer-standalone` modules. Step 3 of "Run the server from source" compiles them too.
 
-After changing optimizer-side code:
-
-1. If `dist/src/main/fusion-bin/lib/` is empty or missing, fill it once with `make sync-libs` (a few
-   seconds).
-2. Rebuild the changed module's jar with Maven `package`, offline, using `-pl <module path> -am`
-   and `-DskipTests` plus the same skip flags as the server compile (about 15 seconds). Use
-   `package`, not `install`: `install` needs the rat plugin and sibling jars in `~/.m2`.
-3. Copy `<module path>/target/<artifactId>-0.9-SNAPSHOT.jar` into `dist/src/main/fusion-bin/lib/`,
-   replacing the jar of the same name.
-
-- Start an optimizer with the server running:
-  `POST /api/ams/v1/optimize/optimizerGroups/local/optimizers` with `{"parallelism":1}`.
-  `GET` on the same path (with `?page=1&pageSize=10`) should show it as `RUNNING`.
-- Its log is `dist/src/main/fusion-bin/logs/optimizer-local-<id>/optimizer.log.err`. The server
-  log line `Starting local optimizer using command` gives the `<id>`.
+- Simplest: `make debug-optimizer NO_COMPILE=1` with the server running. It runs
+  `StandaloneOptimizer` on the same classpath in the foreground and registers into the bootstrap
+  group `spark-container` (`optimizer.bootstrap.group-name` in `local-test/config.yaml`). Catalogs
+  registered with `"optimizerGroup":"spark-container"` then need no `local` group. `make debug-server`
+  and `make debug-catalog` do steps 4 and the catalog registration of "Run the server from source"
+  for a database named by `DEBUG_DB` (default `fusion_dev`).
+- Or let the server start it: `POST /api/ams/v1/optimize/optimizerGroups/local/optimizers` with
+  `{"parallelism":1}`. `localContainer` has `use-server-classpath: "true"`, so `bin/optimizer.sh`
+  gets the server's classpath through `FUSION_OPTIMIZER_CLASSPATH`. `GET` on the same path (with
+  `?page=1&pageSize=10`) should show it as `RUNNING`. Its log is
+  `dist/src/main/fusion-bin/logs/optimizer-local-<id>/optimizer.log.err`; the server log line
+  `Starting local optimizer using command` gives the `<id>`.
+- After an optimizer-side edit, recompile (step 3) and restart the optimizer.
 - The optimizer is its own process: stopping the server does not stop it. Kill it by PID
-  (`ps -eo pid,args | grep "[S]tandaloneOptimizer "`) before you restart with a new jar.
+  (`ps -eo pid,args | grep "[S]tandaloneOptimizer "`).
+- If compile errors look impossible (`X cannot be converted to X`), the IDE's compiler has written
+  broken classes into `target/`; run `./mvnw -o clean -pl fusion-ams -am -Pskip-dashboard-build`
+  and compile again.
 
 ### Clean up
 
 When done testing:
 - Stop the optimizer and the server.
-- Revert temporary code changes and tests. Then redo step 3 of "Run the server from source" (and `package` for
-  optimizer modules), so `target/` no longer holds the test code.
-- If you swapped jars into `lib/`, run `make sync-libs` to restore the built ones.
+- Revert temporary code changes and tests. Then redo step 3 of "Run the server from source", so
+  `target/` no longer holds the test code.
 - Delete your optimizer log directories under `dist/src/main/fusion-bin/logs/`.
 - Drop the throwaway database (`docker exec postgres dropdb -U iceberg fusion_dev`), then run
   `make stop-deps` if the dependencies were not already running before you started.

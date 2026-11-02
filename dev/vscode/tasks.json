@@ -1,0 +1,59 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "fusion: start Postgres and MinIO",
+      "type": "shell",
+      "command": "make debug-deps",
+      "problemMatcher": []
+    },
+    {
+      "label": "fusion: make debug-server",
+      "type": "shell",
+      "command": "make debug-deps && make debug-server DEBUG_SUSPEND=y",
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": {
+        "owner": "fusion",
+        "pattern": {
+          "regexp": "^__fusion_no_match__$"
+        },
+        "background": {
+          "activatesOnStart": true,
+          "beginsPattern": "^(Starting local dependencies|Compiling)",
+          "endsPattern": "Listening for transport dt_socket at address: 5005"
+        }
+      }
+    },
+    {
+      "label": "fusion: make debug-optimizer",
+      "type": "shell",
+      "command": "make debug-optimizer NO_COMPILE=1 DEBUG_SUSPEND=y",
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": {
+        "owner": "fusion",
+        "pattern": {
+          "regexp": "^__fusion_no_match__$"
+        },
+        "background": {
+          "activatesOnStart": true,
+          "beginsPattern": "^Starting optimizer",
+          "endsPattern": "Listening for transport dt_socket at address: 5006"
+        }
+      }
+    },
+    {
+      "label": "fusion: make debug-stop",
+      "type": "shell",
+      "command": "make debug-stop",
+      "problemMatcher": []
+    }
+  ]
+}

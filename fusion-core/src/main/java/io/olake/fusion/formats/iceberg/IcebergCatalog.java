@@ -67,17 +67,15 @@ public class IcebergCatalog {
 
   /** Returns true if a catalog with these properties serves Iceberg tables. */
   public static boolean servesIceberg(String metastoreType, Map<String, String> catalogProperties) {
-    return CatalogUtil.tableFormats(
-            CatalogUtil.normalizeMetastoreType(metastoreType), catalogProperties)
-        .contains(TableFormat.ICEBERG);
+    return CatalogUtil.tableFormats(metastoreType, catalogProperties).contains(TableFormat.ICEBERG);
   }
 
   /**
    * Builds the Iceberg catalog.
    *
    * @param name catalog name
-   * @param metastoreType Fusion catalog type, such as {@code hive}, {@code glue}, {@code rest},
-   *     {@code custom} or {@code hadoop}
+   * @param metastoreType Fusion catalog type, such as {@code hive}, {@code glue}, {@code rest}, or
+   *     {@code custom}
    * @param catalogProperties catalog properties, including the {@code table.*} table defaults
    * @param metaStore authentication context of the catalog
    */
@@ -87,11 +85,10 @@ public class IcebergCatalog {
       Map<String, String> catalogProperties,
       TableMetaStore metaStore) {
     Preconditions.checkArgument(StringUtils.isNotBlank(metastoreType), "metastore type is blank");
-    String normalizedType = CatalogUtil.normalizeMetastoreType(metastoreType);
     Map<String, String> icebergProperties =
-        CatalogUtil.withIcebergCatalogInitializeProperties(name, normalizedType, catalogProperties);
+        CatalogUtil.withIcebergCatalogInitializeProperties(name, metastoreType, catalogProperties);
     // apply glue credentials to glue catalog
-    if (CatalogMetaProperties.CATALOG_TYPE_GLUE.equalsIgnoreCase(normalizedType)) {
+    if (CatalogMetaProperties.CATALOG_TYPE_GLUE.equalsIgnoreCase(metastoreType)) {
       icebergProperties = StaticAwsCredentialsProvider.applyGlueCredentials(icebergProperties);
     }
     Catalog catalog =
@@ -181,7 +178,7 @@ public class IcebergCatalog {
             return new FusionTable(
                 io.olake.fusion.table.TableIdentifier.of(name, database, table),
                 icebergTable,
-                AuthenticatedFileIOs.buildAdaptIcebergFileIO(metaStore, icebergTable.io()),
+                AuthenticatedFileIOs.buildAdaptIcebergFileIO(icebergTable.io()),
                 properties);
           } catch (NoSuchTableException e) {
             throw new io.olake.fusion.NoSuchTableException(e);

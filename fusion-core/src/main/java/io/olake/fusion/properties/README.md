@@ -10,7 +10,7 @@ Constants only, compiled into both sides. Who reads them:
 - `CatalogMetaProperties`: mostly the **server** (catalog registration, `CatalogBuilder`,
   `CatalogConnectionTester`, `CatalogController`, `ExternalCatalog`) and the catalog code in
   `fusion-core` (`IcebergCatalogFactory`, `CatalogUtil`, `MixedFormatCatalogUtil`,
-  `table.TableMetaStore`, `table.TableProperties`).
+  `table.TableProperties`).
 - `MetaTableProperties`: mixed-format location keys; out of Fusion's scope (still referenced by
   `server.table.TableMetadata` and `InternalIcebergCreator`).
 
@@ -24,11 +24,12 @@ Constants only, compiled into both sides. Who reads them:
 ## How it works
 
 **Catalog types.** `CATALOG_TYPE_GLUE = "glue"`, `CATALOG_TYPE_REST = "rest"`,
-`CATALOG_TYPE_HIVE = "hive"`, `CATALOG_TYPE_CUSTOM = "custom"` are the types OLake-UI sends. Also
-`hadoop` (deprecated, `CATALOG_TYPE_HADOOP`), `filesystem` and `ams`.
+`CATALOG_TYPE_HIVE = "hive"`, `CATALOG_TYPE_CUSTOM = "custom"` are the types OLake-UI sends and the
+only catalog type constants. Local tests use a `custom` catalog with
+`catalog-impl=org.apache.iceberg.hadoop.HadoopCatalog` and a `file://` warehouse.
 `CatalogUtil#tableFormats` reads `TABLE_FORMATS = "table-formats"` (comma-separated, unknown names
-dropped) and falls back to the type: `glue`, `rest`, `custom`, `hadoop`, `filesystem`, `hive` →
-`ICEBERG`; `ams` → `IllegalArgumentException` (an `ams` catalog must set `table-formats`). A Fusion
+dropped) and falls back to the type: `glue`, `rest`, `custom`, `hive` → `ICEBERG`; any other type
+(such as `ams`) → `IllegalArgumentException`. A Fusion
 catalog sets `table-formats` to `ICEBERG` (the REST field `tableFormatList` is `["ICEBERG"]`).
 
 **Table defaults on a catalog.** Catalog properties that start with `TABLE_PROPERTIES_PREFIX =
@@ -38,15 +39,13 @@ the table's own properties win. OLake-UI sets `table.self-optimizing.enabled=fal
 (`OPTIMIZE_PROPERTIES_PREFIX`), `optimize.` (deprecated), `table-expire.`, `clean-orphan-file.`,
 `clean-dangling-delete-files.`, `data-expire.`, `table-trash.`, `tag.auto-create.`, `log-store.`.
 
-**Storage and auth keys.** `storage.type` (values `Hadoop`, `S3`, `OSS`, `Local`, legacy `hdfs`),
-`storage.s3.region`, `storage.s3.endpoint`, `storage.oss.endpoint`, `hadoop.hdfs.site`,
-`hadoop.core.site`, `hive.site`; `auth.type` (values `simple`, `kerberos`, `ak/sk`, `custom`),
-`auth.simple.hadoop_username`, `auth.kerberos.principal|keytab|krb5`, `auth.ak_sk.access_key`,
-`auth.ak_sk.secret_key`.
+**Storage and auth keys.** `storage.type` (values `S3`, `Local`), `storage.s3.region`,
+`storage.s3.endpoint`; `auth.type` (values `ak/sk`, `custom`), `auth.ak_sk.access_key`,
+`auth.ak_sk.secret_key`. There are no Kerberos or SIMPLE auth keys.
 
 **Other keys.** `warehouse`, `database-filter`, `table-filter`, `clients` (default 20),
-`client.pool.cache.eviction-interval-ms` (default 5 min), `ams.uri`, `auth.load-from-ams`
-(default true), `mixed-format.table-store.separator` (default `_`),
+`client.pool.cache.eviction-interval-ms` (default 5 min), `ams.uri`,
+`mixed-format.table-store.separator` (default `_`),
 `table-properties.non-persisted.additional`, `table-properties.non-persisted.excluded`.
 
 ## State, threads and concurrency

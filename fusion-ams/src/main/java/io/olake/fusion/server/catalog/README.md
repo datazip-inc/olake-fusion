@@ -18,9 +18,9 @@ Registers, validates, stores and loads the catalogs Fusion compacts tables from,
 | `CatalogBuilder` | `checkSupported(meta)` (type in the supported set and table formats ⊆ `{ICEBERG}`); `buildServerCatalog(meta, conf)`. | `CatalogUtil.tableFormats` (fusion-core) |
 | `CatalogConnectionTester` | `runTestConnection(meta)`: builds a raw Iceberg catalog, creates namespace `test_olake` and table `test_olake` if missing, and appends one Parquet record. | Iceberg `CatalogUtil.buildIcebergCatalog`, `StaticAwsCredentialsProvider` |
 | `ServerCatalog` | Abstract base: holds `CatalogMeta` and `TableMetaStore`; `updateMetadata`, `reload`, abstract list/load methods. | `CatalogMetaMapper`, `CatalogUtil.buildMetaStore` |
-| `ExternalCatalog` | Catalog whose tables live in an outside metastore (`glue`, `rest`, `hive`, `custom`, `hadoop`, `filesystem`). Delegates to `CommonUnifiedCatalog`, applies database/table filters, writes `table_identifier` rows (`syncTable`, `disposeTable`). | `UnifiedCatalog`, `TableMetaMapper` |
+| `ExternalCatalog` | Catalog whose tables live in an outside metastore (`glue`, `rest`, `hive`, `custom`). Delegates to `CommonUnifiedCatalog`, applies database/table filters, writes `table_identifier` rows (`syncTable`, `disposeTable`). | `UnifiedCatalog`, `TableMetaMapper` |
 | `InternalCatalog` / `InternalCatalogImpl` | Catalog type `ams`: databases and tables kept in Fusion's database and served over Iceberg REST. Not used by OLake-UI. | `table.internal`, `TableMetaMapper`, `CatalogMetaMapper` |
-| `CatalogType` | Enum `AMS, HIVE, HADOOP, GLUE, REST, CUSTOM`; used by `terminal` code only. | — |
+| `CatalogType` | Enum `HIVE, GLUE, REST, CUSTOM`; used by `terminal` code only. | — |
 
 ## How it works
 
@@ -31,15 +31,15 @@ The `DefaultCatalogManager` constructor builds the meta cache (`maximumSize(100)
 ### Registration (`createCatalog`)
 
 1. `AlreadyExistsException` if `catalogExist(name)`.
-2. `CatalogBuilder.checkSupported(meta)`: type must be one of `hadoop`, `filesystem`, `glue`, `rest`, `custom`, `hive`, `ams`, and `CatalogUtil.tableFormats(meta)` must contain only `ICEBERG`. Without a `table-formats` property the formats come from the type: `ams` is rejected (`CatalogUtil.tableFormats` throws `IllegalArgumentException`), every other type gives `ICEBERG`; so `ams` catalogs must set `table-formats=ICEBERG`.
+2. `CatalogBuilder.checkSupported(meta)`: type must be one of `glue`, `rest`, `custom`, `hive`, `ams`, and `CatalogUtil.tableFormats(meta)` must contain only `ICEBERG`. Without a `table-formats` property the formats come from the type: `ams` is rejected (`CatalogUtil.tableFormats` throws `IllegalArgumentException`), every other type gives `ICEBERG`; so `ams` catalogs must set `table-formats=ICEBERG`.
 3. `fillCatalogProperties`: for `hive` only, sets `ams.uri` to the Thrift table-service address and defaults `CLIENT_POOL_SIZE`.
-4. `validateCatalogConnection` → `CatalogConnectionTester.runTestConnection`. On failure it throws `RuntimeException("Test Connection unsuccessful: <root cause>\n<stack trace>")`.
+4. `validateCatalogConnection` → `CatalogConnectionTester.runTestConnection`. The test catalog gets its properties from `CatalogUtil.withIcebergCatalogInitializeProperties`, which sets `io-impl=org.apache.iceberg.io.ResolvingFileIO` for `hive` and `custom` catalogs that set no `io-impl`. On failure it throws `RuntimeException("Test Connection unsuccessful: <root cause>\n<stack trace>")`.
 5. Builds the `ServerCatalog`, inserts the row with `CatalogMetaMapper.insertCatalog`, disposes any stale in-memory catalog of that name and stores the new one.
 6. `Telemetry.trackFailure` / `trackCatalogCreated` record the outcome; `olake_created` in the catalog properties is reported as the OLake flag.
 
 ### Update (`updateCatalog`)
 
-`getServerCatalog(name)`, reject a type change (`CatalogUtil.normalizeMetastoreType` must match), `checkSupported`, run the connection test on a deep copy with `fillCatalogProperties` applied, then `catalog.updateMetadata(meta)` (writes `CatalogMetaMapper.updateCatalog`, rebuilds the `TableMetaStore`, and for `ExternalCatalog` refreshes the unified catalog and filters) and invalidates the cache entry. Note that the stored meta is the one passed in, without `fillCatalogProperties`.
+`getServerCatalog(name)`, reject a type change (the stored and new catalog type strings must be equal), `checkSupported`, run the connection test on a deep copy with `fillCatalogProperties` applied, then `catalog.updateMetadata(meta)` (writes `CatalogMetaMapper.updateCatalog`, rebuilds the `TableMetaStore`, and for `ExternalCatalog` refreshes the unified catalog and filters) and invalidates the cache entry. Note that the stored meta is the one passed in, without `fillCatalogProperties`.
 
 ### Drop (`dropCatalog`)
 

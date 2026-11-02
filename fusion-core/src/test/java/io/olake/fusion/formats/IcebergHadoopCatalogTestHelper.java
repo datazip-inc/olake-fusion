@@ -27,12 +27,14 @@ import io.olake.fusion.utils.CatalogUtil;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Lists;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Sets;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.iceberg.CatalogProperties;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.catalog.Catalog;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.SupportsNamespaces;
 import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.hadoop.HadoopCatalog;
 import org.apache.iceberg.types.Types;
 
 import java.util.HashMap;
@@ -59,6 +61,8 @@ public class IcebergHadoopCatalogTestHelper extends AbstractFormatCatalogTestHel
 
   public IcebergHadoopCatalogTestHelper(String catalogName, Map<String, String> catalogProperties) {
     super(catalogName, catalogProperties);
+    this.catalogProperties.putIfAbsent(
+        CatalogProperties.CATALOG_IMPL, HadoopCatalog.class.getName());
   }
 
   @Override

@@ -43,7 +43,7 @@ public class BasicCatalogTestHelper implements CatalogTestHelper {
   }
 
   public BasicCatalogTestHelper(TableFormat tableFormat, Map<String, String> catalogProperties) {
-    this(CatalogMetaProperties.CATALOG_TYPE_HADOOP, catalogProperties, tableFormat);
+    this(CatalogMetaProperties.CATALOG_TYPE_CUSTOM, catalogProperties, tableFormat);
   }
 
   public BasicCatalogTestHelper(
@@ -86,11 +86,8 @@ public class BasicCatalogTestHelper implements CatalogTestHelper {
       throw new UnsupportedOperationException(
           "Cannot build iceberg catalog for table format:" + tableFormat);
     }
-    Map<String, String> catalogProperties = Maps.newHashMap(catalogMeta.getCatalogProperties());
-    catalogProperties.put(
-        CatalogUtil.ICEBERG_CATALOG_TYPE, CatalogUtil.ICEBERG_CATALOG_TYPE_HADOOP);
     return CatalogUtil.buildIcebergCatalog(
-        TEST_CATALOG_NAME, catalogProperties, new Configuration());
+        TEST_CATALOG_NAME, catalogMeta.getCatalogProperties(), new Configuration());
   }
 
   @Override

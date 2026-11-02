@@ -35,10 +35,10 @@ Properties (parsed in `TableConfigurations`, fusion-ams) and defaults:
 1. `keepTime = orphanExistingMinutes * 60_000`; cutoff = `now - keepTime`.
 2. `cleanContentFiles(cutoff, metrics)`: valid set = all content file paths of **all** snapshots
    (`IcebergTableUtil.getAllContentFilePath`, via `ALL_ENTRIES`) plus statistics files. Under
-   `<location>/data` it lists files (directory listing if FileIO supports file-system operations,
-   else prefix listing) and deletes those not in the valid set (or whose parent is not in it) and
-   older than the cutoff; then deletes empty directories older than the cutoff (never the `data` or
-   `metadata` folder itself).
+   `<location>/data` it lists files with prefix listing (`listPrefix`) and deletes those not in the
+   valid set and older than the cutoff. Directories are not deleted, so empty ones stay (on object
+   stores such as S3 they do not exist on their own). If the FileIO has no prefix listing, it logs a
+   warning and skips.
 3. `table.refresh()`, then `cleanMetadata(cutoff, metrics)`: valid set = manifest lists, all
    manifests (`ALL_MANIFESTS`), metadata files, statistics files, version hint. Files under
    `<location>/metadata` not in the set and older than the cutoff are deleted, except names matching
@@ -60,7 +60,7 @@ timestamp of the latest snapshot not produced by Fusion maintenance
 `CLEAN_DANGLING_DELETE`). If a Flink checkpoint snapshot is younger than the Flink retention, it is
 kept too. Then Iceberg `expireSnapshots().retainLast(max(minCount, 1)).expireOlderThan(t)
 .deleteWith(cleaner::addFile).cleanExpiredFiles(true).commit()`; `RollingFileCleaner` deletes the
-collected files in groups of 1000 and the rest in `clear()`.
+collected files in groups of 1000 and the rest in `clear()`; it does not delete directories.
 
 ### `expireData()`
 
@@ -95,7 +95,7 @@ streams and concurrent maps.
   and by `IcebergTableUtil.findLatestOptimizingSnapshot`; keep them stable.
 - Iceberg APIs (1.7.2): `ExpireSnapshots`, `RewriteFiles`, `DeleteFiles`, `ReachableFileUtil`,
   `MetadataTableType.ALL_ENTRIES` / `ALL_MANIFESTS`, `SupportsPrefixOperations`,
-  `SupportsFileSystemOperations`, `ManageSnapshots`.
+  `ManageSnapshots`.
 
 ## Extending or changing it
 

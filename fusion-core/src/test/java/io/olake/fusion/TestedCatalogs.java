@@ -26,6 +26,6 @@ import io.olake.fusion.properties.CatalogMetaProperties;
 
 public class TestedCatalogs {
   public static CatalogTestHelper hadoopCatalog(TableFormat... format) {
-    return new BasicCatalogTestHelper(CatalogMetaProperties.CATALOG_TYPE_HADOOP, null, format);
+    return new BasicCatalogTestHelper(CatalogMetaProperties.CATALOG_TYPE_CUSTOM, null, format);
   }
 }

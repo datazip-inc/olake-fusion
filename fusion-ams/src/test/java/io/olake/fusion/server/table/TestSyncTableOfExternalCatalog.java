@@ -422,7 +422,7 @@ public class TestSyncTableOfExternalCatalog extends AMSTableTestBase {
     CatalogMeta catalogMeta =
         CatalogTestHelpers.buildCatalogMeta(
             catalogName,
-            CatalogMetaProperties.CATALOG_TYPE_HADOOP,
+            CatalogMetaProperties.CATALOG_TYPE_CUSTOM,
             properties,
             TableFormat.ICEBERG);
     IcebergCatalog externalCatalog = IcebergCatalog.of(catalogMeta);
@@ -441,11 +441,9 @@ public class TestSyncTableOfExternalCatalog extends AMSTableTestBase {
       externalCatalog.createDatabase(dbName);
     }
     // create new table
-    Map<String, String> catalogProperties = Maps.newHashMap(catalogMeta.getCatalogProperties());
-    catalogProperties.put(
-        CatalogUtil.ICEBERG_CATALOG_TYPE, CatalogUtil.ICEBERG_CATALOG_TYPE_HADOOP);
     org.apache.iceberg.catalog.Catalog catalog =
-        CatalogUtil.buildIcebergCatalog(catalogName, catalogProperties, new Configuration());
+        CatalogUtil.buildIcebergCatalog(
+            catalogName, catalogMeta.getCatalogProperties(), new Configuration());
     catalog.createTable(
         org.apache.iceberg.catalog.TableIdentifier.of(dbName, tableName),
         tableTestHelper().tableSchema(),

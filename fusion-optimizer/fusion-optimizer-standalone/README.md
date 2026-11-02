@@ -1,6 +1,6 @@
 # Standalone optimizer
 
-A single-JVM optimizer started by the server through `bin/optimizer.sh` for local debugging. It loads jars from `dist/src/main/fusion-bin/lib/`, not compiled classes.
+A single-JVM optimizer for local debugging: started by the server through `bin/optimizer.sh`, or directly with `make debug-optimizer`. From source it runs the compiled classes.
 
 ## Packages
 

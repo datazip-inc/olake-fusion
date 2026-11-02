@@ -44,7 +44,7 @@ public class TestPostgresPersistence {
     CatalogMeta meta =
         CatalogTestHelpers.buildCatalogMeta(
             "pg_catalog_t25",
-            CatalogMetaProperties.CATALOG_TYPE_HADOOP,
+            CatalogMetaProperties.CATALOG_TYPE_CUSTOM,
             Maps.newHashMap(),
             TableFormat.ICEBERG);
     Rows rows = new Rows();

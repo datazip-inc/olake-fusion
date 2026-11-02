@@ -44,13 +44,15 @@ settings (`ALTER TABLE ... SET TBLPROPERTIES`).
 
 1. `terminalId` is the request's `JSESSIONID` cookie, or a new random UUID when there is none
    (`TerminalController.executeScript`).
-2. Load `CatalogMeta`; build a `TableMetaStore` from its storage and auth config
-   (`getCatalogTableMetaStore`).
-3. Session id = `terminalId-<authMethod>-<user or principal>-<catalog>` with `/` replaced by `_`.
+2. Load `CatalogMeta`; create a plain `TableMetaStore` (default Hadoop configuration, the same
+   for every catalog).
+3. Session id = `terminalId-<catalog>` with `/` replaced by `_`.
 4. `catalogConnectorType` requires the catalog's table formats to be exactly `{ICEBERG}`, else
    `IllegalStateException("Terminal supports Iceberg catalogs only ...")`.
 5. `applyClientProperties` sets `warehouse` to the catalog name for `ams` catalogs, otherwise adds
-   `type` (when there is no `catalog-impl`), and, for Glue, static AWS credentials.
+   `type` (when there is no `catalog-impl`), calls `CatalogUtil.applyDefaultFileIO` (for `hive`
+   and `custom` catalogs without `io-impl`, sets `io-impl=org.apache.iceberg.io.ResolvingFileIO`,
+   so `s3://` paths use `S3FileIO`), and, for Glue, static AWS credentials.
 6. Build the session `Configurations`: fetch size `terminal.result.limit`, the catalog list,
    connector `iceberg`, `catalog-url-base`, and every catalog property as `catalog.<c>.<key>`.
 7. Under `sessionMapLock`, reuse the existing context if its configuration is equal, else create a

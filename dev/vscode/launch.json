@@ -1,0 +1,81 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "java",
+      "name": "Fusion: server",
+      "request": "launch",
+      "mainClass": "io.olake.fusion.server.FusionServiceContainer",
+      "projectName": "fusion-ams",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "vmArgs": "-Dfile.encoding=UTF-8 -Darrow.memory.allocator=unsafe -XX:+UseZGC -XX:CompileCommand=exclude,io/netty/buffer/PoolChunkList.allocate -XX:CompileCommand=exclude,io/netty/buffer/PoolArena.allocate --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.invoke=ALL-UNNAMED --add-opens=java.base/java.lang.reflect=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.util.concurrent=ALL-UNNAMED --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED --add-opens=java.base/sun.nio.cs=ALL-UNNAMED --add-opens=java.base/sun.security.action=ALL-UNNAMED --add-opens=java.base/sun.util.calendar=ALL-UNNAMED",
+      "env": {
+        "AMORO_HOME": "${workspaceFolder}/dist/src/main/fusion-bin",
+        "AMORO_CONF_DIR": "${workspaceFolder}/local-test",
+        "CONSOLE_LOG_LEVEL": "info",
+        "AMS_SERVER__EXPOSE__HOST": "127.0.0.1",
+        "AMS_DATABASE_URL": "jdbc:postgresql://localhost:5432/fusion_dev",
+        "OPTIMIZER_LOG_CONF_FILE": "${workspaceFolder}/dist/src/main/fusion-bin/conf/optimize/log4j2.xml",
+        "OPTIMIZER_JAVA_OPTS": "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5006",
+        "AWS_ACCESS_KEY_ID": "admin",
+        "AWS_SECRET_ACCESS_KEY": "password",
+        "AWS_REGION": "us-east-1"
+      },
+      "preLaunchTask": "fusion: start Postgres and MinIO"
+    },
+    {
+      "type": "java",
+      "name": "Fusion: optimizer",
+      "request": "launch",
+      "mainClass": "io.olake.fusion.optimizer.standalone.StandaloneOptimizer",
+      "projectName": "fusion-optimizer-standalone",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "args": "-a thrift://127.0.0.1:1261 -g spark-container -p 1",
+      "vmArgs": "-Xmx2g --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.invoke=ALL-UNNAMED --add-opens=java.base/java.lang.reflect=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.util.concurrent=ALL-UNNAMED --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED --add-opens=java.base/sun.nio.cs=ALL-UNNAMED --add-opens=java.base/sun.security.action=ALL-UNNAMED --add-opens=java.base/sun.util.calendar=ALL-UNNAMED",
+      "env": {
+        "AWS_ACCESS_KEY_ID": "admin",
+        "AWS_SECRET_ACCESS_KEY": "password",
+        "AWS_REGION": "us-east-1"
+      }
+    },
+    {
+      "type": "java",
+      "name": "Fusion: attach to make debug-server",
+      "request": "attach",
+      "hostName": "localhost",
+      "port": 5005,
+      "projectName": "fusion-ams",
+      "preLaunchTask": "fusion: make debug-server",
+      "postDebugTask": "fusion: make debug-stop"
+    },
+    {
+      "type": "java",
+      "name": "Fusion: attach to make debug-optimizer",
+      "request": "attach",
+      "hostName": "localhost",
+      "port": 5006,
+      "projectName": "fusion-optimizer-standalone",
+      "preLaunchTask": "fusion: make debug-optimizer"
+    },
+    {
+      "type": "java",
+      "name": "Fusion: attach to optimizer on port 5006",
+      "request": "attach",
+      "hostName": "localhost",
+      "port": 5006,
+      "projectName": "fusion-optimizer-standalone"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Fusion: server + optimizer",
+      "configurations": [
+        "Fusion: server",
+        "Fusion: optimizer"
+      ],
+      "stopAll": true
+    }
+  ]
+}

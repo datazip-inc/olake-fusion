@@ -44,13 +44,6 @@ public class CatalogMetaProperties {
 
   public static final String KEY_TABLE_FILTER = "table-filter";
 
-  /**
-   * Use {@link #CATALOG_TYPE_FILESYSTEM} instead for front But we can't remove this until we could
-   * use filesystem and storage to determine the right catalog-impl
-   */
-  @Deprecated public static final String CATALOG_TYPE_HADOOP = "hadoop";
-
-  public static final String CATALOG_TYPE_FILESYSTEM = "filesystem";
   public static final String CATALOG_TYPE_HIVE = "hive";
   public static final String CATALOG_TYPE_GLUE = "glue";
   public static final String CATALOG_TYPE_REST = "rest";
@@ -65,10 +58,6 @@ public class CatalogMetaProperties {
       "client.pool.cache.eviction-interval-ms";
   public static final long CLIENT_POOL_CACHE_EVICTION_INTERVAL_MS_DEFAULT =
       TimeUnit.MINUTES.toMillis(5);
-
-  // only used for engine properties
-  public static final String LOAD_AUTH_FROM_AMS = "auth.load-from-ams";
-  public static final boolean LOAD_AUTH_FROM_AMS_DEFAULT = true;
 
   // properties in table level set by catalog
   public static final String TABLE_PROPERTIES_PREFIX = "table.";

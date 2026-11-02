@@ -22,6 +22,7 @@ package io.olake.fusion.utils;
 
 import org.apache.amoro.shade.guava32.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.CatalogProperties;
+import org.apache.iceberg.io.ResolvingFileIO;
 import org.apache.iceberg.rest.RESTCatalog;
 import org.junit.Assert;
 import org.junit.Test;
@@ -275,7 +276,7 @@ public class TestCatalogUtil {
   public void testWithIcebergCatalogInitializeProperties() {
     Map<String, String> props;
     final String name = "test";
-    final String typeHadoop = "hadoop";
+    final String typeHive = "hive";
     final String typeCustom = "custom";
     final String type = "type";
     final String keyWarehouse = CatalogProperties.WAREHOUSE_LOCATION;
@@ -285,8 +286,9 @@ public class TestCatalogUtil {
     // hive catalog
     props =
         CatalogUtil.withIcebergCatalogInitializeProperties(
-            name, typeHadoop, ImmutableMap.of(keyWarehouse, path));
-    Assert.assertEquals(typeHadoop, props.get(type));
+            name, typeHive, ImmutableMap.of(keyWarehouse, path));
+    Assert.assertEquals(typeHive, props.get(type));
+    Assert.assertEquals(ResolvingFileIO.class.getName(), props.get(CatalogProperties.FILE_IO_IMPL));
 
     // custom
     props =

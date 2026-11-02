@@ -27,9 +27,7 @@ import static io.olake.fusion.properties.CatalogMetaProperties.AUTH_CONFIGS_KEY_
 import static io.olake.fusion.properties.CatalogMetaProperties.AUTH_CONFIGS_VALUE_TYPE_AK_SK;
 import static io.olake.fusion.properties.CatalogMetaProperties.AUTH_CONFIGS_VALUE_TYPE_CUSTOM;
 import static io.olake.fusion.properties.CatalogMetaProperties.CATALOG_TYPE_CUSTOM;
-import static io.olake.fusion.properties.CatalogMetaProperties.CATALOG_TYPE_FILESYSTEM;
 import static io.olake.fusion.properties.CatalogMetaProperties.CATALOG_TYPE_GLUE;
-import static io.olake.fusion.properties.CatalogMetaProperties.CATALOG_TYPE_HADOOP;
 import static io.olake.fusion.properties.CatalogMetaProperties.CATALOG_TYPE_HIVE;
 import static io.olake.fusion.properties.CatalogMetaProperties.CATALOG_TYPE_REST;
 import static io.olake.fusion.properties.CatalogMetaProperties.STORAGE_CONFIGS_KEY_REGION;
@@ -83,10 +81,6 @@ public class CatalogController {
   static {
     CATALOG_REQUIRED_PROPERTIES = Maps.newHashMap();
     CATALOG_REQUIRED_PROPERTIES.put(
-        CATALOG_TYPE_HADOOP, Lists.newArrayList(CatalogProperties.WAREHOUSE_LOCATION));
-    CATALOG_REQUIRED_PROPERTIES.put(
-        CATALOG_TYPE_FILESYSTEM, Lists.newArrayList(CatalogProperties.WAREHOUSE_LOCATION));
-    CATALOG_REQUIRED_PROPERTIES.put(
         CATALOG_TYPE_GLUE, Lists.newArrayList(CatalogProperties.WAREHOUSE_LOCATION));
     CATALOG_REQUIRED_PROPERTIES.put(
         CATALOG_TYPE_CUSTOM, Lists.newArrayList(CatalogProperties.CATALOG_IMPL));
@@ -104,11 +98,9 @@ public class CatalogController {
         CatalogDescriptor.of(CATALOG_TYPE_CUSTOM, STORAGE_CONFIGS_VALUE_TYPE_S3, ICEBERG));
     VALIDATE_CATALOGS.add(
         CatalogDescriptor.of(CATALOG_TYPE_REST, STORAGE_CONFIGS_VALUE_TYPE_S3, ICEBERG));
-    // Hadoop catalogs on the local file system, used for local testing.
+    // Custom catalogs on the local file system, used for local testing.
     VALIDATE_CATALOGS.add(
-        CatalogDescriptor.of(CATALOG_TYPE_HADOOP, STORAGE_CONFIGS_VALUE_TYPE_LOCAL, ICEBERG));
-    VALIDATE_CATALOGS.add(
-        CatalogDescriptor.of(CATALOG_TYPE_FILESYSTEM, STORAGE_CONFIGS_VALUE_TYPE_LOCAL, ICEBERG));
+        CatalogDescriptor.of(CATALOG_TYPE_CUSTOM, STORAGE_CONFIGS_VALUE_TYPE_LOCAL, ICEBERG));
   }
 
   private final CatalogManager catalogService;
@@ -156,7 +148,6 @@ public class CatalogController {
     String valueKey = "value";
     String displayKey = "display";
     catalogTypes.add(ImmutableMap.of(valueKey, CATALOG_TYPE_HIVE, displayKey, "Hive"));
-    catalogTypes.add(ImmutableMap.of(valueKey, CATALOG_TYPE_FILESYSTEM, displayKey, "FileSystem"));
     catalogTypes.add(ImmutableMap.of(valueKey, CATALOG_TYPE_GLUE, displayKey, "Glue"));
     catalogTypes.add(ImmutableMap.of(valueKey, CATALOG_TYPE_REST, displayKey, "REST"));
     catalogTypes.add(ImmutableMap.of(valueKey, CATALOG_TYPE_CUSTOM, displayKey, "Custom"));
@@ -235,7 +226,7 @@ public class CatalogController {
   private CatalogMeta constructCatalogMeta(CatalogRegisterInfo info) {
     CatalogMeta catalogMeta = new CatalogMeta();
     catalogMeta.setCatalogName(info.getName());
-    String metastoreType = CatalogUtil.normalizeMetastoreType(info.getType());
+    String metastoreType = info.getType();
     catalogMeta.setCatalogType(metastoreType);
     catalogMeta.setCatalogProperties(
         PropertiesUtil.unionCatalogProperties(info.getTableProperties(), info.getProperties()));
@@ -389,7 +380,7 @@ public class CatalogController {
 
     if (catalogService.catalogExist(catalogName)) {
       info.setName(catalogMeta.getCatalogName());
-      info.setType(CatalogUtil.normalizeMetastoreType(catalogMeta.getCatalogType()));
+      info.setType(catalogMeta.getCatalogType());
 
       // we put the table format single
       String tableFormat =
@@ -456,10 +447,9 @@ public class CatalogController {
 
   public void getMetastoreTableFormats(Context ctx) {
     String metastoreType = ctx.pathParam("type");
-    String normalizedType = CatalogUtil.normalizeMetastoreType(metastoreType);
     List<String> tableFormats =
         VALIDATE_CATALOGS.stream()
-            .filter(d -> d.catalogType.equalsIgnoreCase(normalizedType))
+            .filter(d -> d.catalogType.equalsIgnoreCase(metastoreType))
             .map(d -> d.tableFormat.name())
             .distinct()
             .collect(Collectors.toList());
@@ -468,10 +458,9 @@ public class CatalogController {
 
   public void getMetastoreStorageTypes(Context ctx) {
     String metastoreType = ctx.pathParam("type");
-    String normalizedType = CatalogUtil.normalizeMetastoreType(metastoreType);
     List<String> storageTypes =
         VALIDATE_CATALOGS.stream()
-            .filter(d -> d.catalogType.equalsIgnoreCase(normalizedType))
+            .filter(d -> d.catalogType.equalsIgnoreCase(metastoreType))
             .map(d -> d.storageType)
             .distinct()
             .collect(Collectors.toList());

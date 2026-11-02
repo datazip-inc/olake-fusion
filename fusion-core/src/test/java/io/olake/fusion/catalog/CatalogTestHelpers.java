@@ -24,6 +24,8 @@ import io.olake.fusion.TableFormat;
 import io.olake.fusion.api.CatalogMeta;
 import io.olake.fusion.properties.CatalogMetaProperties;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.iceberg.CatalogProperties;
+import org.apache.iceberg.hadoop.HadoopCatalog;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -34,13 +36,18 @@ public class CatalogTestHelpers {
 
   /**
    * Catalog meta on the local file system: storage type {@code Local}, which uses the default
-   * Hadoop configuration, and no authentication.
+   * Hadoop configuration, and no authentication. A {@code custom} catalog without {@code
+   * catalog-impl} gets Iceberg's {@link HadoopCatalog}, so tests get a catalog that needs only a
+   * {@code warehouse} directory.
    */
   public static CatalogMeta buildCatalogMeta(
       String catalogName,
       String type,
       Map<String, String> properties,
       TableFormat... tableFormats) {
+    if (CatalogMetaProperties.CATALOG_TYPE_CUSTOM.equals(type)) {
+      properties.putIfAbsent(CatalogProperties.CATALOG_IMPL, HadoopCatalog.class.getName());
+    }
     Map<String, String> storageConfig = new HashMap<>();
     storageConfig.put(
         CatalogMetaProperties.STORAGE_CONFIGS_KEY_TYPE,

@@ -1,8 +1,8 @@
 # `io.olake.fusion.formats.iceberg`
 
 Iceberg implementation of Fusion's format-neutral catalog and table API: builds the Iceberg catalog
-from catalog properties and wraps each loaded Iceberg table so that every operation runs with the
-catalog's credentials.
+from catalog properties and wraps each loaded Iceberg table and its FileIO. Calls run as the process
+user; storage credentials come from the catalog's FileIO properties.
 
 ## Role in Fusion
 
@@ -27,8 +27,8 @@ files through the same wrapper.
 
 `IcebergTable.newIcebergTable(identifier, icebergTable, metaStore, catalogProperties)`:
 
-1. `AuthenticatedFileIOs.buildAdaptIcebergFileIO(metaStore, icebergTable.io())` wraps the table's
-   FileIO so that file access runs as the catalog's user.
+1. `AuthenticatedFileIOs.buildAdaptIcebergFileIO(icebergTable.io())` wraps the table's FileIO in an
+   `AuthenticatedFileIOAdapter` (no impersonation; see [`io`](../../io/README.md)).
 2. `MixedFormatCatalogUtil.useMixedTableOperations(...)` rebuilds the `BaseTable` on
    `MixedTableOperations` (or `MixedHadoopTableOperations` for Hadoop tables), which run
    `current`, `refresh` and `commit` inside `doAs` (see [`op`](../../op/README.md)).
@@ -54,7 +54,11 @@ the latest metadata. Without caching, every `loadTable` hits the catalog.
 
 - Catalog properties come from the catalog registered in Fusion (OLake-UI builds them in its
   `mapper.go`); keys such as `cache-enabled`, `warehouse`, `io-impl` and Glue credential keys are
-  read by Iceberg or by `StaticAwsCredentialsProvider`.
+  read by Iceberg or by `StaticAwsCredentialsProvider`. For `hive` and `custom` catalogs without
+  `io-impl`, `CatalogUtil.withIcebergCatalogInitializeProperties` sets
+  `io-impl=org.apache.iceberg.io.ResolvingFileIO` (`S3FileIO` for `s3`/`s3a`/`s3n` paths,
+  `HadoopFileIO` otherwise); Iceberg's `HiveCatalog` and `JdbcCatalog` would otherwise default to
+  `HadoopFileIO`, which cannot read `s3://` paths.
 - The wrapped table is `Serializable` and travels inside `RewriteFilesInput`; changing the wrapper's
   fields changes the task wire format (see [`optimizing`](../../optimizing/README.md#contracts)).
 - `NoSuchTableException` from Iceberg is rethrown as `io.olake.fusion.NoSuchTableException`.

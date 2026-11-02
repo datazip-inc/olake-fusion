@@ -16,6 +16,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+# Modified by Datazip Inc. in 2026
+#
 # This file is used to export env variables for AMORO
 
 # set your hadoop conf dir

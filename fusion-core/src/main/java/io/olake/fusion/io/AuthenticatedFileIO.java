@@ -78,19 +78,6 @@ public interface AuthenticatedFileIO extends FileIO {
     }
   }
 
-  /** Returns true if this tableIo is an {@link SupportsFileSystemOperations} */
-  default boolean supportFileSystemOperations() {
-    return false;
-  }
-
-  /** Return this cast to {@link SupportsFileSystemOperations} if it is. */
-  default SupportsFileSystemOperations asFileSystemIO() {
-    if (supportFileSystemOperations()) {
-      return (SupportsFileSystemOperations) this;
-    }
-    throw new IllegalStateException("Doesn't support directory operations");
-  }
-
   /** Return true if this tableIo support file trash and could recover file be deleted. */
   default boolean supportsFileRecycle() {
     return false;

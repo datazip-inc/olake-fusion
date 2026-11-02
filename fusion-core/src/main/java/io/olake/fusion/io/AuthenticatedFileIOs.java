@@ -20,22 +20,12 @@
 
 package io.olake.fusion.io;
 
-import io.olake.fusion.table.TableMetaStore;
-import org.apache.iceberg.hadoop.HadoopFileIO;
 import org.apache.iceberg.io.FileIO;
 
 public class AuthenticatedFileIOs {
 
-  public static AuthenticatedHadoopFileIO buildHadoopFileIO(TableMetaStore tableMetaStore) {
-    return new AuthenticatedHadoopFileIO(tableMetaStore);
-  }
-
-  public static AuthenticatedFileIO buildAdaptIcebergFileIO(
-      TableMetaStore tableMetaStore, FileIO io) {
-    if (io instanceof HadoopFileIO) {
-      return buildHadoopFileIO(tableMetaStore);
-    } else {
-      return new AuthenticatedFileIOAdapter(io);
-    }
+  /** Wraps an Iceberg table's FileIO; prefix and bulk operations follow the wrapped FileIO. */
+  public static AuthenticatedFileIO buildAdaptIcebergFileIO(FileIO io) {
+    return new AuthenticatedFileIOAdapter(io);
   }
 }

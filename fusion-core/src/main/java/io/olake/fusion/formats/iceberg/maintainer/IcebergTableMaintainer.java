@@ -28,8 +28,6 @@ import io.olake.fusion.config.TableConfiguration;
 import io.olake.fusion.formats.iceberg.utils.IcebergTableUtil;
 import io.olake.fusion.formats.iceberg.utils.RollingFileCleaner;
 import io.olake.fusion.io.AuthenticatedFileIO;
-import io.olake.fusion.io.PathInfo;
-import io.olake.fusion.io.SupportsFileSystemOperations;
 import io.olake.fusion.maintainer.MaintainerMetrics;
 import io.olake.fusion.maintainer.OptimizingInfo;
 import io.olake.fusion.maintainer.TableMaintainer;
@@ -283,18 +281,7 @@ public class IcebergTableMaintainer implements TableMaintainer {
     int expected = 0, deleted = 0;
 
     AuthenticatedFileIO io = fileIO();
-    // listPrefix will not return the directory and the orphan file clean should clean the empty
-    // dir.
-    if (io.supportFileSystemOperations()) {
-      SupportsFileSystemOperations fio = io.asFileSystemIO();
-      Set<PathInfo> directories = new HashSet<>();
-      Set<String> filesToDelete =
-          deleteInvalidFilesInFs(fio, dataLocation, lastTime, exclude, directories);
-      expected = filesToDelete.size();
-      deleted = TableFileUtil.deleteFiles(io, filesToDelete);
-      /* delete empty directories */
-      deleteEmptyDirectories(fio, directories, lastTime, exclude);
-    } else if (io.supportPrefixOperations()) {
+    if (io.supportPrefixOperations()) {
       SupportsPrefixOperations pio = io.asPrefixFileIO();
       Set<String> filesToDelete = deleteInvalidFilesByPrefix(pio, dataLocation, lastTime, exclude);
       expected = filesToDelete.size();
@@ -302,7 +289,7 @@ public class IcebergTableMaintainer implements TableMaintainer {
     } else {
       LOG.warn(
           String.format(
-              "Table %s doesn't support a fileIo with listDirectory or listPrefix, so skip clear files.",
+              "Table %s doesn't support a fileIo with listPrefix, so skip clear files.",
               table.name()));
     }
 
@@ -352,7 +339,7 @@ public class IcebergTableMaintainer implements TableMaintainer {
     } else {
       LOG.warn(
           String.format(
-              "Table %s doesn't support a fileIo with listDirectory or listPrefix, so skip clear files.",
+              "Table %s doesn't support a fileIo with listPrefix, so skip clear files.",
               table.name()));
     }
   }
@@ -438,50 +425,6 @@ public class IcebergTableMaintainer implements TableMaintainer {
         IcebergTableUtil.findFirstMatchSnapshot(
             table, s -> s.summary().values().stream().noneMatch(AMORO_MAINTAIN_COMMITS::contains));
     return snapshot.map(Snapshot::timestampMillis).orElse(Long.MAX_VALUE);
-  }
-
-  private Set<String> deleteInvalidFilesInFs(
-      SupportsFileSystemOperations fio,
-      String location,
-      long lastTime,
-      Set<String> excludes,
-      Set<PathInfo> directories) {
-    if (!fio.exists(location)) {
-      return Collections.emptySet();
-    }
-
-    Set<String> filesToDelete = new HashSet<>();
-    for (PathInfo p : fio.listDirectory(location)) {
-      String uriPath = TableFileUtil.getUriPath(p.location());
-      if (p.isDirectory()) {
-        directories.add(p);
-        filesToDelete.addAll(
-            deleteInvalidFilesInFs(fio, p.location(), lastTime, excludes, directories));
-      } else {
-        String parentLocation = TableFileUtil.getParent(p.location());
-        String parentUriPath = TableFileUtil.getUriPath(parentLocation);
-        if (!excludes.contains(uriPath)
-            && !excludes.contains(parentUriPath)
-            && p.createdAtMillis() < lastTime) {
-          filesToDelete.add(p.location());
-        }
-      }
-    }
-    return filesToDelete;
-  }
-
-  private void deleteEmptyDirectories(
-      SupportsFileSystemOperations fio, Set<PathInfo> paths, long lastTime, Set<String> excludes) {
-    paths.forEach(
-        p -> {
-          if (fio.exists(p.location())
-              && !p.location().endsWith(METADATA_FOLDER_NAME)
-              && !p.location().endsWith(DATA_FOLDER_NAME)
-              && p.createdAtMillis() < lastTime
-              && fio.isEmptyDirectory(p.location())) {
-            TableFileUtil.deleteEmptyDirectory(fio, p.location(), excludes);
-          }
-        });
   }
 
   private Set<String> deleteInvalidFilesByPrefix(

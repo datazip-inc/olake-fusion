@@ -1,0 +1,19 @@
+{
+  "java.compile.nullAnalysis.mode": "automatic",
+  "java.jdt.ls.java.home": "@JAVA_HOME_17@",
+  "java.configuration.runtimes": [
+    {
+      "name": "JavaSE-17",
+      "path": "@JAVA_HOME_17@",
+      "default": true
+    }
+  ],
+  "java.configuration.updateBuildConfiguration": "automatic",
+  "java.import.maven.arguments": "-Pskip-dashboard-build -DskipTests -Dspotless.skip=true -Dcheckstyle.skip=true",
+  "java.import.exclusions": [
+    "**/node_modules/**",
+    "**/.git/**"
+  ],
+  "java.debug.settings.hotCodeReplace": "auto",
+  "makefile.configureOnOpen": false
+}
