@@ -82,6 +82,9 @@ resources
 # ... but src/main/resources is source, not Hugo output. Without this a new file there (a schema
 # migration, say) is silently ignored and ships as a jar that cannot start.
 !**/src/main/resources/
+!**/src/test/resources/
+# Vite's static input folder, not Hugo output.
+!fusion-web/public/
 
 /dist/src/main/fusion-bin/*
 !/dist/src/main/fusion-bin/bin/
