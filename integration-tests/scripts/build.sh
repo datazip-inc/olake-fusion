@@ -39,8 +39,7 @@ cd "$REPO_DIR"
 artifacts() {
   local scala_binary
   scala_binary="$(echo "$SCALA_VERSION" | cut -d. -f1-2)"
-  ./mvnw -B -ntp clean package -pl dist -am -DskipTests \
-    -Pno-extended-disk-storage -Pno-plugin-bin
+  ./mvnw -B -ntp clean package -pl dist -am -DskipTests -Pno-extended-disk-storage
   ./mvnw -B -ntp package -pl fusion-optimizer/fusion-optimizer-spark -am -DskipTests \
     -Dspark.version="$SPARK_VERSION" -Dscala.version="$SCALA_VERSION" -Dscala.binary.version="$scala_binary"
   ./mvnw -B -ntp -f integration-tests/pom.xml test-compile

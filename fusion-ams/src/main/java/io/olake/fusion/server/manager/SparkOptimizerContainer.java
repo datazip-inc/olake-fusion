@@ -47,7 +47,6 @@ public class SparkOptimizerContainer extends AbstractOptimizerContainer {
 
   public static final String SPARK_HOME_PROPERTY = "spark-home";
   public static final String ENV_HADOOP_USER_NAME = "HADOOP_USER_NAME";
-  private static final String DEFAULT_JOB_URI = "/plugin/optimizer/spark/optimizer-job.jar";
   private static final String SPARK_JOB_MAIN_CLASS =
       "io.olake.fusion.optimizer.spark.SparkOptimizer";
   public static final String SPARK_MASTER = "master";
@@ -83,15 +82,11 @@ public class SparkOptimizerContainer extends AbstractOptimizerContainer {
             .orElse(DeployMode.CLIENT.getValue());
     this.deployMode = DeployMode.valueToEnum(runMode);
     String jobUri = containerProperties.get(SPARK_JOB_URI);
-    if (deployMode.equals(DeployMode.CLUSTER.name())) {
-      Preconditions.checkArgument(
-          StringUtils.isNotEmpty(jobUri),
-          "The property: %s is required if running mode in cluster mode.",
-          SPARK_JOB_URI);
-    }
-    if (StringUtils.isEmpty(jobUri)) {
-      jobUri = amsHome + DEFAULT_JOB_URI;
-    }
+    Preconditions.checkArgument(
+        StringUtils.isNotEmpty(jobUri),
+        "The property %s is required: the optimizer job jar, for example"
+            + " local:///opt/spark/usrlib/optimizer-job.jar in the Spark image",
+        SPARK_JOB_URI);
     this.jobUri = jobUri;
     SparkOptimizerContainer.SparkConf sparkConf =
         SparkOptimizerContainer.SparkConf.buildFor(loadSparkConfig(), containerProperties).build();

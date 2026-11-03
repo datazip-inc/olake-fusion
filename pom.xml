@@ -86,7 +86,6 @@
         <maven-gpg-plugin.version>3.0.1</maven-gpg-plugin.version>
         <maven-deploy-plugin.version>3.0.0-M1</maven-deploy-plugin.version>
         <maven-shade-plugin.version>3.6.1</maven-shade-plugin.version>
-        <maven-scala-plugin.version>4.8.1</maven-scala-plugin.version>
         <maven-antlr4-plugin.version>4.3</maven-antlr4-plugin.version>
         <maven-surefire-plugin.version>3.0.0-M7</maven-surefire-plugin.version>
         <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
@@ -1297,29 +1296,6 @@
                     <version>${maven-antlr4-plugin.version}</version>
                 </plugin>
                 <plugin>
-                    <groupId>net.alchim31.maven</groupId>
-                    <artifactId>scala-maven-plugin</artifactId>
-                    <version>${maven-scala-plugin.version}</version>
-                    <executions>
-                        <execution>
-                            <id>scala-compile-first</id>
-                            <goals>
-                                <goal>add-source</goal>
-                                <goal>compile</goal>
-                            </goals>
-                            <phase>process-resources</phase>
-                        </execution>
-                        <execution>
-                            <id>scala-test-compile</id>
-                            <goals>
-                                <goal>add-source</goal>
-                                <goal>testCompile</goal>
-                            </goals>
-                            <phase>process-test-resources</phase>
-                        </execution>
-                    </executions>
-                </plugin>
-                <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
                     <version>${maven-surefire-plugin.version}</version>
@@ -1440,7 +1416,6 @@
                             <!-- Generated content -->
                             <exclude>**/target/**</exclude>
                             <exclude>**/target-debug/**</exclude>
-                            <exclude>**/scalastyle-output.xml</exclude>
                             <exclude>docs/resources/**</exclude>
                             <exclude>docs/public/**</exclude>
                             <exclude>docs/themes/book/**</exclude>

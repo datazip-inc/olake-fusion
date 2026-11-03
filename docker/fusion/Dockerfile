@@ -26,8 +26,7 @@
 
 FROM eclipse-temurin:17-jdk-jammy AS builder
 
-# Add the entire project to the build container, unzip it,
-# and remove the bundled Spark optimizer plugin to reduce the container size.
+# Unpack the distribution built by Maven.
 
 ADD . /workspace/fusion
 WORKDIR /workspace/fusion
@@ -35,7 +34,6 @@ WORKDIR /workspace/fusion
 RUN FUSION_VERSION=`cat pom.xml | grep 'fusion-parent' -C 3 | grep -Eo '<version>.*</version>' | awk -F'[><]' '{print $3}'` \
     && cp dist/target/*.tar.gz /usr/local \
     && tar -xzvf /usr/local/fusion-${FUSION_VERSION}-bin.tar.gz -C /usr/local \
-    && rm /usr/local/fusion-${FUSION_VERSION}/plugin/optimizer/spark -rf \
     && mv /usr/local/fusion-${FUSION_VERSION} /usr/local/fusion \
     && rm -rf /workspace/fusion
 

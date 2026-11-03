@@ -31,10 +31,6 @@
     <name>Fusion Dist</name>
     <url>https://amoro.apache.org</url>
 
-    <properties>
-        <assembly.descriptor.file>src/main/assemblies/bin.xml</assembly.descriptor.file>
-    </properties>
-
     <dependencies>
         <dependency>
             <groupId>io.olake.fusion</groupId>
@@ -45,12 +41,6 @@
             <groupId>io.olake.fusion</groupId>
             <artifactId>fusion-optimizer-standalone</artifactId>
             <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.olake.fusion</groupId>
-            <artifactId>fusion-optimizer-spark-${spark.major.version}_${scala.binary.version}</artifactId>
-            <version>${project.version}</version>
-            <scope>compile</scope>
         </dependency>
     </dependencies>
 
@@ -69,7 +59,7 @@
                         <phase>package</phase>
                         <configuration>
                             <descriptors>
-                                <descriptor>${assembly.descriptor.file}</descriptor>
+                                <descriptor>src/main/assemblies/bin.xml</descriptor>
                             </descriptors>
                             <finalName>fusion-${project.version}-bin</finalName>
                             <appendAssemblyId>false</appendAssemblyId>
@@ -94,12 +84,4 @@
         </plugins>
     </build>
 
-    <profiles>
-        <profile>
-            <id>no-plugin-bin</id>
-            <properties>
-                <assembly.descriptor.file>src/main/assemblies/release-bin.xml</assembly.descriptor.file>
-            </properties>
-        </profile>
-    </profiles>
 </project>
