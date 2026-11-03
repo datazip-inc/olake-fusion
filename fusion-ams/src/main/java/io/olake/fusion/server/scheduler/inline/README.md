@@ -196,13 +196,12 @@ Core logic, do not change casually: `evaluateCronTriggers` (the only path into a
   is never needed either; only the extra `SKIPPED` rows are not written.
 - `snapshotChanged` compares against `lastOptimizedSnapshotId`, which `completeProcess` moves
   forward only on success. After a failed run the next fire runs again.
-- **The tick-level skip rarely happens.** On success, `lastOptimizedSnapshotId` is set to the run's
-  **target** (pre-commit) snapshot. `refresh` stores the table's current snapshot, which after a
-  commit is Fusion's own `OPTIMIZE` snapshot. So the next fire sees a changed snapshot, marks
-  `PENDING`, and the planner does a full evaluation before it records `SKIPPED` through
-  `completeEmptyProcess`. That path does not move `lastOptimizedSnapshotId` either, so every later
-  fire on an unchanged table does the same. `optimizingNotNecessary`, which would move it, has no
-  callers. Check this before relying on tick-level skips to save planning work.
+- **After a successful run, the next fire plans once.** On success, `lastOptimizedSnapshotId` is
+  set to the run's **target** (pre-commit) snapshot, while `refresh` stores Fusion's own `OPTIMIZE`
+  snapshot as current. The next fire therefore sees a changed snapshot, marks `PENDING`, and the
+  planner evaluates the table. If it finds nothing, `completeEmptyProcess` moves
+  `lastOptimizedSnapshotId` to the snapshot the planner read, so later fires on an unchanged table
+  take the tick-level skip without planning.
 - `markAsPending` writes the `table_process` row before it moves the status, and does not check
   `IDLE` itself. If the status is no longer `IDLE`, the row stays `PENDING` while the table keeps its
   current process id.

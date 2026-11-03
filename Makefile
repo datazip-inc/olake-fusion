@@ -41,7 +41,7 @@ MVN := JAVA_HOME="$(JAVA_HOME_17)" PATH="$(JAVA_HOME_17)/bin:$(PATH)" ./mvnw
 .DEFAULT_GOAL := help
 
 .PHONY: help build debug debug-deps debug-compile debug-server debug-optimizer debug-catalog \
-        debug-stop debug-reset debug-clean vscode setup-debug-mode clean-debug-mode \
+        debug-data debug-stop debug-reset debug-clean vscode setup-debug-mode clean-debug-mode \
         start-deps stop-deps start-fusion-docker clean-fusion-docker \
         sync-frontend spotless-fix integration-test integration-test-build \
         integration-test-images integration-test-down
@@ -58,6 +58,8 @@ help:
 	@echo "  make debug-server          Run the server in the foreground (JDWP on :$(SERVER_DEBUG_PORT))"
 	@echo "  make debug-optimizer       Run an optimizer in the foreground (JDWP on :$(OPTIMIZER_DEBUG_PORT))"
 	@echo "  make debug-catalog         Register catalog $(DEBUG_CATALOG) on the local MinIO (server must run)"
+	@echo "  make debug-data ARGS=...   Create an Iceberg table with data and delete files, e.g."
+	@echo "                             ARGS=\"--files 20 --pos 20 --update\" (ARGS=--help lists options)"
 	@echo "  make debug-stop            Stop the server and optimizer started from this checkout"
 	@echo "  make vscode                Install VS Code launch, task and settings files into .vscode/"
 	@echo "  make debug-reset           Drop and recreate the $(DEBUG_DB) database"
@@ -98,10 +100,7 @@ build:
 # Debug mode (IDE workflow)
 # ---------------------------------------------------------------------------
 
-# The server and the optimizer run from target/classes plus the Maven dependency classpath, so
-# a code change only needs a recompile (rerun the target, or let the IDE compile). Nothing is
-# copied into dist/. Logs go to the console. Attach a debugger to the JDWP ports; set
-# DEBUG_SUSPEND=y to make the JVM wait for the debugger before it starts.
+# Server and optimizer run from compiled classes, not dist/ jars. See CONTRIBUTING.md, "Debug mode".
 
 DEBUG_DB             ?= fusion_dev
 DEBUG_CATALOG        ?= local_iceberg
@@ -111,16 +110,17 @@ DEBUG_SUSPEND        ?= n
 SERVER_DEBUG_PORT    ?= 5005
 OPTIMIZER_DEBUG_PORT ?= 5006
 OPTIMIZER_MEMORY_MB  ?= 2048
-DEBUG_CP             := $(CURDIR)/fusion-ams/target/debug-classpath.txt
-DEBUG_COOKIES        := $(CURDIR)/fusion-ams/target/debug-cookies.txt
+# Separate from target/, which an IDE with a stale project model fills with broken classes.
+DEBUG_BUILD_DIR      := target-debug
+DEBUG_CP             := $(CURDIR)/fusion-ams/$(DEBUG_BUILD_DIR)/debug-classpath.txt
+DEBUG_COOKIES        := $(CURDIR)/fusion-ams/$(DEBUG_BUILD_DIR)/debug-cookies.txt
 FUSION_URL           := http://localhost:1630
 
 JAVA_17       := "$(JAVA_HOME_17)/bin/java"
 JVM_ADD_OPENS := $(foreach p,java.lang java.lang.invoke java.lang.reflect java.io java.net java.nio \
                    java.util java.util.concurrent java.util.concurrent.atomic sun.nio.ch sun.nio.cs \
                    sun.security.action sun.util.calendar,--add-opens=java.base/$(p)=ALL-UNNAMED)
-DEBUG_RUN_CP   = $(CURDIR)/fusion-ams/target/classes:$$(cat "$(DEBUG_CP)")
-# Credentials of the local MinIO, read by Iceberg's S3FileIO.
+DEBUG_RUN_CP   = $(CURDIR)/fusion-ams/$(DEBUG_BUILD_DIR)/classes:$$(cat "$(DEBUG_CP)")
 DEBUG_AWS_ENV := AWS_ACCESS_KEY_ID=admin AWS_SECRET_ACCESS_KEY=password AWS_REGION=us-east-1
 
 debug: debug-deps
@@ -131,7 +131,6 @@ debug: debug-deps
 	@echo "  make debug-catalog      once, after the server is up"
 	@echo "  make debug-optimizer    optimizer, debugger port $(OPTIMIZER_DEBUG_PORT)"
 
-# Postgres and MinIO, and the debug database. Safe to run when they are already up.
 debug-deps: start-deps
 	@echo "Waiting for Postgres..."
 	@until docker exec postgres pg_isready -U iceberg >/dev/null 2>&1; do sleep 1; done
@@ -139,14 +138,12 @@ debug-deps: start-deps
 		"SELECT 1 FROM pg_database WHERE datname = '$(DEBUG_DB)'" | grep -q 1 \
 		|| docker exec postgres createdb -U iceberg $(DEBUG_DB)
 
-# Compiles fusion-ams and every module it depends on (the optimizer modules included), and writes
-# their dependency classpath. Sibling modules resolve to their target/classes.
 debug-compile:
 	@if [ -z "$(JAVA_HOME_17)" ]; then echo "ERROR: JDK 17 not found. Set JAVA_HOME."; exit 1; fi
 	@echo "Compiling..."
 	@$(MVN) -q -B -ntp test-compile dependency:build-classpath -pl fusion-ams -am \
 		-Pskip-dashboard-build -Drat.skip=true -Dspotless.check.skip=true -Dcheckstyle.skip=true \
-		-Dmdep.outputFile="$(DEBUG_CP)"
+		-Dfusion.build.dir=$(DEBUG_BUILD_DIR) -Dmdep.outputFile="$(DEBUG_CP)"
 
 debug-server: $(if $(NO_COMPILE),,debug-compile)
 	@echo "Starting Fusion on $(FUSION_URL) (admin / password), database $(DEBUG_DB)"
@@ -161,8 +158,7 @@ debug-server: $(if $(NO_COMPILE),,debug-compile)
 		-agentlib:jdwp=transport=dt_socket,server=y,suspend=$(DEBUG_SUSPEND),address=*:$(SERVER_DEBUG_PORT) \
 		-cp "$(DEBUG_RUN_CP)" io.olake.fusion.server.FusionServiceContainer
 
-# An optimizer started outside the server registers into the server's bootstrap group
-# (optimizer.bootstrap.group-name in local-test/config.yaml), which accepts external optimizers.
+# Registers into the bootstrap group (optimizer.bootstrap.group-name), which accepts external optimizers.
 debug-optimizer: $(if $(NO_COMPILE),,debug-compile)
 	@echo "Starting optimizer for group $(DEBUG_GROUP), parallelism $(DEBUG_PARALLELISM)"
 	@$(DEBUG_AWS_ENV) $(JAVA_17) -Xmx$(OPTIMIZER_MEMORY_MB)m $(JVM_ADD_OPENS) \
@@ -170,8 +166,6 @@ debug-optimizer: $(if $(NO_COMPILE),,debug-compile)
 		-cp "$(DEBUG_RUN_CP)" io.olake.fusion.optimizer.standalone.StandaloneOptimizer \
 		-a thrift://127.0.0.1:1261 -g $(DEBUG_GROUP) -p $(DEBUG_PARALLELISM)
 
-# Registers an Iceberg JDBC catalog whose metadata lives in the debug database and whose data lives
-# in the local MinIO bucket `warehouse`. Skipped when the catalog already exists.
 debug-catalog:
 	@curl -sf -c "$(DEBUG_COOKIES)" -X POST "$(FUSION_URL)/api/ams/v1/login" \
 		-H "X-Request-Source: Web" -H "Content-Type: application/json" \
@@ -194,8 +188,13 @@ debug-catalog:
 		echo ""; \
 	fi
 
-# Stops the server and optimizer JVMs that run from this checkout's target/classes (started by the
-# debug targets, by VS Code, or by the server), forcibly if they do not exit within 10 seconds.
+debug-data: $(if $(NO_COMPILE),,debug-compile)
+	@$(DEBUG_AWS_ENV) $(JAVA_17) $(JVM_ADD_OPENS) \
+		-cp "$(CURDIR)/fusion-ams/$(DEBUG_BUILD_DIR)/test-classes:$(DEBUG_RUN_CP)" \
+		io.olake.fusion.dev.IcebergTestDataGenerator \
+		--catalog $(DEBUG_CATALOG) --uri "jdbc:postgresql://localhost:5432/$(DEBUG_DB)" $(ARGS)
+
+# Force-kills after 10 seconds: the server does not always exit on SIGTERM.
 debug-stop:
 	@pids=$$(ps -eo pid,args | grep -E "(FusionServiceContainer|StandaloneOptimizer)" \
 		| grep -F "$(CURDIR)/" | grep -v grep | awk '{print $$1}'); \
@@ -208,8 +207,6 @@ debug-stop:
 	[ -n "$$alive" ] && kill -9 $$alive 2>/dev/null; \
 	echo "Stopped: $$pids"
 
-# Installs the VS Code files from dev/vscode/. Existing launch.json and tasks.json are kept as
-# *.bak; an existing settings.json is left alone.
 vscode:
 	@mkdir -p .vscode
 	@for f in launch.json tasks.json; do \
@@ -272,13 +269,13 @@ spotless-fix:
 
 sync-frontend:
 	@SRC=fusion-web/src/main/resources/static; \
-	DST=fusion-web/target/classes/static; \
 	if [ ! -d "$$SRC" ]; then \
 		echo "ERROR: $$SRC not found. Run 'pnpm build' inside fusion-web/ first."; \
 		exit 1; \
 	fi; \
-	mkdir -p "$$DST"; \
-	cp -r "$$SRC"/. "$$DST"/
+	for DST in fusion-web/target/classes/static fusion-web/$(DEBUG_BUILD_DIR)/classes/static; do \
+		mkdir -p "$$DST"; cp -r "$$SRC"/. "$$DST"/; \
+	done
 	@echo "Frontend synced. Refresh http://localhost:1630"
 
 # ---------------------------------------------------------------------------

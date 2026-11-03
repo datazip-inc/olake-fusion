@@ -95,7 +95,8 @@ running, `PENDING` tables stay `PENDING`.
 3. `planner.isNecessary()`:
    - true → `new TableOptimizingProcess(planner, tableRuntime)`, which creates a `TaskRuntime` per
      planned task (task ids 1..n) and calls `beginAndPersistProcess` (below);
-   - false → `tableRuntime.completeEmptyProcess()`: row → `SKIPPED`, status → `IDLE`.
+   - false → `tableRuntime.completeEmptyProcess(targetSnapshotId, targetChangeSnapshotId)`: row →
+     `SKIPPED`, status → `IDLE`, `lastOptimizedSnapshotId` → the planner's target snapshot.
 4. Any `Throwable` → `tableRuntime.planFailed(...)`: row → `FAILED`, an `ERROR` line in the driver
    log, status → `IDLE`, process id → 0. The exception is rethrown and logged by `whenComplete`.
 

@@ -8,52 +8,30 @@
       "problemMatcher": []
     },
     {
-      "label": "fusion: make debug-server",
+      "label": "fusion: register catalog",
       "type": "shell",
-      "command": "make debug-deps && make debug-server DEBUG_SUSPEND=y",
-      "isBackground": true,
-      "presentation": {
-        "reveal": "always",
-        "panel": "dedicated"
-      },
-      "problemMatcher": {
-        "owner": "fusion",
-        "pattern": {
-          "regexp": "^__fusion_no_match__$"
-        },
-        "background": {
-          "activatesOnStart": true,
-          "beginsPattern": "^(Starting local dependencies|Compiling)",
-          "endsPattern": "Listening for transport dt_socket at address: 5005"
-        }
-      }
+      "command": "make debug-catalog",
+      "problemMatcher": []
     },
     {
-      "label": "fusion: make debug-optimizer",
+      "label": "fusion: create test data",
       "type": "shell",
-      "command": "make debug-optimizer NO_COMPILE=1 DEBUG_SUSPEND=y",
-      "isBackground": true,
-      "presentation": {
-        "reveal": "always",
-        "panel": "dedicated"
-      },
-      "problemMatcher": {
-        "owner": "fusion",
-        "pattern": {
-          "regexp": "^__fusion_no_match__$"
-        },
-        "background": {
-          "activatesOnStart": true,
-          "beginsPattern": "^Starting optimizer",
-          "endsPattern": "Listening for transport dt_socket at address: 5006"
-        }
-      }
+      "command": "make debug-data ARGS='${input:debugDataArgs}'",
+      "problemMatcher": []
     },
     {
-      "label": "fusion: make debug-stop",
+      "label": "fusion: stop debug JVMs",
       "type": "shell",
       "command": "make debug-stop",
       "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "debugDataArgs",
+      "type": "promptString",
+      "description": "make debug-data options (--help lists them)",
+      "default": "--files 20 --pos 20 --update --recreate"
     }
   ]
 }

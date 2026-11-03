@@ -67,6 +67,8 @@
     </issueManagement>
 
     <properties>
+        <!-- `make debug-*` builds into target-debug, out of reach of the IDE's compiler. -->
+        <fusion.build.dir>target</fusion.build.dir>
         <java.source.version>17</java.source.version>
         <java.target.version>17</java.target.version>
         <maven.compiler.source>${java.source.version}</maven.compiler.source>
@@ -1286,6 +1288,7 @@
     </pluginRepositories>
 
     <build>
+        <directory>${project.basedir}/${fusion.build.dir}</directory>
         <pluginManagement>
             <plugins>
                 <plugin>
@@ -1436,6 +1439,7 @@
                             <exclude>**/.idea/**</exclude>
                             <!-- Generated content -->
                             <exclude>**/target/**</exclude>
+                            <exclude>**/target-debug/**</exclude>
                             <exclude>**/scalastyle-output.xml</exclude>
                             <exclude>docs/resources/**</exclude>
                             <exclude>docs/public/**</exclude>
@@ -1454,7 +1458,8 @@
                             <exclude>**/components.d.ts</exclude>
                             <exclude>**/Chart.lock</exclude>
                             <exclude>dev/deps/**</exclude>
-                            <exclude>local/test/data/**</exclude>
+                            <exclude>local-test/data/**</exclude>
+                            <exclude>**/fusion-bin/logs/**</exclude>
                             <exclude>site/**</exclude>
                             <!-- artifacts created during release process -->
                             <exclude>release/**</exclude>

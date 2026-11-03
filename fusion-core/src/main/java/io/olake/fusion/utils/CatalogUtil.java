@@ -185,11 +185,9 @@ public class CatalogUtil {
   }
 
   /**
-   * Default {@code io-impl} to {@link ResolvingFileIO} for Hive and custom catalogs that do not set
-   * one. Without it, Iceberg's HiveCatalog and JdbcCatalog fall back to HadoopFileIO, which has no
-   * FileSystem for {@code s3://} paths. ResolvingFileIO uses S3FileIO for s3, s3a and s3n paths and
-   * HadoopFileIO for anything else, which matches the FileIO OLake writes its tables with. Glue and
-   * REST catalogs already pick an S3-capable FileIO and are left unchanged.
+   * Defaults {@code io-impl} to {@link ResolvingFileIO} for Hive and custom catalogs. Iceberg would
+   * otherwise use HadoopFileIO, which cannot read {@code s3://} paths. Glue and REST catalogs
+   * already pick an S3-capable FileIO.
    *
    * @param metastoreType - metastore type
    * @param catalogProperties - catalog properties, updated in place

@@ -109,7 +109,7 @@ public class TestOrphanFileClean extends ExecutorTestBase {
     maintainer.cleanContentFiles(System.currentTimeMillis(), orphanFilesCleaningMetrics);
     maintainer.cleanMetadata(System.currentTimeMillis(), orphanFilesCleaningMetrics);
 
-    // Orphan cleanup deletes files only; an emptied directory stays (S3 has no directories).
+    // Empty directories are not deleted.
     Assert.assertFalse(getFusionTable().io().exists(baseOrphanFilePath));
     baseTable
         .newScan()
@@ -269,7 +269,7 @@ public class TestOrphanFileClean extends ExecutorTestBase {
             TestTableMaintainerContext.of(getTable()));
     maintainer.cleanOrphanFiles();
 
-    // Orphan cleanup deletes files only; an emptied directory stays (S3 has no directories).
+    // Empty directories are not deleted.
     Assert.assertFalse(getFusionTable().io().exists(baseOrphanFilePath));
   }
 

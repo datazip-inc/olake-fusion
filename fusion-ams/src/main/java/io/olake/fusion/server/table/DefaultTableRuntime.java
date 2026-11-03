@@ -463,7 +463,7 @@ public class DefaultTableRuntime extends AbstractTableRuntime implements TableRu
     this.pendingCronType = null;
   }
 
-  public void completeEmptyProcess() {
+  public void completeEmptyProcess(long targetSnapshotId, long targetChangeSnapshotId) {
     OptimizingStatus originalStatus = getOptimizingStatus();
     boolean needUpdate =
         originalStatus == OptimizingStatus.PLANNING || originalStatus == OptimizingStatus.PENDING;
@@ -481,6 +481,16 @@ public class DefaultTableRuntime extends AbstractTableRuntime implements TableRu
     store()
         .begin()
         .updateStatusCode(code -> OptimizingStatus.IDLE.getCode())
+        // The planner found nothing to do in this snapshot, so later cron ticks can skip without
+        // planning until the table changes. This also absorbs Fusion's own optimize commit, which
+        // completeProcess leaves ahead of lastOptimizedSnapshotId.
+        .updateState(
+            OPTIMIZING_STATE_KEY,
+            state -> {
+              state.setLastOptimizedSnapshotId(targetSnapshotId);
+              state.setLastOptimizedChangeSnapshotId(targetChangeSnapshotId);
+              return state;
+            })
         .updateState(PENDING_INPUT_KEY, any -> new AbstractOptimizingEvaluator.PendingInput())
         .updateState(PROCESS_ID_KEY, any -> 0L)
         .commit();
@@ -587,8 +597,8 @@ public class DefaultTableRuntime extends AbstractTableRuntime implements TableRu
    * actual file analysis is deferred to the planner inside {@code OptimizingQueue.planInternal}.
    *
    * @param cronType the optimization type whose cron triggered this transition — stored so that
-   *     {@link #completeEmptyProcess()} can update the correct per-type timestamp when the planner
-   *     determines no work is needed.
+   *     {@link #completeEmptyProcess(long, long)} can update the correct per-type timestamp when
+   *     the planner determines no work is needed.
    */
   public void markAsPending(OptimizingType cronType) {
     this.pendingCronType = cronType;

@@ -130,8 +130,7 @@ containers:
   - name: localContainer
     container-impl: io.olake.fusion.server.manager.LocalOptimizerContainer
     properties:
-      # Run the optimizer on the server's classpath: with `make debug-server` that is the compiled
-      # classes, so no jars need to be copied into dist/.
+      # The optimizer runs the server's (compiled) classes instead of lib/ jars.
       use-server-classpath: "true"
 
   - name: sparkContainer

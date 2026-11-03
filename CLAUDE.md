@@ -208,8 +208,8 @@ Prerequisites: Docker is running, and the repo has been fully built at least onc
 4. Start `io.olake.fusion.server.FusionServiceContainer` with a Java 17 binary, in the background,
    with output in a log file, and save its PID.
    - Classpath: `fusion-ams/target/classes` followed by the contents of the classpath file.
-   - JVM flags: the `vmArgs` of the `FusionServiceContainer` launch configuration in
-     `CONTRIBUTING.md` (the `--add-opens` flags are required on Java 17).
+   - JVM flags: the `vmArgs` of the **Fusion: server** configuration in
+     `dev/vscode/launch.json` (the `--add-opens` flags are required on Java 17).
    - Environment:
      - `AMORO_HOME=$PWD/dist/src/main/fusion-bin`
      - `AMORO_CONF_DIR=$PWD/local-test`
@@ -258,11 +258,18 @@ This covers the rewrite executors in `fusion-core` and the `fusion-optimizer-com
   `dist/src/main/fusion-bin/logs/optimizer-local-<id>/optimizer.log.err`; the server log line
   `Starting local optimizer using command` gives the `<id>`.
 - After an optimizer-side edit, recompile (step 3) and restart the optimizer.
+- Test data: `make debug-data ARGS="--files 20 --pos 20 --update"` creates `demo.events` in the
+  debug catalog with small data files and position (`--pos`) or equality (`--eq`) delete files;
+  `--update` re-adds each deleted row as a new version, `--minor-cron`/`--major-cron`/`--full-cron`
+  enable optimizing. It prints the row count a query must return, which checks compaction results.
+  `ARGS=--help` lists the options. The tool is the test-scope class
+  `io.olake.fusion.dev.IcebergTestDataGenerator`.
 - The optimizer is its own process: stopping the server does not stop it. Kill it by PID
   (`ps -eo pid,args | grep "[S]tandaloneOptimizer "`).
-- If compile errors look impossible (`X cannot be converted to X`), the IDE's compiler has written
-  broken classes into `target/`; run `./mvnw -o clean -pl fusion-ams -am -Pskip-dashboard-build`
-  and compile again.
+- The `make debug-*` targets build into `target-debug/` (`-Dfusion.build.dir=target-debug`), so
+  an IDE compiling into `target/` cannot break them. If a build into `target/` shows impossible
+  errors (`X cannot be converted to X`, `NoClassDefFoundError: Configurations`), the IDE's compiler
+  has written broken classes there; run `./mvnw -o clean -pl fusion-ams -am -Pskip-dashboard-build`.
 
 ### Clean up
 

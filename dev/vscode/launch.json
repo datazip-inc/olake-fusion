@@ -42,26 +42,15 @@
     },
     {
       "type": "java",
-      "name": "Fusion: attach to make debug-server",
+      "name": "Fusion: attach to server (5005)",
       "request": "attach",
       "hostName": "localhost",
       "port": 5005,
-      "projectName": "fusion-ams",
-      "preLaunchTask": "fusion: make debug-server",
-      "postDebugTask": "fusion: make debug-stop"
+      "projectName": "fusion-ams"
     },
     {
       "type": "java",
-      "name": "Fusion: attach to make debug-optimizer",
-      "request": "attach",
-      "hostName": "localhost",
-      "port": 5006,
-      "projectName": "fusion-optimizer-standalone",
-      "preLaunchTask": "fusion: make debug-optimizer"
-    },
-    {
-      "type": "java",
-      "name": "Fusion: attach to optimizer on port 5006",
+      "name": "Fusion: attach to optimizer (5006)",
       "request": "attach",
       "hostName": "localhost",
       "port": 5006,

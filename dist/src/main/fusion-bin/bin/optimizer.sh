@@ -28,8 +28,7 @@ fi
 
 LIB_PATH=$FUSION_HOME/lib
 if [ -n "$FUSION_OPTIMIZER_CLASSPATH" ]; then
-  # Set by a server started from source (container property use-server-classpath): run the
-  # compiled classes instead of the jars in lib/.
+  # Set by LocalOptimizerContainer when use-server-classpath is true.
   export CLASSPATH=$FUSION_CONF_DIR/optimize:$FUSION_OPTIMIZER_CLASSPATH
 else
   export CLASSPATH=$FUSION_CONF_DIR/optimize:$LIB_PATH/:$(find $LIB_PATH/ -type f -name "*.jar" | paste -sd':' -)

@@ -27,10 +27,8 @@ import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import java.util.concurrent.Callable;
 
 /**
- * Hadoop configuration of a catalog. Iceberg's catalog constructors (HiveCatalog needs a non-null
- * one) and the terminal's Spark session take it. Storage credentials do not live here: Fusion
- * reaches its storage (S3) through the catalog's FileIO properties, and every call runs as the
- * process user.
+ * Hadoop configuration of a catalog, for Iceberg's catalog constructors and the terminal. Storage
+ * credentials come from the catalog's FileIO properties.
  */
 public class TableMetaStore {
 

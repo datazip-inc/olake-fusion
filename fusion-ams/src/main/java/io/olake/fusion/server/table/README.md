@@ -97,7 +97,7 @@ Statuses are `OptimizingStatus` codes (`IDLE` 700, `PENDING` 600, `PLANNING` 500
 | `recordSkippedOptimization(type, reason)` | `TableRuntimeRefreshExecutor` | Inserts and updates a `SKIPPED` `table_process` row in one `doAs` (one transaction) with `skipReason`. |
 | `beginPlanning()` | `OptimizingQueue` | Updates the process row to `PLANNING`; status → PLANNING. |
 | `planFailed(reason, t)` | `OptimizingQueue` | Process row → `FAILED` (and a JSON line in `driver.log`); status → IDLE, `process_id` → 0. |
-| `completeEmptyProcess()` | `OptimizingQueue` when the planner finds nothing | Process row → `SKIPPED`; status → IDLE; resets `pending_input` and `process_id`. |
+| `completeEmptyProcess(targetSnapshotId, targetChangeSnapshotId)` | `OptimizingQueue` when the planner finds nothing | Process row → `SKIPPED`; status → IDLE; `lastOptimizedSnapshotId` → the planner's target snapshot; resets `pending_input` and `process_id`. |
 | `beginProcess(process)` | `OptimizingQueue` (inside `invokeConsistency`) | `process_id` = process id; status → `OptimizingStatus.ofOptimizingType(...)`; resets `pending_input`. |
 | `beginCommitting()` | `OptimizingQueue` | status → COMMITTING. |
 | `completeProcess(success)` | `OptimizingQueue` and `recover` | On success only, advances `lastOptimizedSnapshotId`, `lastOptimizedChangeSnapshotId`, `lastOptimizingType`; always sets the per-type last time to the plan time; status → IDLE. |

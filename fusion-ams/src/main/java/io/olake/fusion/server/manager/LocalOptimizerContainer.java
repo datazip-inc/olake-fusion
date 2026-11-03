@@ -39,9 +39,8 @@ public class LocalOptimizerContainer extends AbstractOptimizerContainer {
   public static final String JOB_MEMORY_PROPERTY = "memory";
 
   /**
-   * Container property: when {@code true}, the optimizer runs on this server's own classpath
-   * instead of the jars in {@code $AMORO_HOME/lib}. Meant for a server started from source, so that
-   * the optimizer runs the freshly compiled classes.
+   * Container property: when {@code true}, the optimizer uses this server's classpath instead of
+   * {@code $AMORO_HOME/lib}, so a server run from source starts it on the compiled classes.
    */
   public static final String USE_SERVER_CLASSPATH_PROPERTY = "use-server-classpath";
 
