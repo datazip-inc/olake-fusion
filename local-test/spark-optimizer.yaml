@@ -102,7 +102,7 @@ spec:
             - --deploy-mode
             - client
             - --class
-            - org.apache.amoro.optimizer.spark.SparkOptimizer
+            - io.olake.fusion.optimizer.spark.SparkOptimizer
             # The pod is the driver: bind to the pod IP, and publish the headless service name so
             # executors can reach the driver.
             - --conf

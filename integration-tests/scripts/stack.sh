@@ -82,7 +82,7 @@ config() {
   mkdir -p "$TESTS_DIR/build"
   docker run --rm -v "$REPO_DIR:/work:ro" -w /work "$YQ_IMAGE" eval-all \
     'select(fileIndex == 0) * select(fileIndex == 1)' \
-    dist/src/main/amoro-bin/conf/config.yaml \
+    dist/src/main/fusion-bin/conf/config.yaml \
     integration-tests/docker/fusion-config.overlay.yaml \
     > "$TESTS_DIR/build/config.yaml"
   echo "Rendered $TESTS_DIR/build/config.yaml"

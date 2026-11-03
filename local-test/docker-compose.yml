@@ -34,7 +34,6 @@ services:
         ipv4_address: 10.210.30.10
     ports:
       - "1630:1630"    # Web UI + REST API
-      - "1260:1260"    # Thrift table service
       - "1261:1261"    # Thrift optimizing service
     environment:
       JVM_XMS: "1024"

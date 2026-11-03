@@ -50,6 +50,11 @@ jobs:
               continue
             fi
 
+            # License texts quote the Apache License itself; they carry no source header.
+            case "$(basename "$file")" in
+              LICENSE|LICENSE-*|NOTICE|NOTICE-*) continue ;;
+            esac
+
             if ! head -40 "$file" | grep -q -E "$LICENSE_REGEX"; then
               continue
             fi

@@ -53,10 +53,9 @@ OLake-Fusion adds an operational layer on top of Iceberg so your team can focus 
 
 With OLake-Fusion, you can:
 
-- Keep query performance stable with continuous self-optimization.
-- Reduce storage and compute waste from small-file and metadata overhead.
-- Manage tables consistently across different catalogs and environments.
-- Build infra-decoupled, stream-and-batch-fused, lake-native data platforms.
+- Keep query performance stable with scheduled compaction.
+- Reduce storage and compute waste from small files, delete files and old snapshots.
+- Manage Iceberg tables the same way across Glue, Hive, JDBC and REST catalogs.
 
 ## Architecture
 
@@ -64,15 +63,14 @@ With OLake-Fusion, you can:
   <img src="fusion-arch.png" alt="OLake-Fusion architecture" height="360px"/>
 </p>
 
-- **Fusion (Management Service):** Handles table lifecycle operations such as self-optimization and data expiration, and provides a unified catalog interface across engines.
-- **Spark Optimizer:** Runs optimization tasks that improve file layout and maintain read efficiency.
+- **Fusion (management service):** schedules compaction from each table's crons, commits the results, and cleans up expired snapshots, orphan files and dangling delete files.
+- **Spark optimizer:** runs the compaction tasks on Kubernetes.
 
 ## Key Features
 
-- **Cron Based Table Configuration:** Define cron to run compaction with an easy UI.
-- **Multi-Catalog Support:** Works with catalogs such as Glue, JDBC, and REST-based catalogs.
-- **Infrastructure Independent:** Deploy on private cloud, public cloud, hybrid cloud, or multi-cloud.
-- **Lakehouse Ready:** Designed for modern analytics workloads on open table formats.
+- **Cron-based compaction:** set Lite (Minor), Medium (Major) and Full schedules per table in OLake-UI.
+- **Multiple catalogs:** Glue, Hive Metastore, JDBC and REST catalogs.
+- **Runs anywhere:** Docker or Kubernetes, on any cloud or on premises.
 
 ## Benchmark Highlights
 
@@ -83,12 +81,7 @@ Read the full benchmark details: [Compaction Benchmark](https://olake.io/docs/be
 
 ## Quick Start
 
-Start with the first end-to-end setup guide:
-
 - [Configure Your First Compaction](https://olake.io/docs/fusion/getting-started/configure-first-compaction/)
-
-Helpful next reads:
-
 - [Deployment Guide Docker](https://olake.io/docs/fusion/install/olake-ui/)
 - [Deployment Guide Helm](https://olake.io/docs/fusion/install/kubernetes-compaction/)
 - [Managing Catalogs](https://olake.io/docs/fusion/maintenance/catalogs/)
@@ -100,8 +93,6 @@ Helpful next reads:
 - Follow docs and updates at [OLake Fusion Docs](https://olake.io/docs/fusion/getting-started/overview/)
 
 ## Contributing
-
-Contributions of all sizes are welcome.
 
 - This project: [CONTRIBUTING.md](CONTRIBUTING.md) — build, IDE setup, debug mode, and PR requirements
 - Core project: [datazip-inc/olake](https://github.com/datazip-inc/olake/blob/master/CONTRIBUTING.md)

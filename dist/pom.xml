@@ -22,41 +22,25 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
-        <groupId>org.apache.amoro</groupId>
-        <artifactId>amoro-parent</artifactId>
+        <groupId>io.olake.fusion</groupId>
+        <artifactId>fusion-parent</artifactId>
         <version>0.9-SNAPSHOT</version>
     </parent>
 
     <artifactId>dist</artifactId>
-    <name>Amoro Project AMS Dist</name>
+    <name>Fusion Dist</name>
     <url>https://amoro.apache.org</url>
-
-    <properties>
-        <assembly.descriptor.file>src/main/assemblies/bin.xml</assembly.descriptor.file>
-    </properties>
 
     <dependencies>
         <dependency>
-            <groupId>org.apache.amoro</groupId>
-            <artifactId>amoro-ams</artifactId>
+            <groupId>io.olake.fusion</groupId>
+            <artifactId>fusion-ams</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>org.apache.amoro</groupId>
-            <artifactId>amoro-optimizer-standalone</artifactId>
+            <groupId>io.olake.fusion</groupId>
+            <artifactId>fusion-optimizer-standalone</artifactId>
             <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.amoro</groupId>
-            <artifactId>amoro-optimizer-spark-${spark.major.version}_${scala.binary.version}</artifactId>
-            <version>${project.version}</version>
-            <scope>compile</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.amoro</groupId>
-            <artifactId>amoro-metrics-prometheus</artifactId>
-            <version>${project.version}</version>
-            <scope>compile</scope>
         </dependency>
     </dependencies>
 
@@ -75,9 +59,9 @@
                         <phase>package</phase>
                         <configuration>
                             <descriptors>
-                                <descriptor>${assembly.descriptor.file}</descriptor>
+                                <descriptor>src/main/assemblies/bin.xml</descriptor>
                             </descriptors>
-                            <finalName>apache-amoro-${project.version}-bin</finalName>
+                            <finalName>fusion-${project.version}-bin</finalName>
                             <appendAssemblyId>false</appendAssemblyId>
                         </configuration>
                     </execution>
@@ -100,12 +84,4 @@
         </plugins>
     </build>
 
-    <profiles>
-        <profile>
-            <id>no-plugin-bin</id>
-            <properties>
-                <assembly.descriptor.file>src/main/assemblies/release-bin.xml</assembly.descriptor.file>
-            </properties>
-        </profile>
-    </profiles>
 </project>

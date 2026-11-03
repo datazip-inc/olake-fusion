@@ -16,16 +16,9 @@ on:
   # push:
   #   paths:
   #     - ".github/workflows/**"
-  #     - "amoro-ams/**"
-  #     - "amoro-common/**"
-  #     - "amoro-metrics/**"
-  #     - "amoro-optimizer/**"
-  #     - "amoro-format-iceberg/**"
-  #     - "amoro-format-paimon/**"
-  #     - "amoro-format-hudi/**"
-  #     - "amoro-format-mixed/amoro-mixed-flink/**"
-  #     - "amoro-format-mixed/amoro-mixed-hive/**"
-  #     - "amoro-format-mixed/amoro-mixed-spark/**"
+  #     - "fusion-ams/**"
+  #     - "fusion-optimizer/**"
+  #     - "fusion-core/**"
   #     - "pom.xml"
   #     - "tools/maven/**"
 jobs:
@@ -61,7 +54,7 @@ jobs:
           test "$SCALA" = "2.13.18"
 
       - name: Build all modules with Maven
-        run: ./mvnw clean install -Djacoco.flink.skip=true -B -ntp -Pscala-2.13 -Pspark-${{ matrix.spark }}
+        run: ./mvnw clean install -B -ntp -Pscala-2.13 -Pspark-${{ matrix.spark }}
 
       - name: Code coverage
         uses: codecov/codecov-action@v3

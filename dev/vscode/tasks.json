@@ -1,0 +1,37 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "fusion: start Postgres and MinIO",
+      "type": "shell",
+      "command": "make debug-deps",
+      "problemMatcher": []
+    },
+    {
+      "label": "fusion: register catalog",
+      "type": "shell",
+      "command": "make debug-catalog",
+      "problemMatcher": []
+    },
+    {
+      "label": "fusion: create test data",
+      "type": "shell",
+      "command": "make debug-data ARGS='${input:debugDataArgs}'",
+      "problemMatcher": []
+    },
+    {
+      "label": "fusion: stop debug JVMs",
+      "type": "shell",
+      "command": "make debug-stop",
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "debugDataArgs",
+      "type": "promptString",
+      "description": "make debug-data options (--help lists them)",
+      "default": "--files 20 --pos 20 --update --recreate"
+    }
+  ]
+}

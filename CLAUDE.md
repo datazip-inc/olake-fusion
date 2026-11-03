@@ -35,12 +35,11 @@ These are the modules that usually matter, but sometimes other modules need to b
 
 | Module | Runs in | Contains |
 | --- | --- | --- |
-| `amoro-ams` | Server | Scheduling, commit, table runtime, REST API, etc. |
-| `amoro-format-iceberg` | Server and optimizer | Evaluators and planners (server), rewrite executors (optimizer) |
-| `amoro-common` | Both | Shared types and config |
-| `amoro-optimizer/amoro-optimizer-common`, `-standalone`, `-spark` | Optimizer | Shared optimizer code, the local optimizer, the production optimizer |
+| `fusion-ams` | Server | Scheduling, commit, table runtime, REST API, etc. |
+| `fusion-core` | Server and optimizer | Shared types, config and Thrift API; evaluators and planners (server), rewrite executors (optimizer) |
+| `fusion-optimizer/fusion-optimizer-common`, `-standalone`, `-spark` | Optimizer | Shared optimizer code, the local optimizer, the production optimizer |
 
-**Compaction runs on the Spark optimizer** (`amoro-optimizer-spark`, image `olakego/fusion-spark`)
+**Compaction runs on the Spark optimizer** (`fusion-optimizer-spark`, image `olakego/fusion-spark`)
 on Kubernetes. The local standalone optimizer is only for local debugging.
 
 **Out of scope unless asked.** Do not read, fix or refactor these. If a change to shared code also
@@ -48,9 +47,9 @@ affects them, mention it in one line and move on.
 
 - Mixed-format tables (mixed-iceberg, mixed-hive), Hive, Paimon and Hudi tables, and the modules
   that exist only for them: `amoro-format-mixed/*`, `amoro-format-hudi`, `amoro-format-paimon`.
-- The Flink optimizer, `amoro-optimizer/amoro-optimizer-flink`. Fusion does not use it. Never use
+- The Flink optimizer, `fusion-optimizer/fusion-optimizer-flink`. Fusion does not use it. Never use
   it to run or test compaction, and do not suggest it.
-- Amoro's own web UI, `amoro-web` (served by Fusion on port 1630). It is not the product UI;
+- Amoro's own web UI, `fusion-web` (served by Fusion on port 1630). It is not the product UI;
   OLake-UI is. Ask before changing anything there.
 - Fusion uses PostgreSQL as its database. Ignore modules for other databases completely.
 
@@ -202,17 +201,17 @@ Prerequisites: Docker is running, and the repo has been fully built at least onc
    between runs, and an existing database can hold catalogs that point at real cloud storage (for
    example Glue + S3). The server syncs those tables on startup, and its maintenance jobs would act
    on them.
-3. Compile `amoro-ams` and every module it depends on, and write its runtime classpath to a file,
+3. Compile `fusion-ams` and every module it depends on, and write its runtime classpath to a file,
    with Maven's `test-compile` and `dependency:build-classpath` in one offline run (about 30–45
    seconds). Sibling modules then resolve to their `target/classes`, so edits in
-   `amoro-format-iceberg`, `amoro-common` and so on are picked up without installing them.
-4. Start `org.apache.amoro.server.AmoroServiceContainer` with a Java 17 binary, in the background,
+   `fusion-core` and so on are picked up without installing them.
+4. Start `io.olake.fusion.server.FusionServiceContainer` with a Java 17 binary, in the background,
    with output in a log file, and save its PID.
-   - Classpath: `amoro-ams/target/classes` followed by the contents of the classpath file.
-   - JVM flags: the `vmArgs` of the `AmoroServiceContainer` launch configuration in
-     `CONTRIBUTING.md` (the `--add-opens` flags are required on Java 17).
+   - Classpath: `fusion-ams/target/classes` followed by the contents of the classpath file.
+   - JVM flags: the `vmArgs` of the **Fusion: server** configuration in
+     `dev/vscode/launch.json` (the `--add-opens` flags are required on Java 17).
    - Environment:
-     - `AMORO_HOME=$PWD/dist/src/main/amoro-bin`
+     - `AMORO_HOME=$PWD/dist/src/main/fusion-bin`
      - `AMORO_CONF_DIR=$PWD/local-test`
      - `AMS_SERVER__EXPOSE__HOST=127.0.0.1`
      - `AMS_DATABASE_URL=jdbc:postgresql://localhost:5432/<throwaway database>`
@@ -242,38 +241,43 @@ Prerequisites: Docker is running, and the repo has been fully built at least onc
 
 ### Code that runs in the optimizer
 
-The local optimizer is a separate process, started by the server through `bin/optimizer.sh` with the
-`localContainer` from `local-test/config.yaml`. It loads **jars** from
-`dist/src/main/amoro-bin/lib/`, not the compiled classes, so it keeps running old code until those
-jars are replaced. This covers the rewrite executors in `amoro-format-iceberg` and the
-`amoro-optimizer-common` and `amoro-optimizer-standalone` modules.
+The optimizer runs from the compiled classes, like the server; no jars are copied into `dist/`.
+This covers the rewrite executors in `fusion-core` and the `fusion-optimizer-common` and
+`fusion-optimizer-standalone` modules. Step 3 of "Run the server from source" compiles them too.
 
-After changing optimizer-side code:
-
-1. If `dist/src/main/amoro-bin/lib/` is empty or missing, fill it once with `make sync-libs` (a few
-   seconds).
-2. Rebuild the changed module's jar with Maven `package`, offline, using `-pl <module path> -am`
-   and `-DskipTests` plus the same skip flags as the server compile (about 15 seconds). Use
-   `package`, not `install`: `install` needs the rat plugin and sibling jars in `~/.m2`.
-3. Copy `<module path>/target/<artifactId>-0.9-SNAPSHOT.jar` into `dist/src/main/amoro-bin/lib/`,
-   replacing the jar of the same name.
-
-- Start an optimizer with the server running:
-  `POST /api/ams/v1/optimize/optimizerGroups/local/optimizers` with `{"parallelism":1}`.
-  `GET` on the same path (with `?page=1&pageSize=10`) should show it as `RUNNING`.
-- Its log is `dist/src/main/amoro-bin/logs/optimizer-local-<id>/optimizer.log.err`. The server
-  log line `Starting local optimizer using command` gives the `<id>`.
+- Simplest: `make debug-optimizer NO_COMPILE=1` with the server running. It runs
+  `StandaloneOptimizer` on the same classpath in the foreground and registers into the bootstrap
+  group `spark-container` (`optimizer.bootstrap.group-name` in `local-test/config.yaml`). Catalogs
+  registered with `"optimizerGroup":"spark-container"` then need no `local` group. `make debug-server`
+  and `make debug-catalog` do steps 4 and the catalog registration of "Run the server from source"
+  for a database named by `DEBUG_DB` (default `fusion_dev`).
+- Or let the server start it: `POST /api/ams/v1/optimize/optimizerGroups/local/optimizers` with
+  `{"parallelism":1}`. `localContainer` has `use-server-classpath: "true"`, so `bin/optimizer.sh`
+  gets the server's classpath through `FUSION_OPTIMIZER_CLASSPATH`. `GET` on the same path (with
+  `?page=1&pageSize=10`) should show it as `RUNNING`. Its log is
+  `dist/src/main/fusion-bin/logs/optimizer-local-<id>/optimizer.log.err`; the server log line
+  `Starting local optimizer using command` gives the `<id>`.
+- After an optimizer-side edit, recompile (step 3) and restart the optimizer.
+- Test data: `make debug-data ARGS="--files 20 --pos 20 --update"` creates `demo.events` in the
+  debug catalog with small data files and position (`--pos`) or equality (`--eq`) delete files;
+  `--update` re-adds each deleted row as a new version, `--minor-cron`/`--major-cron`/`--full-cron`
+  enable optimizing. It prints the row count a query must return, which checks compaction results.
+  `ARGS=--help` lists the options. The tool is the test-scope class
+  `io.olake.fusion.dev.IcebergTestDataGenerator`.
 - The optimizer is its own process: stopping the server does not stop it. Kill it by PID
-  (`ps -eo pid,args | grep "[S]tandaloneOptimizer "`) before you restart with a new jar.
+  (`ps -eo pid,args | grep "[S]tandaloneOptimizer "`).
+- The `make debug-*` targets build into `target-debug/` (`-Dfusion.build.dir=target-debug`), so
+  an IDE compiling into `target/` cannot break them. If a build into `target/` shows impossible
+  errors (`X cannot be converted to X`, `NoClassDefFoundError: Configurations`), the IDE's compiler
+  has written broken classes there; run `./mvnw -o clean -pl fusion-ams -am -Pskip-dashboard-build`.
 
 ### Clean up
 
 When done testing:
 - Stop the optimizer and the server.
-- Revert temporary code changes and tests. Then redo step 3 of "Run the server from source" (and `package` for
-  optimizer modules), so `target/` no longer holds the test code.
-- If you swapped jars into `lib/`, run `make sync-libs` to restore the built ones.
-- Delete your optimizer log directories under `dist/src/main/amoro-bin/logs/`.
+- Revert temporary code changes and tests. Then redo step 3 of "Run the server from source", so
+  `target/` no longer holds the test code.
+- Delete your optimizer log directories under `dist/src/main/fusion-bin/logs/`.
 - Drop the throwaway database (`docker exec postgres dropdb -U iceberg fusion_dev`), then run
   `make stop-deps` if the dependencies were not already running before you started.
 - Check that `git status` shows only the changes you meant to leave.

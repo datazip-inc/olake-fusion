@@ -19,9 +19,7 @@
 COMPOSE_DIR  := local-test
 KIND_CLUSTER := fusion-cluster
 AMORO_LOG_DIR ?= $(CURDIR)/docker/kind/amoro-logs
-DIST_TAR     := $(CURDIR)/dist/target/apache-amoro-0.9-SNAPSHOT-bin.tar.gz
-RUNTIME_HOME := $(CURDIR)/dist/target/amoro-0.9-SNAPSHOT
-BIN_HOME     := $(CURDIR)/dist/src/main/amoro-bin
+BIN_HOME     := $(CURDIR)/dist/src/main/fusion-bin
 
 # Auto-detect JDK 17: prefer JAVA_HOME if already JDK 17,
 # then macOS java_home utility, then common Linux paths.
@@ -42,7 +40,8 @@ MVN := JAVA_HOME="$(JAVA_HOME_17)" PATH="$(JAVA_HOME_17)/bin:$(PATH)" ./mvnw
 
 .DEFAULT_GOAL := help
 
-.PHONY: help build sync-libs setup-debug-mode clean-debug-mode \
+.PHONY: help build debug debug-deps debug-compile debug-server debug-optimizer debug-catalog \
+        debug-data debug-stop debug-reset debug-clean vscode setup-debug-mode clean-debug-mode \
         start-deps stop-deps start-fusion-docker clean-fusion-docker \
         sync-frontend spotless-fix integration-test integration-test-build \
         integration-test-images integration-test-down
@@ -51,11 +50,20 @@ help:
 	@echo "Fusion (Amoro) Development Makefile"
 	@echo ""
 	@echo "Development:"
-	@echo "  make build                 Clean build + install to ~/.m2 + sync optimizer libs (requires JDK 17)"
-	@echo "  make sync-libs             Re-extract dist tar and sync optimizer libs (no rebuild)"
-	@echo "  make setup-debug-mode      Start deps + build (one-shot setup for IDE debugging)"
-	@echo "  make clean-debug-mode      Stop deps + cleanup extracted runtime"
+	@echo "  make build                 Clean build + install to ~/.m2 (requires JDK 17)"
 	@echo "  make sync-frontend         Sync built frontend assets to target/ (fixes blank UI)"
+	@echo ""
+	@echo "Debug (server and optimizer from compiled classes, no dist build):"
+	@echo "  make debug                 Start Postgres + MinIO, create the $(DEBUG_DB) database, compile"
+	@echo "  make debug-server          Run the server in the foreground (JDWP on :$(SERVER_DEBUG_PORT))"
+	@echo "  make debug-optimizer       Run an optimizer in the foreground (JDWP on :$(OPTIMIZER_DEBUG_PORT))"
+	@echo "  make debug-catalog         Register catalog $(DEBUG_CATALOG) on the local MinIO (server must run)"
+	@echo "  make debug-data ARGS=...   Create an Iceberg table with data and delete files, e.g."
+	@echo "                             ARGS=\"--files 20 --pos 20 --update\" (ARGS=--help lists options)"
+	@echo "  make debug-stop            Stop the server and optimizer started from this checkout"
+	@echo "  make vscode                Install VS Code launch, task and settings files into .vscode/"
+	@echo "  make debug-reset           Drop and recreate the $(DEBUG_DB) database"
+	@echo "  make debug-clean           Stop Postgres + MinIO"
 	@echo "  make spotless-fix          Auto-fix Spotless (Google Java Format) violations"
 	@echo ""
 	@echo "Docker:"
@@ -87,30 +95,146 @@ build:
 	@find "$(BIN_HOME)/logs" -name 'optimizer-local-test-*' -exec rm -rf {} + 2>/dev/null || true
 	@echo "Building all modules..."
 	@$(MVN) clean install -DskipTests -Drat.skip=true -Dmaven.clean.failOnError=false -B -ntp
-	@$(MAKE) sync-libs
-
-sync-libs:
-	@if [ ! -f "$(DIST_TAR)" ]; then \
-		echo "ERROR: $(DIST_TAR) not found. Run 'make build' first."; \
-		exit 1; \
-	fi
-	@rm -rf "$(RUNTIME_HOME)"
-	@tar -xzf "$(DIST_TAR)" -C "$(CURDIR)/dist/target"
-	@rm -rf "$(BIN_HOME)/lib"
-	@cp -R "$(RUNTIME_HOME)/lib" "$(BIN_HOME)/lib"
-	@echo "Synced optimizer libs → $(BIN_HOME)/lib"
 
 # ---------------------------------------------------------------------------
 # Debug mode (IDE workflow)
 # ---------------------------------------------------------------------------
 
-setup-debug-mode: start-deps build
-	@echo ""
-	@echo "Setup complete. Run 'AmoroServiceContainer' from your IDE. See CONTRIBUTING.md"
+# Server and optimizer run from compiled classes, not dist/ jars. See CONTRIBUTING.md, "Debug mode".
 
-clean-debug-mode: stop-deps
-	@rm -rf "$(RUNTIME_HOME)"
-	@echo "Teardown complete."
+DEBUG_DB             ?= fusion_dev
+DEBUG_CATALOG        ?= local_iceberg
+DEBUG_GROUP          ?= spark-container
+DEBUG_PARALLELISM    ?= 1
+DEBUG_SUSPEND        ?= n
+SERVER_DEBUG_PORT    ?= 5005
+OPTIMIZER_DEBUG_PORT ?= 5006
+OPTIMIZER_MEMORY_MB  ?= 2048
+# Separate from target/, which an IDE with a stale project model fills with broken classes.
+DEBUG_BUILD_DIR      := target-debug
+DEBUG_CP             := $(CURDIR)/fusion-ams/$(DEBUG_BUILD_DIR)/debug-classpath.txt
+DEBUG_COOKIES        := $(CURDIR)/fusion-ams/$(DEBUG_BUILD_DIR)/debug-cookies.txt
+FUSION_URL           := http://localhost:1630
+
+JAVA_17       := "$(JAVA_HOME_17)/bin/java"
+JVM_ADD_OPENS := $(foreach p,java.lang java.lang.invoke java.lang.reflect java.io java.net java.nio \
+                   java.util java.util.concurrent java.util.concurrent.atomic sun.nio.ch sun.nio.cs \
+                   sun.security.action sun.util.calendar,--add-opens=java.base/$(p)=ALL-UNNAMED)
+DEBUG_RUN_CP   = $(CURDIR)/fusion-ams/$(DEBUG_BUILD_DIR)/classes:$$(cat "$(DEBUG_CP)")
+DEBUG_AWS_ENV := AWS_ACCESS_KEY_ID=admin AWS_SECRET_ACCESS_KEY=password AWS_REGION=us-east-1
+
+debug: debug-deps
+	@$(MAKE) --no-print-directory debug-compile
+	@echo ""
+	@echo "Debug setup ready. In separate terminals:"
+	@echo "  make debug-server       server, debugger port $(SERVER_DEBUG_PORT)"
+	@echo "  make debug-catalog      once, after the server is up"
+	@echo "  make debug-optimizer    optimizer, debugger port $(OPTIMIZER_DEBUG_PORT)"
+
+debug-deps: start-deps
+	@echo "Waiting for Postgres..."
+	@until docker exec postgres pg_isready -U iceberg >/dev/null 2>&1; do sleep 1; done
+	@docker exec postgres psql -U iceberg -d postgres -Atc \
+		"SELECT 1 FROM pg_database WHERE datname = '$(DEBUG_DB)'" | grep -q 1 \
+		|| docker exec postgres createdb -U iceberg $(DEBUG_DB)
+
+debug-compile:
+	@if [ -z "$(JAVA_HOME_17)" ]; then echo "ERROR: JDK 17 not found. Set JAVA_HOME."; exit 1; fi
+	@echo "Compiling..."
+	@$(MVN) -q -B -ntp test-compile dependency:build-classpath -pl fusion-ams -am \
+		-Pskip-dashboard-build -Drat.skip=true -Dspotless.check.skip=true -Dcheckstyle.skip=true \
+		-Dfusion.build.dir=$(DEBUG_BUILD_DIR) -Dmdep.outputFile="$(DEBUG_CP)"
+
+debug-server: $(if $(NO_COMPILE),,debug-compile)
+	@echo "Starting Fusion on $(FUSION_URL) (admin / password), database $(DEBUG_DB)"
+	@AMORO_HOME="$(BIN_HOME)" AMORO_CONF_DIR="$(CURDIR)/$(COMPOSE_DIR)" CONSOLE_LOG_LEVEL=info \
+		AMS_SERVER__EXPOSE__HOST=127.0.0.1 \
+		OPTIMIZER_LOG_CONF_FILE="$(BIN_HOME)/conf/optimize/log4j2.xml" \
+		AMS_DATABASE_URL="jdbc:postgresql://localhost:5432/$(DEBUG_DB)" \
+		$(DEBUG_AWS_ENV) \
+		$(JAVA_17) -Dfile.encoding=UTF-8 -Darrow.memory.allocator=unsafe -XX:+UseZGC \
+		-XX:CompileCommand=exclude,io/netty/buffer/PoolChunkList.allocate \
+		-XX:CompileCommand=exclude,io/netty/buffer/PoolArena.allocate $(JVM_ADD_OPENS) \
+		-agentlib:jdwp=transport=dt_socket,server=y,suspend=$(DEBUG_SUSPEND),address=*:$(SERVER_DEBUG_PORT) \
+		-cp "$(DEBUG_RUN_CP)" io.olake.fusion.server.FusionServiceContainer
+
+# Registers into the bootstrap group (optimizer.bootstrap.group-name), which accepts external optimizers.
+debug-optimizer: $(if $(NO_COMPILE),,debug-compile)
+	@echo "Starting optimizer for group $(DEBUG_GROUP), parallelism $(DEBUG_PARALLELISM)"
+	@$(DEBUG_AWS_ENV) $(JAVA_17) -Xmx$(OPTIMIZER_MEMORY_MB)m $(JVM_ADD_OPENS) \
+		-agentlib:jdwp=transport=dt_socket,server=y,suspend=$(DEBUG_SUSPEND),address=*:$(OPTIMIZER_DEBUG_PORT) \
+		-cp "$(DEBUG_RUN_CP)" io.olake.fusion.optimizer.standalone.StandaloneOptimizer \
+		-a thrift://127.0.0.1:1261 -g $(DEBUG_GROUP) -p $(DEBUG_PARALLELISM)
+
+debug-catalog:
+	@curl -sf -c "$(DEBUG_COOKIES)" -X POST "$(FUSION_URL)/api/ams/v1/login" \
+		-H "X-Request-Source: Web" -H "Content-Type: application/json" \
+		-d '{"user":"admin","password":"password"}' >/dev/null \
+		|| { echo "ERROR: cannot log in to $(FUSION_URL); is 'make debug-server' running?"; exit 1; }
+	@if curl -sf -b "$(DEBUG_COOKIES)" -H "X-Request-Source: Web" "$(FUSION_URL)/api/ams/v1/catalogs" \
+		| grep -q '"catalogName":"$(DEBUG_CATALOG)"'; then \
+		echo "Catalog $(DEBUG_CATALOG) already exists."; \
+	else \
+		curl -s -b "$(DEBUG_COOKIES)" -X POST "$(FUSION_URL)/api/ams/v1/catalogs" \
+			-H "X-Request-Source: Web" -H "Content-Type: application/json" \
+			-d '{"name":"$(DEBUG_CATALOG)","type":"custom","optimizerGroup":"$(DEBUG_GROUP)", \
+			"tableFormatList":["ICEBERG"], \
+			"storageConfig":{"storage.type":"S3","storage.s3.endpoint":"http://localhost:9000","storage.s3.region":"us-east-1"}, \
+			"authConfig":{"auth.type":"AKSK","auth.aksk.access-key":"admin","auth.aksk.secret-key":"password"}, \
+			"properties":{"catalog-impl":"org.apache.iceberg.jdbc.JdbcCatalog", \
+			"uri":"jdbc:postgresql://localhost:5432/$(DEBUG_DB)","jdbc.user":"iceberg","jdbc.password":"password", \
+			"jdbc.schema-version":"V1","warehouse":"s3://warehouse/$(DEBUG_CATALOG)/","s3.path-style-access":"true"}, \
+			"tableProperties":{}}'; \
+		echo ""; \
+	fi
+
+debug-data: $(if $(NO_COMPILE),,debug-compile)
+	@$(DEBUG_AWS_ENV) $(JAVA_17) $(JVM_ADD_OPENS) \
+		-cp "$(CURDIR)/fusion-ams/$(DEBUG_BUILD_DIR)/test-classes:$(DEBUG_RUN_CP)" \
+		io.olake.fusion.dev.IcebergTestDataGenerator \
+		--catalog $(DEBUG_CATALOG) --uri "jdbc:postgresql://localhost:5432/$(DEBUG_DB)" $(ARGS)
+
+# Force-kills after 10 seconds: the server does not always exit on SIGTERM.
+debug-stop:
+	@pids=$$(ps -eo pid,args | grep -E "(FusionServiceContainer|StandaloneOptimizer)" \
+		| grep -F "$(CURDIR)/" | grep -v grep | awk '{print $$1}'); \
+	if [ -z "$$pids" ]; then echo "Nothing to stop."; exit 0; fi; \
+	kill $$pids 2>/dev/null; \
+	for i in 1 2 3 4 5 6 7 8 9 10; do \
+		alive=$$(for p in $$pids; do kill -0 $$p 2>/dev/null && echo $$p; done); \
+		[ -z "$$alive" ] && break; sleep 1; \
+	done; \
+	[ -n "$$alive" ] && kill -9 $$alive 2>/dev/null; \
+	echo "Stopped: $$pids"
+
+vscode:
+	@mkdir -p .vscode
+	@for f in launch.json tasks.json; do \
+		if [ -f ".vscode/$$f" ] && ! cmp -s "dev/vscode/$$f" ".vscode/$$f"; then \
+			cp ".vscode/$$f" ".vscode/$$f.bak"; echo "Saved the old .vscode/$$f as .vscode/$$f.bak"; \
+		fi; \
+		cp "dev/vscode/$$f" ".vscode/$$f"; \
+	done
+	@if [ -f .vscode/settings.json ]; then \
+		echo "Kept .vscode/settings.json; compare with dev/vscode/settings.json"; \
+	else \
+		sed "s|@JAVA_HOME_17@|$(JAVA_HOME_17)|g" dev/vscode/settings.json > .vscode/settings.json; \
+		echo "Wrote .vscode/settings.json for JDK $(JAVA_HOME_17)"; \
+	fi
+	@echo "Done. Reload VS Code, then pick a 'Fusion:' configuration in Run and Debug."
+
+debug-reset:
+	@docker exec postgres dropdb -U iceberg --if-exists $(DEBUG_DB)
+	@docker exec postgres createdb -U iceberg $(DEBUG_DB)
+	@echo "Database $(DEBUG_DB) recreated."
+
+debug-clean: stop-deps
+	@rm -f "$(DEBUG_CP)" "$(DEBUG_COOKIES)"
+	@echo "Teardown complete. The $(DEBUG_DB) database is kept; 'make debug-reset' clears it."
+
+# Older names of the debug targets.
+setup-debug-mode: debug
+clean-debug-mode: debug-clean
 
 # ---------------------------------------------------------------------------
 # Docker
@@ -144,14 +268,14 @@ spotless-fix:
 	@$(MVN) spotless:apply -B -ntp
 
 sync-frontend:
-	@SRC=amoro-web/src/main/resources/static; \
-	DST=amoro-web/target/classes/static; \
+	@SRC=fusion-web/src/main/resources/static; \
 	if [ ! -d "$$SRC" ]; then \
-		echo "ERROR: $$SRC not found. Run 'pnpm build' inside amoro-web/ first."; \
+		echo "ERROR: $$SRC not found. Run 'pnpm build' inside fusion-web/ first."; \
 		exit 1; \
 	fi; \
-	mkdir -p "$$DST"; \
-	cp -r "$$SRC"/. "$$DST"/
+	for DST in fusion-web/target/classes/static fusion-web/$(DEBUG_BUILD_DIR)/classes/static; do \
+		mkdir -p "$$DST"; cp -r "$$SRC"/. "$$DST"/; \
+	done
 	@echo "Frontend synced. Refresh http://localhost:1630"
 
 # ---------------------------------------------------------------------------
