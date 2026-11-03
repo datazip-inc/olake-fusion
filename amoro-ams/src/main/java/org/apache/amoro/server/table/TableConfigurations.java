@@ -29,6 +29,7 @@ import org.apache.amoro.properties.HiveTableProperties;
 import org.apache.amoro.shade.guava32.com.google.common.annotations.VisibleForTesting;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Sets;
+import org.apache.amoro.shade.guava32.com.google.common.primitives.Ints;
 import org.apache.amoro.table.TableProperties;
 import org.apache.amoro.utils.CompatiblePropertyUtil;
 import org.apache.amoro.utils.PropertyUtil;
@@ -56,27 +57,40 @@ public class TableConfigurations {
    */
   public static TableConfiguration parseTableConfig(Map<String, String> properties) {
     boolean gcEnabled = CompatiblePropertyUtil.propertyAsBoolean(properties, "gc.enabled", true);
+    String keepDuration =
+        CompatiblePropertyUtil.propertyAsString(
+            properties,
+            TableProperties.SNAPSHOT_KEEP_DURATION,
+            TableProperties.SNAPSHOT_KEEP_DURATION_DEFAULT);
+    String minCount =
+        CompatiblePropertyUtil.propertyAsString(
+            properties,
+            TableProperties.SNAPSHOT_MIN_COUNT,
+            String.valueOf(TableProperties.SNAPSHOT_MIN_COUNT_DEFAULT));
+    Long snapshotTTLMinutes = parseSnapshotTTLMinutes(keepDuration);
+    Integer snapshotMinCount = Ints.tryParse(minCount.trim());
+    String snapshotExpireCron =
+        CompatiblePropertyUtil.propertyAsString(
+            properties, TableProperties.SNAPSHOT_EXPIRE_TRIGGER_CRON, null);
+    // Setting a cron turns expiry on unless snapshot-expire.enabled says otherwise.
+    boolean snapshotExpireCronSet =
+        snapshotExpireCron != null && !snapshotExpireCron.trim().isEmpty();
     return new TableConfiguration()
         .setExpireSnapshotEnabled(
             gcEnabled
                 && CompatiblePropertyUtil.propertyAsBoolean(
-                    properties,
-                    TableProperties.ENABLE_TABLE_EXPIRE,
-                    TableProperties.ENABLE_TABLE_EXPIRE_DEFAULT))
+                    properties, TableProperties.SNAPSHOT_EXPIRE_ENABLED, snapshotExpireCronSet))
+        .setSnapshotExpireTriggerCron(snapshotExpireCron)
+        .setSnapshotExpireConfigError(
+            snapshotExpireConfigError(keepDuration, snapshotTTLMinutes, minCount, snapshotMinCount))
         .setSnapshotTTLMinutes(
-            ConfigHelpers.TimeUtils.parseDuration(
-                        CompatiblePropertyUtil.propertyAsString(
-                            properties,
-                            TableProperties.SNAPSHOT_KEEP_DURATION,
-                            TableProperties.SNAPSHOT_KEEP_DURATION_DEFAULT),
-                        ChronoUnit.MINUTES)
-                    .getSeconds()
-                / 60)
+            snapshotTTLMinutes != null
+                ? snapshotTTLMinutes
+                : parseSnapshotTTLMinutes(TableProperties.SNAPSHOT_KEEP_DURATION_DEFAULT))
         .setSnapshotMinCount(
-            CompatiblePropertyUtil.propertyAsInt(
-                properties,
-                TableProperties.SNAPSHOT_MIN_COUNT,
-                TableProperties.SNAPSHOT_MIN_COUNT_DEFAULT))
+            snapshotMinCount != null
+                ? snapshotMinCount
+                : TableProperties.SNAPSHOT_MIN_COUNT_DEFAULT)
         .setFlinkCheckpointRetention(
             ConfigHelpers.TimeUtils.parseDuration(
                     CompatiblePropertyUtil.propertyAsString(
@@ -109,6 +123,34 @@ public class TableConfigurations {
         .setOptimizingConfig(parseOptimizingConfig(properties))
         .setExpiringDataConfig(parseDataExpirationConfig(properties))
         .setTagConfiguration(parseTagConfiguration(properties));
+  }
+
+  /** Minutes of {@code snapshot.keep.duration} (no unit means days), or null when unparsable. */
+  private static Long parseSnapshotTTLMinutes(String keepDuration) {
+    try {
+      return ConfigHelpers.TimeUtils.parseDuration(keepDuration, ChronoUnit.DAYS).getSeconds() / 60;
+    } catch (IllegalArgumentException | ArithmeticException e) {
+      return null;
+    }
+  }
+
+  /**
+   * Why the snapshot expiry settings cannot be used, or null. A bad value never fails the table
+   * configuration, so compaction keeps running; only the expiry run fails on it.
+   */
+  private static String snapshotExpireConfigError(
+      String keepDuration, Long snapshotTTLMinutes, String minCount, Integer snapshotMinCount) {
+    if (snapshotTTLMinutes == null || snapshotTTLMinutes < 1) {
+      return invalidSetting(TableProperties.SNAPSHOT_KEEP_DURATION, keepDuration);
+    }
+    if (snapshotMinCount == null || snapshotMinCount < 1) {
+      return invalidSetting(TableProperties.SNAPSHOT_MIN_COUNT, minCount);
+    }
+    return null;
+  }
+
+  private static String invalidSetting(String property, String value) {
+    return String.format("invalid %s '%s'", property, value);
   }
 
   /**

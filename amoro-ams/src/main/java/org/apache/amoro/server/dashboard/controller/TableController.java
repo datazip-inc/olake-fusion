@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.dashboard.controller;
@@ -54,6 +56,7 @@ import org.apache.amoro.server.dashboard.utils.CommonUtil;
 import org.apache.amoro.server.optimizing.OptimizingStatus;
 import org.apache.amoro.server.persistence.TableRuntimeMeta;
 import org.apache.amoro.server.process.TableProcessMeta;
+import org.apache.amoro.server.table.SnapshotExpiryHistory;
 import org.apache.amoro.server.table.TableManager;
 import org.apache.amoro.shade.guava32.com.google.common.base.Function;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
@@ -107,6 +110,7 @@ public class TableController {
   private final TableManager tableManager;
   private final ServerTableDescriptor tableDescriptor;
   private final Configurations serviceConfig;
+  private final SnapshotExpiryHistory snapshotExpiryHistory = new SnapshotExpiryHistory();
   private final ConcurrentHashMap<TableIdentifier, UpgradeRunningInfo> upgradeRunningInfo =
       new ConcurrentHashMap<>();
   private final ScheduledExecutorService tableUpgradeExecutor;
@@ -351,6 +355,27 @@ public class TableController {
     int total = optimizingProcessesInfo.getRight();
 
     ctx.json(OkResponse.of(PageResult.of(result, total)));
+  }
+
+  /**
+   * GET /tables/catalogs/{catalog}/dbs/{db}/tables/{table}/snapshot-expiry-processes: the table's
+   * snapshot expiry runs, newest first, paged, optionally filtered by status.
+   */
+  public void getSnapshotExpiryProcesses(Context ctx) {
+    String status = ctx.queryParam("status");
+    int page = ctx.queryParamAsClass("page", Integer.class).getOrDefault(1);
+    int pageSize = ctx.queryParamAsClass("pageSize", Integer.class).getOrDefault(20);
+    Preconditions.checkArgument(page >= 1, "page[%s] must >= 1", page);
+    Preconditions.checkArgument(pageSize >= 1, "pageSize[%s] must >= 1", pageSize);
+    ctx.json(
+        OkResponse.of(
+            snapshotExpiryHistory.list(
+                ctx.pathParam("catalog"),
+                ctx.pathParam("db"),
+                ctx.pathParam("table"),
+                StringUtils.isBlank(status) ? null : ProcessStatus.valueOf(status),
+                page,
+                pageSize)));
   }
 
   public void getOptimizingTypes(Context ctx) {

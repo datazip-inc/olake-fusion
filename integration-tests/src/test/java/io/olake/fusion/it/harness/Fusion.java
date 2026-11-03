@@ -366,6 +366,108 @@ public final class Fusion {
   // Snapshots tab
 
   /** Id of the newest snapshot in the snapshots tab, or null when the table has none. */
+  /** One snapshot expiry run, as listed by the table's snapshot expiry runs. */
+  public static final class ExpiryRun {
+    private final String id;
+    private final String status;
+    private final long startTime;
+    private final long finishTime;
+    private final String failReason;
+    private final JsonNode summary;
+
+    ExpiryRun(
+        String id,
+        String status,
+        long startTime,
+        long finishTime,
+        String failReason,
+        JsonNode summary) {
+      this.id = id;
+      this.status = status;
+      this.startTime = startTime;
+      this.finishTime = finishTime;
+      this.failReason = failReason;
+      this.summary = summary;
+    }
+
+    public String id() {
+      return id;
+    }
+
+    public String status() {
+      return status;
+    }
+
+    public long startTime() {
+      return startTime;
+    }
+
+    public long finishTime() {
+      return finishTime;
+    }
+
+    public String failReason() {
+      return failReason;
+    }
+
+    public boolean terminal() {
+      return !ProcessStatus.RUNNING.equals(status);
+    }
+
+    @Override
+    public String toString() {
+      return "ExpiryRun{" + id + ", " + status + ", " + failReason + ", " + summary + "}";
+    }
+  }
+
+  /**
+   * The table's snapshot expiry runs ({@code GET .../tables/{table}/snapshot-expiry-processes}),
+   * newest first.
+   */
+  public List<ExpiryRun> expiryRuns(String database, String table) {
+    return page(String.format(ApiPaths.SNAPSHOT_EXPIRY_PROCESSES, (Object[]) ids(database, table)))
+        .stream()
+        .map(
+            r ->
+                new ExpiryRun(
+                    Json.text(r, Fields.PROCESS_ID),
+                    Json.text(r, Fields.STATUS),
+                    Json.number(r, Fields.START_TIME),
+                    Json.number(r, Fields.FINISH_TIME),
+                    Json.nullableText(r, Fields.FAIL_REASON),
+                    r.get(Fields.SUMMARY)))
+        .collect(Collectors.toList());
+  }
+
+  public Set<String> expiryRunIds(String database, String table) {
+    return expiryRuns(database, table).stream().map(ExpiryRun::id).collect(Collectors.toSet());
+  }
+
+  /** Waits for the first expiry run not in {@code known} to finish, and returns it. */
+  public ExpiryRun awaitFinishedExpiryRun(
+      String database, String table, Set<String> known, Duration timeout) {
+    return Await.until(
+            "a finished snapshot expiry run on " + database + "." + table,
+            timeout,
+            () ->
+                expiryRuns(database, table).stream()
+                    .filter(r -> !known.contains(r.id()) && r.terminal())
+                    .min(Comparator.comparingLong(ExpiryRun::startTime)),
+            java.util.Optional::isPresent)
+        .get();
+  }
+
+  /**
+   * Commit times of every snapshot in the table's history ({@code GET
+   * .../tables/{table}/snapshots}), oldest first.
+   */
+  public List<Long> snapshotCommitTimes(String database, String table) {
+    return page(String.format(ApiPaths.SNAPSHOTS, (Object[]) ids(database, table))).stream()
+        .map(s -> Json.number(s, Fields.COMMIT_TIME))
+        .sorted()
+        .collect(Collectors.toList());
+  }
+
   public String latestSnapshotId(String database, String table) {
     return page(String.format(ApiPaths.SNAPSHOTS, (Object[]) ids(database, table))).stream()
         .max(Comparator.comparingLong(s -> Json.number(s, Fields.COMMIT_TIME)))

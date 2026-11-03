@@ -65,6 +65,9 @@ public final class Contract {
         "/tables/catalogs/%s/dbs/%s/tables/%s/optimizing-processes";
     /** catalog, database, table. */
     public static final String SNAPSHOTS = "/tables/catalogs/%s/dbs/%s/tables/%s/snapshots";
+    /** catalog, database, table. */
+    public static final String SNAPSHOT_EXPIRY_PROCESSES =
+        "/tables/catalogs/%s/dbs/%s/tables/%s/snapshot-expiry-processes";
 
     public static final String RESOURCE_GROUPS = "/optimize/resourceGroups";
     /** optimizer group. */
@@ -195,6 +198,11 @@ public final class Contract {
     public static final String NEVER = "";
 
     public static final String TARGET_SIZE = "self-optimizing.target-size";
+
+    public static final String SNAPSHOT_EXPIRE_ENABLED = "snapshot-expire.enabled";
+    public static final String SNAPSHOT_EXPIRE_CRON = "snapshot-expire.trigger.cron";
+    public static final String SNAPSHOT_KEEP_DURATION = "snapshot.keep.duration";
+    public static final String SNAPSHOT_MIN_COUNT = "snapshot.keep.min-count";
     public static final String FRAGMENT_RATIO = "self-optimizing.fragment-ratio";
     public static final String MIN_TARGET_SIZE_RATIO = "self-optimizing.min-target-size-ratio";
 
