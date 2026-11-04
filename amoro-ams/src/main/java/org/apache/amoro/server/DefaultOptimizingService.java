@@ -24,6 +24,7 @@ import org.apache.amoro.AmoroTable;
 import org.apache.amoro.OptimizerProperties;
 import org.apache.amoro.TableRuntime;
 import org.apache.amoro.api.OptimizerRegisterInfo;
+import org.apache.amoro.api.OptimizingLogLine;
 import org.apache.amoro.api.OptimizingService;
 import org.apache.amoro.api.OptimizingTask;
 import org.apache.amoro.api.OptimizingTaskId;
@@ -36,6 +37,7 @@ import org.apache.amoro.exception.ObjectNotExistsException;
 import org.apache.amoro.exception.PluginRetryAuthException;
 import org.apache.amoro.resource.ResourceGroup;
 import org.apache.amoro.server.catalog.CatalogManager;
+import org.apache.amoro.server.optimizing.LogWriter;
 import org.apache.amoro.server.optimizing.OptimizingProcess;
 import org.apache.amoro.server.optimizing.OptimizingQueue;
 import org.apache.amoro.server.optimizing.OptimizingStatus;
@@ -353,6 +355,12 @@ public class DefaultOptimizingService extends StatedPersistentBase
   }
 
   @Override
+  public void appendLogs(String authToken, List<OptimizingLogLine> lines) {
+    getAuthenticatedOptimizer(authToken);
+    LogWriter.get().append(lines);
+  }
+
+  @Override
   public boolean cancelProcess(long processId) {
     TableProcessMeta processMeta =
         getAs(TableProcessMapper.class, m -> m.getProcessMeta(processId));
@@ -493,6 +501,7 @@ public class DefaultOptimizingService extends StatedPersistentBase
     @Override
     protected void initHandler(List<TableRuntime> tableRuntimeList) {
       LOG.info("OptimizerManagementService begin initializing");
+      LogWriter.get().createLogDir();
       loadOptimizingQueues(
           tableRuntimeList.stream()
               .filter(t -> t instanceof DefaultTableRuntime)
