@@ -23,18 +23,14 @@ menu:
  - WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  - See the License for the specific language governing permissions and
  - limitations under the License.
+ -
+ - Modified by Datazip Inc. in 2026
  -->
 # REST API
 
-## Accessing Swagger UI
+## Viewing the OpenAPI specification
 
-Access the Swagger UI at:
-
-```
-http://<host>:<port>/#/openapi-ui
-```
-
-You can also view the OpenAPI specification YAML in the repository at `amoro-ams/src/main/resources/openapi/openapi.yaml`, or use the [Swagger Editor](https://editor-next.swagger.io/?url=https://raw.githubusercontent.com/apache/amoro/master/amoro-ams/src/main/resources/openapi/openapi.yaml) online.
+The server serves the OpenAPI specification at `http://<host>:<port>/swagger-docs`. You can also view the YAML in the repository at `amoro-ams/src/main/resources/openapi/openapi.yaml`, or use the [Swagger Editor](https://editor-next.swagger.io/?url=https://raw.githubusercontent.com/apache/amoro/master/amoro-ams/src/main/resources/openapi/openapi.yaml) online.
 
 ## Building the OpenAPI SDK
 
