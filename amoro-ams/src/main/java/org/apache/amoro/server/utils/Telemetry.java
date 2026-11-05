@@ -107,7 +107,15 @@ public class Telemetry {
     EXPLORE_CATALOG,
     LIST_TABLES,
     SYNC_TABLE,
-    DISPOSE_TABLE
+    DISPOSE_TABLE,
+    // Launching an optimizer in its container; the source is the container type, e.g. flink.
+    START_OPTIMIZER,
+    // A started optimizer registering with AMS.
+    REGISTER_OPTIMIZER,
+    // Optimizer bookkeeping in AMS, retried on a loop.
+    KEEP_OPTIMIZERS,
+    RETRY_OPTIMIZING_TASK,
+    SYNC_OPTIMIZER_GROUPS
   }
 
   /**
