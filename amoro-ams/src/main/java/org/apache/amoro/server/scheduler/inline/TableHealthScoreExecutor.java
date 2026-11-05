@@ -28,6 +28,7 @@ import org.apache.amoro.server.scheduler.PeriodicTableScheduler;
 import org.apache.amoro.server.table.DefaultTableRuntime;
 import org.apache.amoro.server.table.TableService;
 import org.apache.amoro.server.utils.IcebergTableUtil;
+import org.apache.amoro.server.utils.Telemetry;
 import org.apache.amoro.table.BasicTableSnapshot;
 import org.apache.amoro.table.MixedTable;
 
@@ -94,6 +95,11 @@ public class TableHealthScoreExecutor extends PeriodicTableScheduler {
     } catch (Throwable t) {
       logger.warn(
           "Failed to calculate health score for table {}", tableRuntime.getTableIdentifier(), t);
+      Telemetry.getInstance()
+          .trackFailure(
+              Telemetry.Command.EVALUATE_TABLE_HEALTH,
+              Telemetry.errorSource(tableRuntime.getFormat()),
+              t);
     }
   }
 }

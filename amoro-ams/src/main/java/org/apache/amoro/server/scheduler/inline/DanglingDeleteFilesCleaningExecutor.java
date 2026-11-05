@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.scheduler.inline;
@@ -27,6 +29,7 @@ import org.apache.amoro.server.scheduler.PeriodicTableScheduler;
 import org.apache.amoro.server.table.DefaultTableRuntime;
 import org.apache.amoro.server.table.TableService;
 import org.apache.amoro.server.table.cleanup.CleanupOperation;
+import org.apache.amoro.server.utils.Telemetry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -87,6 +90,11 @@ public class DanglingDeleteFilesCleaningExecutor extends PeriodicTableScheduler 
       tableMaintainer.cleanDanglingDeleteFiles();
     } catch (Throwable t) {
       LOG.error("{} failed to clean dangling delete file", tableRuntime.getTableIdentifier(), t);
+      Telemetry.getInstance()
+          .trackFailure(
+              Telemetry.Command.CLEAN_DANGLING_DELETE_FILES,
+              Telemetry.errorSource(tableRuntime.getFormat()),
+              t);
     }
   }
 }

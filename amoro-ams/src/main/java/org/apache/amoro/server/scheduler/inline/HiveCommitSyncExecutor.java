@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.scheduler.inline;
@@ -25,6 +27,7 @@ import org.apache.amoro.hive.utils.HiveMetaSynchronizer;
 import org.apache.amoro.hive.utils.TableTypeUtil;
 import org.apache.amoro.server.scheduler.PeriodicTableScheduler;
 import org.apache.amoro.server.table.TableService;
+import org.apache.amoro.server.utils.Telemetry;
 import org.apache.amoro.table.MixedTable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -70,6 +73,11 @@ public class HiveCommitSyncExecutor extends PeriodicTableScheduler {
       syncIcebergToHive(mixedTable);
     } catch (Exception e) {
       LOG.error("{} hive sync failed", tableIdentifier, e);
+      Telemetry.getInstance()
+          .trackFailure(
+              Telemetry.Command.SYNC_HIVE_COMMIT,
+              Telemetry.errorSource(tableRuntime.getFormat()),
+              e);
     } finally {
       LOG.info(
           "{} hive sync finished, cost {}ms",
