@@ -35,6 +35,9 @@ public class OptimizerProperties {
   public static final String SPARK_DRIVER_MEMORY = "spark.driver.memory";
   public static final String SPARK_EXECUTOR_MEMORY = "spark.executor.memory";
   public static final String SPARK_EXECUTOR_CORES = "spark.executor.cores";
+  // The release the Spark optimizer's fusion-spark image was built for, reported when it
+  // registers, for telemetry
+  public static final String OPTIMIZER_VERSION = "optimizer-version";
 
   // Resource container properties
   public static final String EXPORT_PROPERTY_PREFIX = "export.";
