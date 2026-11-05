@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.scheduler.inline;
@@ -51,9 +53,9 @@ public class TestPeriodicTableSchedulerCleanup extends PersistentBase {
 
   static {
     try {
-      Class.forName("org.apache.amoro.server.table.DerbyPersistence");
+      Class.forName("org.apache.amoro.server.table.PostgresPersistence");
     } catch (Exception e) {
-      throw new RuntimeException("Failed to initialize Derby persistence", e);
+      throw new RuntimeException("Failed to initialize Postgres persistence", e);
     }
   }
 
