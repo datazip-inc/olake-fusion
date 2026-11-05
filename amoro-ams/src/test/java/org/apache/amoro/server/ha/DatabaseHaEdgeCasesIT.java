@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.ha;
@@ -21,7 +23,8 @@ package org.apache.amoro.server.ha;
 import org.apache.amoro.config.Configurations;
 import org.apache.amoro.server.AmoroManagementConf;
 import org.apache.amoro.server.persistence.DataSourceFactory;
-import org.apache.amoro.server.table.DerbyPersistence;
+import org.apache.amoro.server.table.PostgresPersistence;
+import org.apache.amoro.utils.PostgresTestDatabase;
 import org.junit.Assert;
 import org.junit.Assume;
 import org.junit.BeforeClass;
@@ -41,12 +44,12 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 /**
- * DATABASE HA concurrency and edge-case tests using Derby. All external classes are invoked via
- * reflection; safely skipped when not merged.
+ * DATABASE HA concurrency and edge-case tests using PostgreSQL. All external classes are invoked
+ * via reflection; safely skipped when not merged.
  */
 public class DatabaseHaEdgeCasesIT {
 
-  @ClassRule public static ExternalResource derby = new DerbyPersistence();
+  @ClassRule public static ExternalResource derby = new PostgresPersistence();
 
   @BeforeClass
   public static void checkPrerequisites() {
@@ -176,9 +179,11 @@ public class DatabaseHaEdgeCasesIT {
   private static void assertLeaseRowCount(int minExpected, int maxExpected) throws Exception {
     Configurations conf = new Configurations();
     conf.set(
-        AmoroManagementConf.DB_CONNECTION_URL, HATestConfigs.detectDerbyUrlFromSqlSessionFactory());
-    conf.set(AmoroManagementConf.DB_TYPE, AmoroManagementConf.DB_TYPE_DERBY);
-    conf.set(AmoroManagementConf.DB_DRIVER_CLASS_NAME, "org.apache.derby.jdbc.EmbeddedDriver");
+        AmoroManagementConf.DB_CONNECTION_URL, HATestConfigs.detectJdbcUrlFromSqlSessionFactory());
+    conf.set(AmoroManagementConf.DB_TYPE, AmoroManagementConf.DB_TYPE_POSTGRES);
+    conf.set(AmoroManagementConf.DB_DRIVER_CLASS_NAME, PostgresTestDatabase.DRIVER);
+    conf.set(AmoroManagementConf.DB_USER_NAME, PostgresTestDatabase.USER);
+    conf.set(AmoroManagementConf.DB_PASSWORD, PostgresTestDatabase.PASSWORD);
     DataSource ds = DataSourceFactory.createDataSource(conf);
 
     try (Connection conn = ds.getConnection();
@@ -195,9 +200,11 @@ public class DatabaseHaEdgeCasesIT {
   private static void bumpLeaseVersion() throws Exception {
     Configurations conf = new Configurations();
     conf.set(
-        AmoroManagementConf.DB_CONNECTION_URL, HATestConfigs.detectDerbyUrlFromSqlSessionFactory());
-    conf.set(AmoroManagementConf.DB_TYPE, AmoroManagementConf.DB_TYPE_DERBY);
-    conf.set(AmoroManagementConf.DB_DRIVER_CLASS_NAME, "org.apache.derby.jdbc.EmbeddedDriver");
+        AmoroManagementConf.DB_CONNECTION_URL, HATestConfigs.detectJdbcUrlFromSqlSessionFactory());
+    conf.set(AmoroManagementConf.DB_TYPE, AmoroManagementConf.DB_TYPE_POSTGRES);
+    conf.set(AmoroManagementConf.DB_DRIVER_CLASS_NAME, PostgresTestDatabase.DRIVER);
+    conf.set(AmoroManagementConf.DB_USER_NAME, PostgresTestDatabase.USER);
+    conf.set(AmoroManagementConf.DB_PASSWORD, PostgresTestDatabase.PASSWORD);
     DataSource ds = DataSourceFactory.createDataSource(conf);
     try (Connection conn = ds.getConnection();
         Statement st = conn.createStatement()) {
