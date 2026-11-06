@@ -55,6 +55,7 @@ public class SparkOptimizer extends Optimizer {
           "To better utilize computing resources, it is recommended to enable 'spark.dynamicAllocation.enabled' "
               + "and set 'spark.dynamicAllocation.maxExecutors' equal to 'OPTIMIZER_EXECUTION_PARALLEL'");
     }
+    ExecutorOverheadCheck.check(jsc.getConf());
 
     // calculate optimizer memory allocation
     int driverMemory = Utils.memoryStringToMb(jsc.getConf().get("spark.driver.memory", "1g"));

@@ -67,6 +67,7 @@ public class SparkOptimizerExecutor extends OptimizerExecutor {
     MDC.put("logFilePath", driverFilePath);
 
     try {
+      ExecutorOverheadCheck.check(jsc.getConf());
       ImmutableList<OptimizingTask> of = ImmutableList.of(task);
       jsc.setJobDescription(jobDescription(task));
       SparkOptimizingTaskFunction taskFunction =
