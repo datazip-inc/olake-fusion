@@ -162,11 +162,6 @@ public class TableProperties {
   // for file size evaluation
   public static final long SELF_OPTIMIZING_EVALUATION_FILE_SIZE_MSE_TOLERANCE_DEFAULT = 0;
 
-  /** table clean related properties */
-  public static final String ENABLE_TABLE_EXPIRE = "table-expire.enabled";
-
-  public static final boolean ENABLE_TABLE_EXPIRE_DEFAULT = false;
-
   /**
    * Enables snapshot expiry for an Iceberg table; expiry runs when its cron fires. When unset,
    * expiry is on if the cron is set.

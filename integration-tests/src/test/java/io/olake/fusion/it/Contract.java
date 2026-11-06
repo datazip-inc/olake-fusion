@@ -65,9 +65,6 @@ public final class Contract {
         "/tables/catalogs/%s/dbs/%s/tables/%s/optimizing-processes";
     /** catalog, database, table. */
     public static final String SNAPSHOTS = "/tables/catalogs/%s/dbs/%s/tables/%s/snapshots";
-    /** catalog, database, table. */
-    public static final String SNAPSHOT_EXPIRY_PROCESSES =
-        "/tables/catalogs/%s/dbs/%s/tables/%s/snapshot-expiry-processes";
 
     public static final String RESOURCE_GROUPS = "/optimize/resourceGroups";
     /** optimizer group. */

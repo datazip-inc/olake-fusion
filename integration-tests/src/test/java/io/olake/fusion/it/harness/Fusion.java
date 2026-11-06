@@ -61,6 +61,8 @@ public final class Fusion {
   private static final Duration HEARTBEAT_FRESHNESS = Duration.ofSeconds(60);
 
   private static final int PAGE_SIZE = 1000;
+  /** Process type of a snapshot expiry run in the optimizing-processes API. */
+  private static final String EXPIRY_TYPE = "EXPIRY";
 
   /** OLake-UI's limit for a table settings change. */
   private static final Duration TERMINAL_TIMEOUT = Duration.ofMinutes(5);
@@ -421,11 +423,14 @@ public final class Fusion {
   }
 
   /**
-   * The table's snapshot expiry runs ({@code GET .../tables/{table}/snapshot-expiry-processes}),
-   * newest first.
+   * The table's snapshot expiry runs ({@code GET .../tables/{table}/optimizing-processes} with type
+   * {@value #EXPIRY_TYPE}), newest first.
    */
   public List<ExpiryRun> expiryRuns(String database, String table) {
-    return page(String.format(ApiPaths.SNAPSHOT_EXPIRY_PROCESSES, (Object[]) ids(database, table)))
+    return page(
+            String.format(ApiPaths.PROCESSES, (Object[]) ids(database, table))
+                + "?type="
+                + EXPIRY_TYPE)
         .stream()
         .map(
             r ->

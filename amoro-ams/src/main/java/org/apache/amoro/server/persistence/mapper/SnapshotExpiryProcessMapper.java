@@ -21,22 +21,18 @@
 package org.apache.amoro.server.persistence.mapper;
 
 import org.apache.amoro.process.ProcessStatus;
-import org.apache.amoro.server.persistence.SnapshotExpiryProcessMeta;
-import org.apache.amoro.server.persistence.converter.Long2TsConverter;
-import org.apache.amoro.server.persistence.converter.Map2StringConverter;
 import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Param;
-import org.apache.ibatis.annotations.Result;
-import org.apache.ibatis.annotations.Results;
-import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
-import java.util.List;
 import java.util.Map;
 
 /** Snapshot expiry runs, one row per run in {@code snapshot_expiry_process}. */
 public interface SnapshotExpiryProcessMapper {
+
+  /** Process type of an expiry run in the optimizing-processes API. */
+  String PROCESS_TYPE = "EXPIRY";
 
   @Insert(
       "INSERT INTO snapshot_expiry_process "
@@ -80,32 +76,6 @@ public interface SnapshotExpiryProcessMapper {
       @Param("tableId") Long tableId,
       @Param("failMessage") String failMessage,
       @Param("finishTime") long finishTime);
-
-  @Select(
-      "<script>SELECT process_id, table_id, status, retry_number, create_time, finish_time,"
-          + " fail_message, summary FROM snapshot_expiry_process WHERE table_id = #{tableId}"
-          + "<if test='status != null'> AND status = #{status}</if>"
-          + " ORDER BY process_id DESC</script>")
-  @Results(
-      id = "snapshotExpiryProcessMap",
-      value = {
-        @Result(column = "process_id", property = "processId"),
-        @Result(column = "table_id", property = "tableId"),
-        @Result(column = "status", property = "status"),
-        @Result(column = "retry_number", property = "retryNumber"),
-        @Result(
-            column = "create_time",
-            property = "createTime",
-            typeHandler = Long2TsConverter.class),
-        @Result(
-            column = "finish_time",
-            property = "finishTime",
-            typeHandler = Long2TsConverter.class),
-        @Result(column = "fail_message", property = "failMessage"),
-        @Result(column = "summary", property = "summary", typeHandler = Map2StringConverter.class)
-      })
-  List<SnapshotExpiryProcessMeta> list(
-      @Param("tableId") long tableId, @Param("status") ProcessStatus status);
 
   @Delete(
       "DELETE FROM snapshot_expiry_process WHERE process_id <= #{processId} AND table_id = #{tableId}")
