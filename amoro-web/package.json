@@ -18,11 +18,9 @@
     "dayjs": "^1.11.11",
     "echarts": "^6.1.0",
     "pinia": "^2.1.7",
-    "swagger-ui": "^5.17.14",
-    "swagger-ui-dist": "^5.17.14",
     "vue": "^3.5.42",
     "vue-clipboard3": "^2.0.0",
-    "vue-i18n": "^9.14.5",
+    "vue-i18n": "^11.4.14",
     "vue-router": "^4.3.3",
     "vue-virtual-scroller": "2.0.0-beta.8"
   },
@@ -33,15 +31,14 @@
     "eslint": "^9.4.0",
     "less": "4.2.0",
     "monaco-editor": "^0.49.0",
-    "qs": "^6.16.0",
     "sql-formatter": "^15.3.1",
     "typescript": "^5.4.5",
     "unplugin-vue-components": "^0.27.0",
-    "vite": "^6.4.3",
+    "vite": "^6.4.4",
     "vite-plugin-fake-server": "^2.1.1",
     "vite-plugin-svg-icons": "^2.0.1",
     "vite-plugin-vue-devtools": "^7.6.7",
-    "vue-tsc": "^2.0.21"
+    "vue-tsc": "^2.2.12"
   },
   "engines": {
     "node": ">=18.18.0"
@@ -49,6 +46,7 @@
   "pnpm": {
     "overrides": {
       "form-data": ">=4.0.4",
+      "dompurify": ">=3.4.17",
       "sha.js": ">=2.4.12",
       "lodash-es@<4.18.0": "^4.18.1",
       "tar-fs@2": "^2.1.5",
@@ -63,12 +61,26 @@
       "lodash@<4.18.0": "^4.18.1",
       "minimatch@3": "^3.1.5",
       "minimatch@7": "^7.4.9",
-      "minimatch@9": "^9.0.9",
+      "minimatch@9": "^11.0.4",
+      "minimatch@10": "^11.0.4",
+      "micromatch@4": "^4.0.8",
+      "path-to-regexp@6": "^6.3.0",
+      "cross-spawn@7": "^7.0.6",
+      "@babel/helpers": "^7.29.10",
+      "@babel/core": "^7.29.7",
+      "ajv@6": "^6.15.0",
+      "yaml@2": "^2.9.1",
       "brace-expansion@1": "^1.1.21",
       "brace-expansion@2": "^2.1.7",
       "postcss@<8.5.18": "^8.5.28",
       "source-map-js": "^1.2.2",
-      "follow-redirects": "^1.16.1"
+      "follow-redirects": "^1.16.1",
+      "postcss-selector-parser@6": "^6.1.5",
+      "picomatch@2": "^2.3.2",
+      "picomatch@4": "^4.0.4",
+      "@babel/runtime": "^7.26.10",
+      "@babel/runtime-corejs3": "^7.26.10",
+      "esbuild@<0.25.0": "^0.25.0"
     },
     "neverBuiltDependencies": [
       "tree-sitter",
