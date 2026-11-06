@@ -389,6 +389,10 @@ public class AmsEnvironment {
         + "    runtime-data-expire-interval-hours: 1\n"
         + "    break-quota-limit-enabled: true\n"
         + "\n"
+        // Snapshot expiry is on by default; its run table exists on Postgres only.
+        + "  expire-snapshots:\n"
+        + "    enabled: false\n"
+        + "\n"
         + "  database:\n"
         + "    type: \"postgres\"\n"
         + "    jdbc-driver-class: \""

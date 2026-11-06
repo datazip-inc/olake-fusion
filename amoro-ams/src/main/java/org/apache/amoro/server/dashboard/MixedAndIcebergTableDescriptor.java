@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.dashboard;
@@ -676,7 +678,7 @@ public class MixedAndIcebergTableDescriptor extends PersistentBase
       processMetaList =
           getAs(
               TableProcessMapper.class,
-              mapper -> mapper.listProcessMeta(identifier.getId(), type, status));
+              mapper -> mapper.listProcessMetaWithSnapshotExpiry(identifier.getId(), type, status));
       PageInfo<TableProcessMeta> pageInfo = new PageInfo<>(processMetaList);
       total = (int) pageInfo.getTotal();
       LOG.info(
@@ -1014,7 +1016,10 @@ public class MixedAndIcebergTableDescriptor extends PersistentBase
       result.setSuccessTasks(successTasks);
       result.setRunningTasks(runningTasks);
     }
-    MetricsSummary summary = MetricsSummary.fromMap(meta.getSummary());
+    // A snapshot expiry run has no summary until it succeeds.
+    MetricsSummary summary =
+        MetricsSummary.fromMap(
+            meta.getSummary() == null ? Collections.emptyMap() : meta.getSummary());
     result.setInputFiles(summary.getInputFilesStatistics());
     result.setOutputFiles(summary.getOutputFilesStatistics());
     result.setTableId(meta.getTableId());

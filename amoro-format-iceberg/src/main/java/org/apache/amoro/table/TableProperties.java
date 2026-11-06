@@ -162,19 +162,23 @@ public class TableProperties {
   // for file size evaluation
   public static final long SELF_OPTIMIZING_EVALUATION_FILE_SIZE_MSE_TOLERANCE_DEFAULT = 0;
 
-  /** table clean related properties */
-  public static final String ENABLE_TABLE_EXPIRE = "table-expire.enabled";
+  /**
+   * Enables snapshot expiry for an Iceberg table; expiry runs when its cron fires. When unset,
+   * expiry is on if the cron is set.
+   */
+  public static final String SNAPSHOT_EXPIRE_ENABLED = "snapshot-expire.enabled";
 
-  public static final boolean ENABLE_TABLE_EXPIRE_DEFAULT = false;
+  /** Unix cron that triggers snapshot expiry. Empty means never. */
+  public static final String SNAPSHOT_EXPIRE_TRIGGER_CRON = "snapshot-expire.trigger.cron";
 
   public static final String CHANGE_DATA_TTL = "change.data.ttl.minutes";
   public static final long CHANGE_DATA_TTL_DEFAULT = 10080; // 7 Days
 
   public static final String SNAPSHOT_KEEP_DURATION = "snapshot.keep.duration";
-  public static final String SNAPSHOT_KEEP_DURATION_DEFAULT = "720min"; // 12 Hours
+  public static final String SNAPSHOT_KEEP_DURATION_DEFAULT = "7d";
 
   public static final String SNAPSHOT_MIN_COUNT = "snapshot.keep.min-count";
-  public static final int SNAPSHOT_MIN_COUNT_DEFAULT = 1;
+  public static final int SNAPSHOT_MIN_COUNT_DEFAULT = 30;
 
   /**
    * The retention period for snapshots created by Flink checkpoints. Snapshots older than this

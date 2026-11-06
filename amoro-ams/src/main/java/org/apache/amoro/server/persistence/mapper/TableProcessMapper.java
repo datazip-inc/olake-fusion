@@ -127,20 +127,32 @@ public interface TableProcessMapper {
       })
   TableProcessMeta getProcessMeta(@Param("processId") long processId);
 
+  /**
+   * The table's compaction runs together with its snapshot expiry runs, newest first. Expiry runs
+   * come from {@code snapshot_expiry_process} with process type {@value
+   * SnapshotExpiryProcessMapper#PROCESS_TYPE}; a {@code processType} filter selects one of the two.
+   */
   @Select(
       "<script>"
-          + "SELECT process_id, table_id, external_process_identifier, status, process_type, process_stage, execution_engine, retry_number, "
-          + "create_time, finish_time, fail_message, process_parameters, summary "
-          + "FROM table_process WHERE table_id = #{tableId} "
-          + " <if test='processType != null'> AND process_type = #{processType}</if>"
-          + " <if test='status != null'> AND status = #{status}</if>"
-          + " ORDER BY process_id desc"
+          + "SELECT process_id, table_id, status, process_type, create_time, finish_time,"
+          + " fail_message, summary FROM ("
+          + "SELECT process_id, table_id, status, process_type, create_time, finish_time,"
+          + " fail_message, summary FROM table_process"
+          + " UNION ALL "
+          + "SELECT process_id, table_id, status, '"
+          + SnapshotExpiryProcessMapper.PROCESS_TYPE
+          + "' AS process_type, create_time, finish_time, fail_message, summary"
+          + " FROM snapshot_expiry_process"
+          + ") processes WHERE table_id = #{tableId}"
+          + "<if test='processType != null'> AND process_type = #{processType}</if>"
+          + "<if test='status != null'> AND status = #{status}</if>"
+          + " ORDER BY process_id DESC"
           + "</script>")
   @ResultMap("tableProcessMap")
-  List<TableProcessMeta> listProcessMeta(
+  List<TableProcessMeta> listProcessMetaWithSnapshotExpiry(
       @Param("tableId") long tableId,
       @Param("processType") String processType,
-      @Param("status") ProcessStatus optimizingStatus);
+      @Param("status") ProcessStatus status);
 
   @Select(
       "SELECT max(process_id) FROM table_process "

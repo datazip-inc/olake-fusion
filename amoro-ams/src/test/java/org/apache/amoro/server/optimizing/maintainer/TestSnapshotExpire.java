@@ -124,9 +124,10 @@ public class TestSnapshotExpire extends ExecutorTestBase {
     tableMaintainer.getChangeMaintainer().expireSnapshots(System.currentTimeMillis(), 1);
 
     Assert.assertEquals(1, Iterables.size(testKeyedTable.changeTable().snapshots()));
+    // Snapshot expiry deletes no file.
     s1Files.forEach(
         file ->
-            Assert.assertFalse(testKeyedTable.changeTable().io().exists(file.path().toString())));
+            Assert.assertTrue(testKeyedTable.changeTable().io().exists(file.path().toString())));
   }
 
   private void writeOptimizedSequence(
@@ -322,7 +323,8 @@ public class TestSnapshotExpire extends ExecutorTestBase {
         .expireSnapshots(System.currentTimeMillis(), 1);
     Assert.assertEquals(1, Iterables.size(table.snapshots()));
 
-    dataFiles.forEach(file -> Assert.assertFalse(table.io().exists(file.path().toString())));
+    // Snapshot expiry deletes no file.
+    dataFiles.forEach(file -> Assert.assertTrue(table.io().exists(file.path().toString())));
     newDataFiles.forEach(file -> Assert.assertTrue(table.io().exists(file.path().toString())));
   }
 
@@ -441,7 +443,8 @@ public class TestSnapshotExpire extends ExecutorTestBase {
         .expireSnapshots(expireTime, 1);
 
     Assert.assertEquals(1, Iterables.size(baseTable.snapshots()));
-    Assert.assertFalse(baseTable.io().exists(file1.path()));
+    // Snapshot expiry deletes no file.
+    Assert.assertTrue(baseTable.io().exists(file1.path()));
     // file2 should not be removed, since it is used by s3
     Assert.assertTrue(baseTable.io().exists(file2.path()));
     Assert.assertTrue(baseTable.io().exists(file3.path()));
@@ -534,10 +537,11 @@ public class TestSnapshotExpire extends ExecutorTestBase {
     Assert.assertEquals(
         3L, TableConfigurations.parseTableConfig(table.properties()).getSnapshotTTLMinutes());
 
-    // using default time unit: minutes
-    table.updateProperties().set(TableProperties.SNAPSHOT_KEEP_DURATION, "720").commit();
+    // using default time unit: days
+    table.updateProperties().set(TableProperties.SNAPSHOT_KEEP_DURATION, "2").commit();
     Assert.assertEquals(
-        720L, TableConfigurations.parseTableConfig(table.properties()).getSnapshotTTLMinutes());
+        2 * 24 * 60L,
+        TableConfigurations.parseTableConfig(table.properties()).getSnapshotTTLMinutes());
 
     table.updateProperties().set(TableProperties.SNAPSHOT_MIN_COUNT, "10").commit();
     Assert.assertEquals(

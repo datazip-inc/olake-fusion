@@ -41,7 +41,9 @@ public class TestTableMaintainerContext {
 
   public static TableConfiguration parseTestTableConfig(Map<String, String> properties) {
     Map<String, String> merged = new HashMap<>(properties);
-    merged.putIfAbsent(TableProperties.ENABLE_TABLE_EXPIRE, "true");
+    merged.putIfAbsent(TableProperties.SNAPSHOT_EXPIRE_ENABLED, "true");
+    // These tests exercise retention mechanics, written against the former default of 1.
+    merged.putIfAbsent(TableProperties.SNAPSHOT_MIN_COUNT, "1");
     return TableConfigurations.parseTableConfig(merged);
   }
 
