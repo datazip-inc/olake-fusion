@@ -26,8 +26,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Warns at startup when executor pods on Kubernetes get less memory overhead than they need outside
- * the heap, so they would be OOMKilled before the executor memory is full.
+ * Logs whether executor pods on Kubernetes get the memory overhead they need outside the heap, as a
+ * warning when they may be OOMKilled before the executor memory is full. It runs at optimizer
+ * startup, for the pod's console, and for each task on the driver, for the run's driver log, which
+ * OLake-UI shows.
  */
 final class ExecutorOverheadCheck {
   private static final Logger LOG = LoggerFactory.getLogger(ExecutorOverheadCheck.class);
