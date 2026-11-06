@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.ha;
@@ -29,9 +31,9 @@ import java.util.Random;
 
 /**
  * Test helper: Build Configurations with JDBC HA enabled and ensure database.url points to the
- * DerbyPersistence path. Note: The current master branch may not yet include ha.type/heartbeat/ttl
- * keys. We still set them as string keys. After the PR is merged, the HA factory will recognize
- * them. Even if not recognized, tests will still be safely skipped.
+ * PostgresPersistence path. Note: The current master branch may not yet include
+ * ha.type/heartbeat/ttl keys. We still set them as string keys. After the PR is merged, the HA
+ * factory will recognize them. Even if not recognized, tests will still be safely skipped.
  */
 public final class HATestConfigs {
   private HATestConfigs() {}
@@ -46,7 +48,7 @@ public final class HATestConfigs {
    * @param tablePort Table Thrift port.
    * @param optimizingPort Optimizing Thrift port.
    * @param httpPort HTTP port.
-   * @return Configurations including Derby URL, ha.enabled=true, ha.type=database, etc.
+   * @return Configurations including the database URL, ha.enabled=true, ha.type=database, etc.
    */
   public static Configurations buildDataBaseHAConfig(
       String clusterName,
@@ -77,17 +79,16 @@ public final class HATestConfigs {
   }
 
   /**
-   * Detect the JDBC URL used by DerbyPersistence from SqlSessionFactoryProvider connection
+   * Detect the JDBC URL used by PostgresPersistence from SqlSessionFactoryProvider connection
    * metadata.
    */
-  public static String detectDerbyUrlFromSqlSessionFactory() {
+  public static String detectJdbcUrlFromSqlSessionFactory() {
     try (SqlSession session = SqlSessionFactoryProvider.getInstance().get().openSession(true)) {
       try (Connection conn = session.getConnection()) {
         return conn.getMetaData().getURL();
       }
     } catch (SQLException e) {
-      // Fallback to a default path as a safeguard; does not affect skip behavior.
-      return "jdbc:derby:/tmp/amoro/derby;create=true";
+      throw new IllegalStateException("Cannot read the test database URL", e);
     }
   }
 

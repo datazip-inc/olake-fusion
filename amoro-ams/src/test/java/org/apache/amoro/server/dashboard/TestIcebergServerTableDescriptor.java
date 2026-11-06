@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.dashboard;
@@ -34,7 +36,7 @@ import org.apache.amoro.process.ProcessStatus;
 import org.apache.amoro.server.persistence.mapper.OptimizingProcessMapper;
 import org.apache.amoro.server.persistence.mapper.TableMetaMapper;
 import org.apache.amoro.server.persistence.mapper.TableProcessMapper;
-import org.apache.amoro.server.table.DerbyPersistence;
+import org.apache.amoro.server.table.PostgresPersistence;
 import org.apache.amoro.table.TableIdentifier;
 import org.apache.amoro.table.descriptor.FormatTableDescriptor;
 import org.apache.amoro.table.descriptor.OptimizingProcessInfo;
@@ -55,7 +57,7 @@ import java.util.Map;
 
 @RunWith(Parameterized.class)
 public class TestIcebergServerTableDescriptor extends TestServerTableDescriptor {
-  @Rule public DerbyPersistence derbyPersistence = new DerbyPersistence();
+  @Rule public PostgresPersistence derbyPersistence = new PostgresPersistence();
 
   public TestIcebergServerTableDescriptor(AmoroCatalogTestHelper<?> amoroCatalogTestHelper) {
     super(amoroCatalogTestHelper);

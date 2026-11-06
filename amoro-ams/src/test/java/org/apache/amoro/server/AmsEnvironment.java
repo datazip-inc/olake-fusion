@@ -42,6 +42,7 @@ import org.apache.amoro.shade.guava32.com.google.common.io.MoreFiles;
 import org.apache.amoro.shade.guava32.com.google.common.io.RecursiveDeleteOption;
 import org.apache.amoro.shade.thrift.org.apache.thrift.transport.TTransportException;
 import org.apache.amoro.table.TableIdentifier;
+import org.apache.amoro.utils.PostgresTestDatabase;
 import org.apache.commons.io.FileUtils;
 import org.apache.iceberg.common.DynFields;
 import org.junit.rules.TemporaryFolder;
@@ -124,7 +125,6 @@ public class AmsEnvironment {
         getTableRuntimeFactoriesConfig(),
         Charset.defaultCharset());
     System.setProperty(Environments.AMORO_HOME, rootPath);
-    System.setProperty("derby.init.sql.dir", path + "../classes/sql/derby/");
     serviceContainer = new AmoroServiceContainer();
     TemporaryFolder hiveDir = new TemporaryFolder();
     hiveDir.create();
@@ -394,11 +394,19 @@ public class AmsEnvironment {
         + "    enabled: false\n"
         + "\n"
         + "  database:\n"
-        + "    type: \"derby\"\n"
-        + "    jdbc-driver-class: \"org.apache.derby.jdbc.EmbeddedDriver\"\n"
-        + "    url: \"jdbc:derby:"
-        + rootPath.replace("\\", "\\\\")
-        + "/derby;create=true\"\n"
+        + "    type: \"postgres\"\n"
+        + "    jdbc-driver-class: \""
+        + PostgresTestDatabase.DRIVER
+        + "\"\n"
+        + "    url: \""
+        + PostgresTestDatabase.create("ams_env_test")
+        + "\"\n"
+        + "    username: \""
+        + PostgresTestDatabase.USER
+        + "\"\n"
+        + "    password: \""
+        + PostgresTestDatabase.PASSWORD
+        + "\"\n"
         + "\n"
         + "  terminal:\n"
         + "    backend: local\n"
