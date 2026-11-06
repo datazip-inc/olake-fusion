@@ -99,7 +99,7 @@ public class TestSnapshotsExpiringExecutor extends SnapshotExpiryTestBase {
 
   @Test
   public void runsWhenTheCronFired() throws Exception {
-    TableRuntime table = table(TABLE_ID, enabled("*/2 * * * *", "7d", "3"));
+    TableRuntime table = table(TABLE_ID, enabled("*/2 * * * *", "7d", "10"));
 
     executor().execute(table);
 
@@ -145,7 +145,7 @@ public class TestSnapshotsExpiringExecutor extends SnapshotExpiryTestBase {
 
   @Test
   public void recordsRunningThenSuccessWithSummary() throws Exception {
-    TableRuntime table = table(TABLE_ID, enabled("* * * * *", "7d", "3"));
+    TableRuntime table = table(TABLE_ID, enabled("* * * * *", "7d", "10"));
     List<Object> statusDuringRun = new ArrayList<>();
     attempt =
         configuration -> {
@@ -166,7 +166,7 @@ public class TestSnapshotsExpiringExecutor extends SnapshotExpiryTestBase {
 
   @Test
   public void runIsLoggedToItsDriverLog() throws Exception {
-    TableRuntime table = table(TABLE_ID, enabled("* * * * *", "7d", "3"));
+    TableRuntime table = table(TABLE_ID, enabled("* * * * *", "7d", "10"));
 
     executor().execute(table);
 
@@ -180,7 +180,7 @@ public class TestSnapshotsExpiringExecutor extends SnapshotExpiryTestBase {
 
   @Test
   public void failedAttemptsAreLoggedToTheDriverLog() throws Exception {
-    TableRuntime table = table(TABLE_ID, enabled("* * * * *", "7d", "3"));
+    TableRuntime table = table(TABLE_ID, enabled("* * * * *", "7d", "10"));
     attempt =
         configuration -> {
           throw new CommitFailedException("conflict");
@@ -200,7 +200,7 @@ public class TestSnapshotsExpiringExecutor extends SnapshotExpiryTestBase {
 
   @Test
   public void invalidConfigFailsWithoutRetryOrExpiry() throws Exception {
-    TableRuntime table = table(TABLE_ID, enabled("* * * * *", "abc", "3"));
+    TableRuntime table = table(TABLE_ID, enabled("* * * * *", "abc", "10"));
 
     executor().execute(table);
 
@@ -213,7 +213,7 @@ public class TestSnapshotsExpiringExecutor extends SnapshotExpiryTestBase {
 
   @Test
   public void retriesThenSucceeds() throws Exception {
-    TableRuntime table = table(TABLE_ID, enabled("* * * * *", "7d", "3"));
+    TableRuntime table = table(TABLE_ID, enabled("* * * * *", "7d", "10"));
     attempt = failTimesThenSucceed(2);
 
     executor().execute(table);
@@ -225,7 +225,7 @@ public class TestSnapshotsExpiringExecutor extends SnapshotExpiryTestBase {
 
   @Test
   public void failsAfterThreeAttemptsWithTheLastError() throws Exception {
-    TableRuntime table = table(TABLE_ID, enabled("* * * * *", "7d", "3"));
+    TableRuntime table = table(TABLE_ID, enabled("* * * * *", "7d", "10"));
     int[] attempts = {0};
     attempt =
         configuration -> {
@@ -246,7 +246,7 @@ public class TestSnapshotsExpiringExecutor extends SnapshotExpiryTestBase {
   public void leftoverRunningRowIsClosedBeforeTheNextRun() throws Exception {
     long leftover = 100L;
     insertRun(leftover, TABLE_ID, "RUNNING", 0, clock.millis() - 3_600_000L, null, null);
-    TableRuntime table = table(TABLE_ID, enabled("* * * * *", "7d", "3"));
+    TableRuntime table = table(TABLE_ID, enabled("* * * * *", "7d", "10"));
 
     executor().execute(table);
 
@@ -260,7 +260,7 @@ public class TestSnapshotsExpiringExecutor extends SnapshotExpiryTestBase {
 
   @Test
   public void fireDuringALongRunIsSkipped() throws Exception {
-    TableRuntime table = table(TABLE_ID, enabled("0,1 10 * * *", "7d", "3"));
+    TableRuntime table = table(TABLE_ID, enabled("0,1 10 * * *", "7d", "10"));
     attempt =
         configuration -> {
           clock.advanceSeconds(150);
@@ -278,7 +278,7 @@ public class TestSnapshotsExpiringExecutor extends SnapshotExpiryTestBase {
 
   @Test
   public void configChangeDuringARunAppliesFromTheNextRun() throws Exception {
-    TableRuntime table = table(TABLE_ID, enabled("* * * * *", "7d", "3"));
+    TableRuntime table = table(TABLE_ID, enabled("* * * * *", "7d", "10"));
     attempt =
         configuration -> {
           configurations.put(
@@ -290,31 +290,31 @@ public class TestSnapshotsExpiringExecutor extends SnapshotExpiryTestBase {
                       "snapshot-expire.trigger.cron",
                       "* * * * *",
                       "snapshot.keep.min-count",
-                      "5")));
+                      "20")));
           return summary(10, 7);
         };
 
     executor().execute(table);
 
     Assert.assertEquals("SUCCESS", runs(TABLE_ID).get(0).get("status"));
-    Assert.assertEquals(3, attemptConfigurations.get(0).getSnapshotMinCount());
+    Assert.assertEquals(10, attemptConfigurations.get(0).getSnapshotMinCount());
     Assert.assertFalse("no further run is scheduled", executor.enabled(table));
   }
 
   @Test
   public void sendsOneCompletedEventPerRun() throws Exception {
-    TableRuntime success = table(TABLE_ID, enabled("* * * * *", "7d", "3"));
+    TableRuntime success = table(TABLE_ID, enabled("* * * * *", "7d", "10"));
     executor().execute(success);
     verify(telemetry)
         .trackSnapshotExpiryCompleted(
-            eq("SUCCESS"), anyLong(), eq(1), eq(3), eq(10), eq(7), eq(10080L), eq(3), anyLong());
+            eq("SUCCESS"), anyLong(), eq(1), eq(3), eq(10), eq(7), eq(10080L), eq(10), anyLong());
 
-    TableRuntime invalid = table(OTHER_TABLE_ID, enabled("* * * * *", "abc", "3"));
+    TableRuntime invalid = table(OTHER_TABLE_ID, enabled("* * * * *", "abc", "10"));
     executor.execute(invalid);
     verify(telemetry)
         .trackSnapshotExpiryCompleted(
             eq("FAILED"), anyLong(), anyInt(), eq(0), eq(0), eq(0), anyLong(), anyInt(), anyLong());
-    TableRuntime failing = table(3L, enabled("* * * * *", "7d", "3"));
+    TableRuntime failing = table(3L, enabled("* * * * *", "7d", "10"));
     attempt =
         configuration -> {
           throw new CommitFailedException("conflict");
@@ -330,7 +330,7 @@ public class TestSnapshotsExpiringExecutor extends SnapshotExpiryTestBase {
   public void reenablingDoesNotRunForAFireMissedWhileDisabled() throws Exception {
     // Config changes would schedule real ticks; the test drives the ticks itself.
     when(tableService.contains(any())).thenReturn(false);
-    TableRuntime table = table(TABLE_ID, enabled("0 10 * * *", "7d", "3"));
+    TableRuntime table = table(TABLE_ID, enabled("0 10 * * *", "7d", "10"));
     executor().execute(table);
     Assert.assertEquals("the 10:00 fire runs", 1, runs(TABLE_ID).size());
 

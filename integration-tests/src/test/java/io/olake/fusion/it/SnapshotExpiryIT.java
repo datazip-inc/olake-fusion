@@ -46,6 +46,9 @@ import java.util.Set;
 @ExtendWith(Report.class)
 class SnapshotExpiryIT extends ItBase {
 
+  /** The lowest {@code snapshot.keep.min-count} Fusion accepts. */
+  private static final int MIN_COUNT = 10;
+
   /** Long enough for every snapshot of a setup to fall out of a one-minute retention. */
   private static final Duration RETENTION_PASSES = Duration.ofSeconds(75);
 
@@ -58,7 +61,10 @@ class SnapshotExpiryIT extends ItBase {
 
   static final Duration EXPIRY_TIMEOUT = Duration.ofMinutes(5);
 
-  /** retain_last 3, 2 of 7 snapshots older than the retention: the 5 newer ones are left. */
+  /**
+   * retain_last 10, 2 old snapshots older than the retention and 12 newer ones: the 12 newer ones
+   * are left.
+   */
   @Test
   void retainsSnapshotsNewerThanTheRetention() throws InterruptedException {
     TestTable table = TestTable.create("expiry_split");
@@ -68,7 +74,7 @@ class SnapshotExpiryIT extends ItBase {
     List<Long> old = snapshots(table);
     long oldEnd = old.get(old.size() - 1);
     Thread.sleep(GAP.toMillis());
-    while (snapshots(table).size() < old.size() + 5) {
+    while (snapshots(table).size() < old.size() + MIN_COUNT + 2) {
       table.load();
     }
     int newer = snapshots(table).size() - old.size();
@@ -76,22 +82,27 @@ class SnapshotExpiryIT extends ItBase {
     // for a run starting 3 minutes later.
     long retentionMinutes = Math.max(1, (System.currentTimeMillis() - oldEnd - 30_000) / 60_000);
 
-    assertSnapshotsLeft(table, retentionMinutes + "min", 3, newer);
+    assertSnapshotsLeft(table, retentionMinutes + "min", MIN_COUNT, newer);
   }
 
-  /** retain_last 1, every snapshot older than the retention: only the newest one is left. */
+  /**
+   * retain_last 10, every one of 12 snapshots older than the retention: only the newest 10 are
+   * left.
+   */
   @Test
   void keepsOnlyTheNewestWhenAllAreOlder() throws InterruptedException {
-    TestTable table = tableWithOldSnapshots("expiry_all_old", 2);
-    assertSnapshotsLeft(table, "1min", 1, 1);
+    TestTable table = tableWithOldSnapshots("expiry_all_old", MIN_COUNT + 2);
+    assertSnapshotsLeft(table, "1min", MIN_COUNT, MIN_COUNT);
   }
 
-  /** retain_last 1, no snapshot older than the retention: every snapshot is left. */
+  /** retain_last 10, none of 11 snapshots older than the retention: every snapshot is left. */
   @Test
   void expiresNothingWhenNoneIsOlder() {
     TestTable table = TestTable.create("expiry_none_old");
-    table.load();
-    assertSnapshotsLeft(table, "3d", 1, snapshots(table).size());
+    while (snapshots(table).size() < MIN_COUNT + 1) {
+      table.load();
+    }
+    assertSnapshotsLeft(table, "3d", MIN_COUNT, snapshots(table).size());
   }
 
   /** One expiry run with the given retention succeeds and leaves {@code expected} snapshots. */
@@ -109,12 +120,12 @@ class SnapshotExpiryIT extends ItBase {
   }
 
   /**
-   * A table written by an OLake seed sync plus {@code syncs} more, whose snapshots are then older
-   * than one minute.
+   * A table written by OLake syncs until it has at least {@code count} snapshots, which are then
+   * older than one minute.
    */
-  static TestTable tableWithOldSnapshots(String name, int syncs) throws InterruptedException {
+  static TestTable tableWithOldSnapshots(String name, int count) throws InterruptedException {
     TestTable table = TestTable.create(name);
-    for (int i = 0; i < syncs; i++) {
+    while (snapshots(table).size() < count) {
       table.load();
     }
     Thread.sleep(RETENTION_PASSES.toMillis());

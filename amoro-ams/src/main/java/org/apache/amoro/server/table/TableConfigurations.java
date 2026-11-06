@@ -50,6 +50,13 @@ public class TableConfigurations {
   private static final Logger LOG = LoggerFactory.getLogger(TableConfigurations.class);
 
   /**
+   * In olake go pebble index is being used, so if we not have more then 3, there are chances of
+   * invalidating the index.
+   */
+  /** The lowest {@code snapshot.keep.min-count} snapshot expiry accepts. */
+  public static final int SNAPSHOT_MIN_COUNT_LOWEST = 10;
+
+  /**
    * Parse table configuration from table properties
    *
    * @param properties table properties
@@ -143,7 +150,7 @@ public class TableConfigurations {
     if (snapshotTTLMinutes == null || snapshotTTLMinutes < 1) {
       return invalidSetting(TableProperties.SNAPSHOT_KEEP_DURATION, keepDuration);
     }
-    if (snapshotMinCount == null || snapshotMinCount < 1) {
+    if (snapshotMinCount == null || snapshotMinCount < SNAPSHOT_MIN_COUNT_LOWEST) {
       return invalidSetting(TableProperties.SNAPSHOT_MIN_COUNT, minCount);
     }
     return null;
