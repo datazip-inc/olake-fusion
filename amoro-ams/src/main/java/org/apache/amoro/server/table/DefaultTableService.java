@@ -184,6 +184,10 @@ public class DefaultTableService extends PersistentBase implements TableService 
         continue;
       }
       List<TableRuntimeState> states = statesMap.get(tableRuntimeMeta.getTableId());
+      // starts on the configurations stored in the AMS database, not the ones it was saved with
+      tableRuntimeMeta.setTableConfig(
+          TableConfigurationsService.getInstance()
+              .overlay(identifier, tableRuntimeMeta.getTableConfig()));
       Optional<TableRuntime> tableRuntime =
           createTableRuntime(identifier, tableRuntimeMeta, states);
       if (!tableRuntime.isPresent()) {
@@ -490,9 +494,20 @@ public class DefaultTableService extends PersistentBase implements TableService 
       if (TablePropertyUtil.isMixedTableStore(table.properties())) {
         return false;
       }
+      // a new iceberg table is stored with fresh configurations, one recreated under the same name
+      // keeps the configurations it had
+      TableConfigurationsService configurations = TableConfigurationsService.getInstance();
+      configurations.storeFresh(
+          serverTableIdentifier.getCatalog(),
+          serverTableIdentifier.getDatabase(),
+          Collections.singletonList(serverTableIdentifier.getTableName()));
+      configurations.storeOlakeCreated(serverTableIdentifier, table);
     }
 
-    Map<String, String> properties = table.properties();
+    // Same overlay as DefaultTableRuntime.refresh, so the very first table_runtime row already
+    // carries the AMS-owned settings rather than a config that is corrected a tick later.
+    Map<String, String> properties =
+        TableConfigurationsService.getInstance().overlay(serverTableIdentifier, table.properties());
     TableRuntimeMeta meta = new TableRuntimeMeta();
     meta.setTableId(serverTableIdentifier.getId());
     meta.setTableConfig(properties);

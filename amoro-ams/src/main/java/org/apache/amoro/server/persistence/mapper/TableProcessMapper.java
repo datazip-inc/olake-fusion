@@ -150,6 +150,17 @@ public interface TableProcessMapper {
   List<Long> selectTableMaxProcessIds(@Param("tables") Collection<Long> tables);
 
   @Select(
+      "SELECT p.process_id, p.table_id, p.status, p.process_type, p.finish_time "
+          + "FROM table_process p JOIN ("
+          + "  SELECT max(process_id) AS process_id FROM table_process "
+          + "  WHERE table_id in (#{tables::number[]}) "
+          + "  GROUP BY table_id, process_type"
+          + ") latest ON p.process_id = latest.process_id")
+  @Lang(InListExtendedLanguageDriver.class)
+  @ResultMap("tableProcessMap")
+  List<TableProcessMeta> selectLatestProcessOfEachType(@Param("tables") Collection<Long> tables);
+
+  @Select(
       "SELECT process_id, table_id, external_process_identifier, status, process_type, process_stage, execution_engine, retry_number, "
           + "create_time, finish_time, fail_message, process_parameters, summary "
           + "FROM table_process WHERE status in ('SUBMITTED', 'RUNNING')")

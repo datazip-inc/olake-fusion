@@ -23,20 +23,23 @@ package org.apache.amoro.server.scheduler.inline;
 import org.apache.amoro.TableFormat;
 import org.apache.amoro.TableRuntime;
 import org.apache.amoro.iceberg.Constants;
-import org.apache.amoro.optimizing.plan.AbstractOptimizingEvaluator;
+import org.apache.amoro.server.persistence.TableOptimizingConfigurationsMeta;
 import org.apache.amoro.server.scheduler.PeriodicTableScheduler;
 import org.apache.amoro.server.table.DefaultTableRuntime;
+import org.apache.amoro.server.table.TableConfigurationsService;
 import org.apache.amoro.server.table.TableService;
 import org.apache.amoro.server.utils.IcebergTableUtil;
 import org.apache.amoro.table.BasicTableSnapshot;
 import org.apache.amoro.table.MixedTable;
 
+import java.util.Objects;
+
 /**
  * Calculates the health score of Iceberg tables on its own schedule and threads. A failure here
  * never affects any of the happy paths.
  *
- * <p>The score is stored in the table summary together with the snapshot it was calculated on, and
- * is calculated again only once the table's current snapshot changes.
+ * <p>The score is stored in the AMS database only, together with the snapshot it was calculated on,
+ * and is calculated again only once the table's current snapshot changes.
  *
  * <p>TODO: Store timestamp when the last healthscore was calculated.
  */
@@ -49,8 +52,8 @@ public class TableHealthScoreExecutor extends PeriodicTableScheduler {
     this.interval = interval;
   }
 
-  // Iceberg tables only. Whether optimizing is enabled is checked on each run instead.
-  // So a table enabled later needs no rescheduling.
+  // Iceberg tables only. Whether optimizing is enabled is read from the db on each run instead, so
+  // a table enabled later needs no rescheduling and the scheduling itself never depends on the db.
   @Override
   protected boolean enabled(TableRuntime tableRuntime) {
     return tableRuntime instanceof DefaultTableRuntime
@@ -72,7 +75,9 @@ public class TableHealthScoreExecutor extends PeriodicTableScheduler {
   public void execute(TableRuntime tableRuntime) {
     try {
       DefaultTableRuntime runtime = (DefaultTableRuntime) tableRuntime;
-      if (!runtime.getOptimizingConfig().isEnabled()) {
+      TableConfigurationsService configurations = TableConfigurationsService.getInstance();
+      TableOptimizingConfigurationsMeta stored = configurations.get(runtime.getTableIdentifier());
+      if (!stored.getSelfOptimizingEnabled()) {
         return;
       }
 
@@ -81,16 +86,17 @@ public class TableHealthScoreExecutor extends PeriodicTableScheduler {
       long snapshotId = IcebergTableUtil.getSnapshotId(table.asUnkeyedTable(), false);
       // nothing to score without a snapshot, nor when this snapshot is scored already
       if (snapshotId == Constants.INVALID_SNAPSHOT_ID
-          || snapshotId == runtime.getHealthScoreSnapshotId()) {
+          || Objects.equals(snapshotId, stored.getHealthScoreSnapshotId())) {
         return;
       }
 
       // the score covers every partition, the limit only caps the ones picked for optimizing
-      AbstractOptimizingEvaluator.PendingInput pendingInput =
+      int healthScore =
           IcebergTableUtil.createOptimizingEvaluator(
                   runtime, table, new BasicTableSnapshot(snapshotId), Integer.MAX_VALUE)
-              .getPendingInput();
-      runtime.setTableSummary(pendingInput, snapshotId);
+              .getPendingInput()
+              .getHealthScore();
+      configurations.storeHealthScore(runtime.getTableIdentifier(), healthScore, snapshotId);
     } catch (Throwable t) {
       logger.warn(
           "Failed to calculate health score for table {}", tableRuntime.getTableIdentifier(), t);

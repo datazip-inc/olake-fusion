@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.dashboard.controller;
@@ -54,6 +56,7 @@ import org.apache.amoro.server.dashboard.utils.CommonUtil;
 import org.apache.amoro.server.optimizing.OptimizingStatus;
 import org.apache.amoro.server.persistence.TableRuntimeMeta;
 import org.apache.amoro.server.process.TableProcessMeta;
+import org.apache.amoro.server.table.TableConfigurationsService;
 import org.apache.amoro.server.table.TableManager;
 import org.apache.amoro.shade.guava32.com.google.common.base.Function;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
@@ -163,9 +166,14 @@ public class TableController {
         if (status != null) {
           tableSummary.setOptimizingStatus(status.name());
         }
+        // the health score is stored in the AMS database only
+        Integer healthScore =
+            TableConfigurationsService.getInstance()
+                .get(serverTableIdentifier.get())
+                .getHealthScore();
+        tableSummary.setHealthScore(healthScore == null ? -1 : healthScore);
         org.apache.amoro.table.TableSummary summary = tableRuntimeMeta.getTableSummary();
         if (summary != null) {
-          tableSummary.setHealthScore(summary.getHealthScore());
           tableSummary.setSmallFileScore(summary.getSmallFileScore());
           tableSummary.setEqualityDeleteScore(summary.getEqualityDeleteScore());
           tableSummary.setPositionalDeleteScore(summary.getPositionalDeleteScore());

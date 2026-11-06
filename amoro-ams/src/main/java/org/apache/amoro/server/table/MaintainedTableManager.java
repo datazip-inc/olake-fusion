@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.table;
@@ -27,6 +29,7 @@ import org.apache.commons.lang3.tuple.Pair;
 
 import javax.annotation.Nullable;
 
+import java.util.Collection;
 import java.util.List;
 
 public interface MaintainedTableManager {
@@ -40,6 +43,13 @@ public interface MaintainedTableManager {
   List<ServerTableIdentifier> listManagedTables();
 
   /**
+   * Load the iceberg tables of one database.
+   *
+   * @return {@link ServerTableIdentifier} list
+   */
+  List<ServerTableIdentifier> listIcebergTables(String catalogName, String databaseName);
+
+  /**
    * Get the ServerTableIdentifier instance of the specified table identifier
    *
    * @return the {@link ServerTableIdentifier} instance
@@ -48,6 +58,9 @@ public interface MaintainedTableManager {
 
   /** Get the table process meta. */
   TableProcessMeta getTableProcessMeta(long processId);
+
+  /** Get the latest process of each process type, for each of the given tables. */
+  List<TableProcessMeta> listLatestProcessOfEachType(Collection<Long> tableIds);
 
   /** Get the table runtime meta. */
   TableRuntimeMeta getTableRuntimeMata(ServerTableIdentifier id);
