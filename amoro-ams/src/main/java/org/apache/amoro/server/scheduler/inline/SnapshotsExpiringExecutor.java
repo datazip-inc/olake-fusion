@@ -39,6 +39,7 @@ import org.apache.amoro.server.utils.Telemetry;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
 import org.apache.amoro.table.TableProperties;
 import org.apache.amoro.utils.CronUtils;
+import org.apache.iceberg.HasTableOperations;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.SnapshotSummary;
 import org.apache.iceberg.Table;
@@ -76,6 +77,9 @@ public class SnapshotsExpiringExecutor extends PeriodicTableScheduler {
   private static final int MAX_FAIL_MESSAGE_LENGTH = 4096;
 
   private static final int MAX_LOGGED_SNAPSHOTS = 100;
+  /** Highest Iceberg table format version snapshot expiry runs on; v3 tables are rejected. */
+  static final int MAX_FORMAT_VERSION = 2;
+
   private static final SnowflakeIdGenerator ID_GENERATOR = new SnowflakeIdGenerator();
 
   private final Clock clock;
@@ -145,13 +149,20 @@ public class SnapshotsExpiringExecutor extends PeriodicTableScheduler {
     }
   }
 
-  /** One expiry attempt on {@code table} with the configuration read when the run started. */
+  /**
+   * One expiry attempt on {@code table} with the configuration read when the run started.
+   *
+   * @throws UnsupportedOperationException if the table's format version is above {@link
+   *     #MAX_FORMAT_VERSION}
+   */
   protected SnapshotExpirySummary expireOnce(
       AmoroTable<?> table, TableRuntime tableRuntime, TableConfiguration configuration) {
     Preconditions.checkArgument(tableRuntime instanceof DefaultTableRuntime);
+    Table icebergTable = (Table) table.originalTable();
+    checkFormatVersionSupported(icebergTable);
     IcebergTableMaintainer maintainer =
         new IcebergTableMaintainer(
-            (Table) table.originalTable(),
+            icebergTable,
             table.id(),
             new DefaultTableMaintainerContext((DefaultTableRuntime) tableRuntime) {
               @Override
@@ -161,6 +172,16 @@ public class SnapshotsExpiringExecutor extends PeriodicTableScheduler {
             });
     return maintainer.expireSnapshotsWithSummary(
         maintainer.mustOlderThan(clock.millis()), configuration.getSnapshotMinCount());
+  }
+
+  /** Throws when the table's format version is above {@link #MAX_FORMAT_VERSION}. */
+  private static void checkFormatVersionSupported(Table table) {
+    int formatVersion = ((HasTableOperations) table).operations().current().formatVersion();
+    if (formatVersion > MAX_FORMAT_VERSION) {
+      throw new UnsupportedOperationException(
+          String.format(
+              "Snapshot expiry does not support Iceberg format version %d tables", formatVersion));
+    }
   }
 
   private void run(TableRuntime tableRuntime, TableConfiguration configuration, long startTime) {
@@ -205,8 +226,13 @@ public class SnapshotsExpiringExecutor extends PeriodicTableScheduler {
         AmoroTable<?> table = loadTable(tableRuntime);
         tableSize = tableSizeBytes(table);
         summary = expireOnce(table, tableRuntime, configuration);
+      } catch (UnsupportedOperationException e) {
+        // An unsupported table fails the same way on every attempt: fail the run at once.
+        lastError = e;
+        LOG.warn("Snapshot expiry of table {} is not supported: {}", identifier, e.getMessage());
+        break;
       } catch (Exception e) {
-        // Any failure of an attempt is retried; the last one is recorded on the run.
+        // Any other failure of an attempt is retried; the last one is recorded on the run.
         lastError = e;
         LOG.warn(
             "Snapshot expiry attempt {} of {} failed for table {}: {}",
