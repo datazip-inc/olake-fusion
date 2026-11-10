@@ -144,14 +144,16 @@ public interface TableProcessMapper {
           + "' AS process_type, create_time, finish_time, fail_message, summary"
           + " FROM snapshot_expiry_process"
           + ") processes WHERE table_id = #{tableId}"
-          + "<if test='processType != null'> AND process_type = #{processType}</if>"
+          + "<if test='processTypes != null'> AND process_type IN"
+          + "<foreach collection='processTypes' item='type' open='(' separator=',' close=')'>"
+          + "#{type}</foreach></if>"
           + "<if test='status != null'> AND status = #{status}</if>"
           + " ORDER BY process_id DESC"
           + "</script>")
   @ResultMap("tableProcessMap")
   List<TableProcessMeta> listProcessMetaWithSnapshotExpiry(
       @Param("tableId") long tableId,
-      @Param("processType") String processType,
+      @Param("processTypes") Collection<String> processTypes,
       @Param("status") ProcessStatus status);
 
   @Select(
