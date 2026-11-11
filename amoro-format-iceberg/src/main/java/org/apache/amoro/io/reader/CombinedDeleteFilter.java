@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.io.reader;
@@ -31,6 +33,7 @@ import org.apache.amoro.shade.guava32.com.google.common.collect.Sets;
 import org.apache.amoro.shade.guava32.com.google.common.hash.BloomFilter;
 import org.apache.amoro.utils.ContentFiles;
 import org.apache.amoro.utils.DynMethods;
+import org.apache.amoro.utils.ExecutorMemoryUtil;
 import org.apache.amoro.utils.map.StructLikeBaseMap;
 import org.apache.amoro.utils.map.StructLikeCollections;
 import org.apache.iceberg.Accessor;
@@ -102,6 +105,10 @@ public abstract class CombinedDeleteFilter<T extends StructLike> {
 
   @VisibleForTesting public static long FILTER_EQ_DELETE_TRIGGER_RECORD_COUNT = 1000000L;
 
+  private static final String MEMORY_DETAILS =
+      " Details: changed_keys_per_task={}, largest_delete_file_rows={}, max_key_length={}.";
+  private static final String MEMORY_DOCS = " To know more: {}";
+
   private final RewriteFilesInput input;
   private final List<DeleteFile> posDeletes;
   // There may have multiple equality delete fields within a rewrite input
@@ -128,6 +135,8 @@ public abstract class CombinedDeleteFilter<T extends StructLike> {
   private final boolean filterEqDelete;
   private final DeleteLoader deleteLoader;
   private final String deleteGroup;
+  // Longest key among the task's data rows, found while the bloom filter is built
+  private int maxDataKeyLength = 0;
 
   protected CombinedDeleteFilter(
       RewriteFilesInput rewriteFilesInput,
@@ -262,6 +271,7 @@ public abstract class CombinedDeleteFilter<T extends StructLike> {
     List<Predicate<StructForDelete<T>>> isInDeleteSets = Lists.newArrayList();
     List<Closeable> structMapCloseable = Lists.newArrayList();
     BloomFilter<StructLike> bloomFilter = initializeBloomFilter();
+    logExecutorMemoryNeed();
     for (Map.Entry<Set<Integer>, Schema> deleteSchemaEntry : deleteSchemaByDeleteIds.entrySet()) {
       Predicate<StructForDelete<T>> predicate =
           applyEqDeletesForSchema(deleteSchemaEntry, bloomFilter, structMapCloseable);
@@ -306,6 +316,8 @@ public abstract class CombinedDeleteFilter<T extends StructLike> {
                   StructProjection.create(requiredSchema, deleteSchema).wrap(record);
               StructLike deletePK = internalRecordWrapper.copyFor(projection);
               bloomFilter.put(deletePK);
+              maxDataKeyLength =
+                  Math.max(maxDataKeyLength, ExecutorMemoryUtil.keyLength(projection));
             });
       }
     } catch (IOException e) {
@@ -313,6 +325,82 @@ public abstract class CombinedDeleteFilter<T extends StructLike> {
     }
 
     return bloomFilter;
+  }
+
+  /** The bloom filter scan finds the real length; without it, the docs' default is used. */
+  @VisibleForTesting
+  public int maxKeyLength() {
+    return filterEqDelete ? maxDataKeyLength : ExecutorMemoryUtil.DEFAULT_KEY_LENGTH;
+  }
+
+  @VisibleForTesting
+  public long changedKeysPerTask() {
+    long eqDeleteRecordCnt =
+        eqDeleteFilesByDeleteIds.values().stream().mapToLong(ContentFile::recordCount).sum();
+    return ExecutorMemoryUtil.changedKeysPerTask(dataRecordCnt, eqDeleteRecordCnt, filterEqDelete);
+  }
+
+  /**
+   * Logs the executor memory this task's equality-delete keys may need, as a warning when it is
+   * close to or more than the executor's heap. Runs before the delete files are loaded, so it comes
+   * before a possible OutOfMemoryError.
+   */
+  private void logExecutorMemoryNeed() {
+    long changedKeys = changedKeysPerTask();
+    long largestDeleteFileRows =
+        eqDeleteFilesByDeleteIds.values().stream()
+            .mapToLong(ContentFile::recordCount)
+            .max()
+            .orElse(0);
+    long neededBytes =
+        ExecutorMemoryUtil.memoryNeededBytes(
+            changedKeys, largestDeleteFileRows, ExecutorMemoryUtil.bytesPerKey(maxKeyLength()));
+    long heapBytes = Runtime.getRuntime().maxMemory();
+    String needed = ExecutorMemoryUtil.formatGb(neededBytes);
+    String executorMemory = ExecutorMemoryUtil.formatExecutorMemory(heapBytes);
+    String keyLength =
+        filterEqDelete ? String.valueOf(maxKeyLength()) : maxKeyLength() + " (default)";
+
+    switch (ExecutorMemoryUtil.heapLevel(neededBytes, heapBytes)) {
+      case TOO_SMALL:
+        LOG.warn(
+            "Executor memory may be too small for this task: it needs up to {}, and "
+                + "spark.executor.memory is {}. Set it to at least {}g, or the task may fail with "
+                + "OutOfMemoryError."
+                + MEMORY_DETAILS
+                + MEMORY_DOCS,
+            needed,
+            executorMemory,
+            ExecutorMemoryUtil.recommendedExecutorMemoryGb(neededBytes),
+            changedKeys,
+            largestDeleteFileRows,
+            keyLength,
+            ExecutorMemoryUtil.MEMORY_NEEDED_DOC_URL);
+        break;
+      case NEARLY_FULL:
+        LOG.warn(
+            "Executor memory may be nearly full for this task: it needs up to {}, and "
+                + "spark.executor.memory is {}. Consider raising it."
+                + MEMORY_DETAILS
+                + MEMORY_DOCS,
+            needed,
+            executorMemory,
+            changedKeys,
+            largestDeleteFileRows,
+            keyLength,
+            ExecutorMemoryUtil.MEMORY_NEEDED_DOC_URL);
+        break;
+      default:
+        LOG.info(
+            "Executor memory is enough for this task: it needs up to {}, and spark.executor.memory "
+                + "is {}."
+                + MEMORY_DETAILS,
+            needed,
+            executorMemory,
+            changedKeys,
+            largestDeleteFileRows,
+            keyLength);
+    }
   }
 
   private CloseableIterable<Record> readRecords() {
