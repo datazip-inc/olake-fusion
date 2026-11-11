@@ -68,7 +68,8 @@ jobs:
     # An empty environment name means no environment, so the runs that skip the gate (see the top
     # of this file) start straight away.
     environment: ${{ !(github.event_name == 'push' || github.head_ref == 'staging') && 'integration-tests' || '' }}
-    timeout-minutes: 20
+    # The snapshot expiry tests wait real minutes for snapshots to age past their retention.
+    timeout-minutes: 45
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

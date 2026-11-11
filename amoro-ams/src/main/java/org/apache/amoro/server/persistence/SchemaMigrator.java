@@ -85,7 +85,9 @@ public class SchemaMigrator {
   private static final String HISTORY_TABLE = "ams_schema_migration";
 
   /** Migration scripts in the order they must be applied. */
-  private static final String[] MIGRATIONS = {"V1__platform_property.sql"};
+  private static final String[] MIGRATIONS = {
+    "V1__platform_property.sql", "V2__snapshot_expiry_process.sql"
+  };
 
   private SchemaMigrator() {}
 
