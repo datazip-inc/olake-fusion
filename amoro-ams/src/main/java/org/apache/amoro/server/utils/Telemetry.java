@@ -418,6 +418,34 @@ public class Telemetry {
         });
   }
 
+  /** "Snapshot Expiry Completed - Fusion", sent once per run, success or failure. */
+  public void trackSnapshotExpiryCompleted(
+      String expiryStatus,
+      long durationMs,
+      int attempts,
+      int expiredSnapshots,
+      int snapshotCountBefore,
+      int snapshotCountAfter,
+      long retentionMinutes,
+      int minSnapshotCount,
+      long tableSizeBytes) {
+    sendEvent(
+        "Snapshot Expiry Completed - Fusion",
+        () -> {
+          Map<String, Object> props = new HashMap<>();
+          props.put("expiry_status", expiryStatus);
+          props.put("duration_ms", durationMs);
+          props.put("attempts", attempts);
+          props.put("expired_snapshots", expiredSnapshots);
+          props.put("snapshot_count_before", snapshotCountBefore);
+          props.put("snapshot_count_after", snapshotCountAfter);
+          props.put("retention_minutes", retentionMinutes);
+          props.put("min_snapshot_count", minSnapshotCount);
+          props.put("table_size (GB)", bytesToGb(tableSizeBytes));
+          return props;
+        });
+  }
+
   public void trackCatalogCreated(String catalogType, boolean imported, boolean success) {
     sendEvent("Catalog Created - Fusion", () -> catalogProps(catalogType, imported, success));
   }

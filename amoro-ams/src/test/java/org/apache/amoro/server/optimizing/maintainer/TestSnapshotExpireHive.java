@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.optimizing.maintainer;
@@ -120,8 +122,8 @@ public class TestSnapshotExpireHive extends TestSnapshotExpire {
 
     hiveFiles.forEach(
         file -> Assert.assertTrue(getMixedTable().io().exists(file.path().toString())));
-    s2Files.forEach(
-        file -> Assert.assertFalse(getMixedTable().io().exists(file.path().toString())));
+    // Snapshot expiry deletes no file.
+    s2Files.forEach(file -> Assert.assertTrue(getMixedTable().io().exists(file.path().toString())));
     s3Files.forEach(file -> Assert.assertTrue(getMixedTable().io().exists(file.path().toString())));
   }
 

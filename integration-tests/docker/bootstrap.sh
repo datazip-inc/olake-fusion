@@ -75,7 +75,8 @@ curl -sf -b /tmp/c -X POST "$API/catalogs" -H "$H" -H 'Content-Type: application
       "io-impl":"org.apache.iceberg.aws.s3.S3FileIO",
       "endpoint":"http://10.210.40.5:9000",
       "access-key-id":"admin",
-      "secret-access-key":"password"
+      "secret-access-key":"password",
+      "cache-enabled":"false"
     },
     "tableProperties":{}
   }'

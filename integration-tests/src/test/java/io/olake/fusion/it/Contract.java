@@ -195,6 +195,11 @@ public final class Contract {
     public static final String NEVER = "";
 
     public static final String TARGET_SIZE = "self-optimizing.target-size";
+
+    public static final String SNAPSHOT_EXPIRE_ENABLED = "snapshot-expire.enabled";
+    public static final String SNAPSHOT_EXPIRE_CRON = "snapshot-expire.trigger.cron";
+    public static final String SNAPSHOT_KEEP_DURATION = "snapshot.keep.duration";
+    public static final String SNAPSHOT_MIN_COUNT = "snapshot.keep.min-count";
     public static final String FRAGMENT_RATIO = "self-optimizing.fragment-ratio";
     public static final String MIN_TARGET_SIZE_RATIO = "self-optimizing.min-target-size-ratio";
 
