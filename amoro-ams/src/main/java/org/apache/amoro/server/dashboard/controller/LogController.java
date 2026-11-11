@@ -23,7 +23,9 @@ package org.apache.amoro.server.dashboard.controller;
 import io.javalin.http.Context;
 import io.javalin.http.HttpCode;
 import org.apache.amoro.server.dashboard.response.OkResponse;
+import org.apache.amoro.server.optimizing.LogChunks;
 import org.apache.amoro.server.optimizing.LogWriter;
+import org.apache.amoro.server.optimizing.S3LogReader;
 import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.databind.JsonNode;
 import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
@@ -33,8 +35,11 @@ import org.slf4j.LoggerFactory;
 
 import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -50,6 +55,13 @@ public class LogController {
   private static final String DRIVER_LOG_FILE = LogWriter.DRIVER_LOG_FILE;
   private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
+  // Null in local storage mode: logs are read from LOG_DIR only.
+  private final S3LogReader s3LogReader;
+
+  public LogController(S3LogReader s3LogReader) {
+    this.s3LogReader = s3LogReader;
+  }
+
   /**
    * Parses a log file into a list of JSON objects. The file is expected to be NDJSON
    * (newline-delimited JSON), but may also contain raw Java stack trace lines that appear after an
@@ -61,69 +73,87 @@ public class LogController {
    * @return List of parsed log entry objects (as Maps)
    */
   private List<Map<String, Object>> parseNDJSONLogFile(Path logPath) {
-    List<Map<String, Object>> logEntries = new ArrayList<>();
     try (BufferedReader reader = Files.newBufferedReader(logPath)) {
-      String line;
-      int lineNumber = 0;
-      Map<String, Object> lastJsonEntry = null;
-      StringBuilder stackTraceBuffer = new StringBuilder();
-
-      while ((line = reader.readLine()) != null) {
-        lineNumber++;
-        String trimmed = line.trim();
-        if (trimmed.isEmpty()) {
-          continue;
-        }
-
-        if (trimmed.startsWith("{")) {
-          // Flush any accumulated raw stack trace lines to the preceding log entry.
-          // Only attach if the entry does not already have a non-empty stackTrace field
-          // (i.e. it was written by an older log4j2 pattern that did not embed the
-          // throwable).
-          if (stackTraceBuffer.length() > 0 && lastJsonEntry != null) {
-            Object existing = lastJsonEntry.get("stackTrace");
-            if (existing == null || existing.toString().isEmpty()) {
-              lastJsonEntry.put("stackTrace", stackTraceBuffer.toString().stripTrailing());
-            }
-            stackTraceBuffer.setLength(0);
-          }
-
-          try {
-            JsonNode jsonNode = OBJECT_MAPPER.readTree(trimmed);
-            Map<String, Object> logEntry = OBJECT_MAPPER.convertValue(jsonNode, Map.class);
-            logEntries.add(logEntry);
-            lastJsonEntry = logEntry;
-          } catch (Exception e) {
-            LOG.warn(
-                "Failed to parse JSON at line {} in {}: {}",
-                lineNumber,
-                logPath.getFileName(),
-                e.getMessage());
-            stackTraceBuffer.append(line).append("\n");
-          }
-        } else {
-          // Non-JSON line: part of a Java stack trace that was written outside the JSON
-          // object.
-          stackTraceBuffer.append(line).append("\n");
-        }
-      }
-
-      // Flush any stack trace that trails the last JSON entry (no subsequent JSON
-      // line).
-      if (stackTraceBuffer.length() > 0 && lastJsonEntry != null) {
-        Object existing = lastJsonEntry.get("stackTrace");
-        if (existing == null || existing.toString().isEmpty()) {
-          lastJsonEntry.put("stackTrace", stackTraceBuffer.toString().stripTrailing());
-        }
-      }
+      return parseNDJSON(reader, logPath.getFileName().toString());
     } catch (IOException e) {
       LOG.error("Failed to read log file: {}", logPath, e);
+      return new ArrayList<>();
+    }
+  }
+
+  private List<Map<String, Object>> parseNDJSON(byte[] content, String fileName) {
+    try (BufferedReader reader =
+        new BufferedReader(
+            new InputStreamReader(new ByteArrayInputStream(content), StandardCharsets.UTF_8))) {
+      return parseNDJSON(reader, fileName);
+    } catch (IOException e) {
+      LOG.error("Failed to read log file: {}", fileName, e);
+      return new ArrayList<>();
+    }
+  }
+
+  private List<Map<String, Object>> parseNDJSON(BufferedReader reader, String fileName)
+      throws IOException {
+    List<Map<String, Object>> logEntries = new ArrayList<>();
+    String line;
+    int lineNumber = 0;
+    Map<String, Object> lastJsonEntry = null;
+    StringBuilder stackTraceBuffer = new StringBuilder();
+
+    while ((line = reader.readLine()) != null) {
+      lineNumber++;
+      String trimmed = line.trim();
+      if (trimmed.isEmpty()) {
+        continue;
+      }
+
+      if (trimmed.startsWith("{")) {
+        // Flush any accumulated raw stack trace lines to the preceding log entry.
+        // Only attach if the entry does not already have a non-empty stackTrace field
+        // (i.e. it was written by an older log4j2 pattern that did not embed the
+        // throwable).
+        if (stackTraceBuffer.length() > 0 && lastJsonEntry != null) {
+          Object existing = lastJsonEntry.get("stackTrace");
+          if (existing == null || existing.toString().isEmpty()) {
+            lastJsonEntry.put("stackTrace", stackTraceBuffer.toString().stripTrailing());
+          }
+          stackTraceBuffer.setLength(0);
+        }
+
+        try {
+          JsonNode jsonNode = OBJECT_MAPPER.readTree(trimmed);
+          Map<String, Object> logEntry = OBJECT_MAPPER.convertValue(jsonNode, Map.class);
+          logEntries.add(logEntry);
+          lastJsonEntry = logEntry;
+        } catch (Exception e) {
+          LOG.warn(
+              "Failed to parse JSON at line {} in {}: {}", lineNumber, fileName, e.getMessage());
+          stackTraceBuffer.append(line).append("\n");
+        }
+      } else {
+        // Non-JSON line: part of a Java stack trace that was written outside the JSON
+        // object.
+        stackTraceBuffer.append(line).append("\n");
+      }
+    }
+
+    // Flush any stack trace that trails the last JSON entry (no subsequent JSON
+    // line).
+    if (stackTraceBuffer.length() > 0 && lastJsonEntry != null) {
+      Object existing = lastJsonEntry.get("stackTrace");
+      if (existing == null || existing.toString().isEmpty()) {
+        lastJsonEntry.put("stackTrace", stackTraceBuffer.toString().stripTrailing());
+      }
     }
     return logEntries;
   }
 
   public void getProcessLogs(Context ctx) {
     String processId = ctx.pathParam("processId");
+    if (s3LogReader != null) {
+      getProcessLogsFromS3(ctx, processId);
+      return;
+    }
     Path processDir = Paths.get(LOG_BASE_DIR, processId);
 
     Map<String, Object> response = new HashMap<>();
@@ -192,6 +222,10 @@ public class LogController {
   public void downloadLogFile(Context ctx) {
     String processId = ctx.pathParam("processId");
     String fileId = ctx.pathParam("fileId");
+    if (s3LogReader != null) {
+      downloadLogFileFromS3(ctx, processId, fileId);
+      return;
+    }
     // fileId is either "driver" or a taskId like "1", "2", etc.
     String fileName = fileId + ".log";
     Path logFile = Paths.get(LOG_BASE_DIR, processId, fileName);
@@ -214,6 +248,10 @@ public class LogController {
 
   public void downloadProcessLogs(Context ctx) {
     String processId = ctx.pathParam("processId");
+    if (s3LogReader != null) {
+      downloadProcessLogsFromS3(ctx, processId);
+      return;
+    }
     Path processDir = Paths.get(LOG_BASE_DIR, processId);
 
     if (!Files.exists(processDir) || !Files.isDirectory(processDir)) {
@@ -245,6 +283,119 @@ public class LogController {
       }
     } catch (IOException e) {
       LOG.error("Failed to create tar archive for process {}", processId, e);
+    }
+  }
+
+  private void getProcessLogsFromS3(Context ctx, String processId) {
+    Map<String, Object> response = new HashMap<>();
+    response.put("processId", processId);
+
+    Map<String, byte[]> files = isProcessId(processId) ? readAll(processId) : Map.of();
+    if (files.isEmpty()) {
+      response.put("exists", false);
+      response.put("message", "Process log directory not found");
+      response.put("driverLog", null);
+      response.put("taskLogs", new ArrayList<>());
+      ctx.json(OkResponse.of(response));
+      return;
+    }
+
+    response.put("exists", true);
+    Map<String, Object> driverLog = new HashMap<>();
+    byte[] driverContent = files.get(LogChunks.DRIVER_FILE_BASE);
+    driverLog.put("exists", driverContent != null);
+    if (driverContent != null) {
+      driverLog.put("content", parseNDJSON(driverContent, DRIVER_LOG_FILE));
+    }
+    response.put("driverLog", driverLog);
+
+    List<Map<String, Object>> taskLogs = new ArrayList<>();
+    files.forEach(
+        (fileBase, content) -> {
+          if (LogChunks.DRIVER_FILE_BASE.equals(fileBase)) {
+            return;
+          }
+          Map<String, Object> taskLog = new HashMap<>();
+          taskLog.put("taskId", fileBase);
+          taskLog.put("exists", true);
+          taskLog.put("content", parseNDJSON(content, fileBase + ".log"));
+          taskLogs.add(taskLog);
+        });
+    response.put("taskLogs", taskLogs);
+    ctx.json(OkResponse.of(response));
+  }
+
+  private void downloadLogFileFromS3(Context ctx, String processId, String fileId) {
+    String fileName = fileId + ".log";
+    if (!isProcessId(processId) || !LogChunks.isValidFileBase(fileId)) {
+      ctx.status(HttpCode.BAD_REQUEST).result("Invalid log file: " + processId + "/" + fileName);
+      return;
+    }
+    byte[] content;
+    try {
+      content = s3LogReader.read(Long.parseLong(processId), fileId);
+    } catch (RuntimeException e) {
+      LOG.error("Failed to read log file {}/{}", processId, fileName, e);
+      ctx.status(HttpCode.INTERNAL_SERVER_ERROR).result("Failed to read log file");
+      return;
+    }
+    if (content == null) {
+      ctx.status(HttpCode.NOT_FOUND).result("Log file not found: " + processId + "/" + fileName);
+      return;
+    }
+    ctx.header("Content-Type", "text/plain; charset=UTF-8");
+    ctx.header("Content-Disposition", "attachment; filename=\"" + fileName + "\"");
+    ctx.result(content);
+  }
+
+  private void downloadProcessLogsFromS3(Context ctx, String processId) {
+    Map<String, byte[]> files = isProcessId(processId) ? readAll(processId) : Map.of();
+    if (files.isEmpty()) {
+      ctx.status(HttpCode.NOT_FOUND).result("Process log directory not found: " + processId);
+      return;
+    }
+
+    String tarFileName = "compaction-logs-" + processId + ".tar";
+    ctx.header("Content-Type", "application/x-tar");
+    ctx.header("Content-Disposition", "attachment; filename=\"" + tarFileName + "\"");
+
+    try {
+      OutputStream out = ctx.res.getOutputStream();
+      try (TarArchiveOutputStream tar = new TarArchiveOutputStream(new BufferedOutputStream(out))) {
+        tar.setLongFileMode(TarArchiveOutputStream.LONGFILE_POSIX);
+        for (Map.Entry<String, byte[]> file : files.entrySet()) {
+          TarArchiveEntry entry = new TarArchiveEntry(file.getKey() + ".log");
+          entry.setSize(file.getValue().length);
+          tar.putArchiveEntry(entry);
+          tar.write(file.getValue());
+          tar.closeArchiveEntry();
+        }
+        tar.finish();
+      }
+    } catch (IOException e) {
+      LOG.error("Failed to create tar archive for process {}", processId, e);
+    }
+  }
+
+  /**
+   * Reads all log files of a process from S3 and local disk. A read failure is logged and shown as
+   * no logs, like a missing local directory.
+   */
+  private Map<String, byte[]> readAll(String processId) {
+    try {
+      return s3LogReader.readAll(Long.parseLong(processId));
+    } catch (RuntimeException e) {
+      LOG.error("Failed to read logs of process {}", processId, e);
+      return Map.of();
+    }
+  }
+
+  private static boolean isProcessId(String processId) {
+    try {
+      Long.parseLong(processId);
+      return true;
+    } catch (NumberFormatException e) {
+      return false;
     }
   }
 }

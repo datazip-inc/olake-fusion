@@ -46,6 +46,10 @@ import org.apache.amoro.server.ha.HighAvailabilityContainer;
 import org.apache.amoro.server.ha.HighAvailabilityContainerFactory;
 import org.apache.amoro.server.manager.EventsManager;
 import org.apache.amoro.server.manager.MetricManager;
+import org.apache.amoro.server.optimizing.LogUploader;
+import org.apache.amoro.server.optimizing.LogWriter;
+import org.apache.amoro.server.optimizing.S3LogReader;
+import org.apache.amoro.server.optimizing.S3LogStore;
 import org.apache.amoro.server.persistence.DataSourceFactory;
 import org.apache.amoro.server.persistence.HttpSessionHandlerFactory;
 import org.apache.amoro.server.persistence.SqlSessionFactoryProvider;
@@ -122,6 +126,9 @@ public class AmoroServiceContainer {
   private DefaultOptimizingService optimizingService;
   private ProcessService processService;
   private TerminalManager terminalManager;
+  // Null in local storage mode (OLAKE_STORAGE_MODE not s3).
+  private S3LogStore logStore;
+  private LogUploader logUploader;
   private Configurations serviceConfig;
   private TServer tableManagementServer;
   private TServer optimizingServiceServer;
@@ -215,6 +222,7 @@ public class AmoroServiceContainer {
     tableManager = new DefaultTableManager(serviceConfig, catalogManager);
     optimizerManager = new DefaultOptimizerManager(serviceConfig, catalogManager);
     terminalManager = new TerminalManager(serviceConfig, catalogManager);
+    logStore = S3LogStore.fromEnv();
 
     initHttpService();
     startHttpService();
@@ -269,6 +277,11 @@ public class AmoroServiceContainer {
     tableManager.setTableService(tableService);
 
     new OptimizerBootstrap(serviceConfig, optimizerManager, optimizingService).run();
+    if (logStore != null) {
+      // Before the Thrift server, so every appended line is buffered for upload.
+      logUploader = new LogUploader(logStore, LogWriter.get());
+      logUploader.start();
+    }
     initThriftService();
     startThriftService();
   }
@@ -289,6 +302,12 @@ public class AmoroServiceContainer {
       LOG.info("Stopping optimizing server[serving:{}] ...", optimizingServiceServer.isServing());
       optimizingServiceServer.stop();
     }
+    // The optimizer sends no more lines: upload them now. The services below can take minutes to
+    // stop, longer than a pod's grace period.
+    if (logUploader != null) {
+      LOG.info("Uploading optimizing logs...");
+      logUploader.flushAll();
+    }
     if (tableService != null) {
       LOG.info("Stopping table service...");
       tableService.dispose();
@@ -302,6 +321,12 @@ public class AmoroServiceContainer {
     if (processService != null) {
       LOG.info("Stopping process server...");
       processService.dispose();
+    }
+    // Last, so the final upload also takes the lines the services above wrote while stopping.
+    if (logUploader != null) {
+      LOG.info("Stopping optimizing log uploader...");
+      logUploader.dispose();
+      logUploader = null;
     }
   }
 
@@ -321,6 +346,10 @@ public class AmoroServiceContainer {
     }
     if (amsServiceMetrics != null) {
       amsServiceMetrics.unregister();
+    }
+    if (logStore != null) {
+      logStore.close();
+      logStore = null;
     }
 
     EventsManager.dispose();
@@ -392,7 +421,13 @@ public class AmoroServiceContainer {
   private void initHttpService() {
     DashboardServer dashboardServer =
         new DashboardServer(
-            serviceConfig, catalogManager, tableManager, optimizerManager, terminalManager, this);
+            serviceConfig,
+            catalogManager,
+            tableManager,
+            optimizerManager,
+            terminalManager,
+            logStore == null ? null : new S3LogReader(logStore, LogWriter.get()),
+            this);
     RestCatalogService restCatalogService = new RestCatalogService(catalogManager, tableManager);
 
     httpServer =
