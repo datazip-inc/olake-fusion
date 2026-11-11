@@ -67,20 +67,27 @@ public class TestExecutorOverheadCheck {
   }
 
   @Test
-  public void fixSetsTheFactorWhenTheOverheadIsNotExplicit() {
-    SparkConf conf = new SparkConf(false).set("spark.executor.memory", "3g");
+  public void fixSetsTheFactorFrom4gWhenTheOverheadIsNotExplicit() {
+    SparkConf conf = new SparkConf(false).set("spark.executor.memory", "4g");
     Assertions.assertEquals(
-        "spark.executor.memoryOverheadFactor=0.15", ExecutorOverheadCheck.overheadFix(conf, 460));
+        "spark.executor.memoryOverheadFactor=0.15", ExecutorOverheadCheck.overheadFix(conf, 614));
+  }
+
+  @Test
+  public void fixSetsAFixedOverheadBelow4gBecauseAFactorKeepsSparksMinimum() {
+    SparkConf conf = new SparkConf(false).set("spark.executor.memory", "2g");
+    Assertions.assertEquals(
+        "spark.executor.memoryOverhead=512m", ExecutorOverheadCheck.overheadFix(conf, 512));
   }
 
   @Test
   public void fixSetsTheOverheadWhenItIsExplicitBecauseSparkIgnoresTheFactor() {
     SparkConf conf =
         new SparkConf(false)
-            .set("spark.executor.memory", "2g")
+            .set("spark.executor.memory", "6g")
             .set("spark.executor.memoryOverhead", "128m")
             .set("spark.executor.memoryOverheadFactor", "0.15");
     Assertions.assertEquals(
-        "spark.executor.memoryOverhead=384m", ExecutorOverheadCheck.overheadFix(conf, 384));
+        "spark.executor.memoryOverhead=921m", ExecutorOverheadCheck.overheadFix(conf, 921));
   }
 }

@@ -190,8 +190,23 @@ public class TestExecutorMemoryUtil {
   }
 
   @Test
-  public void recommendedOverheadIsAtLeastTheMinimum() {
+  public void recommendedOverheadIs512mBelow4g() {
+    Assertions.assertEquals(512, ExecutorMemoryUtil.recommendedOverheadMb(1024));
+    Assertions.assertEquals(512, ExecutorMemoryUtil.recommendedOverheadMb(2048));
+    Assertions.assertEquals(512, ExecutorMemoryUtil.recommendedOverheadMb(3072));
+  }
+
+  @Test
+  public void recommendedOverheadIs15PercentFrom4gTo6g() {
+    Assertions.assertEquals(614, ExecutorMemoryUtil.recommendedOverheadMb(4096));
+    Assertions.assertEquals(921, ExecutorMemoryUtil.recommendedOverheadMb(6144));
+  }
+
+  @Test
+  public void recommendedOverheadFactorIsTheDefaultAbove6g() {
+    Assertions.assertEquals(0.15, ExecutorMemoryUtil.recommendedOverheadFactor(6144));
     Assertions.assertEquals(
-        ExecutorMemoryUtil.MIN_OVERHEAD_MB, ExecutorMemoryUtil.recommendedOverheadMb(1000));
+        ExecutorMemoryUtil.DEFAULT_OVERHEAD_FACTOR,
+        ExecutorMemoryUtil.recommendedOverheadFactor(8192));
   }
 }

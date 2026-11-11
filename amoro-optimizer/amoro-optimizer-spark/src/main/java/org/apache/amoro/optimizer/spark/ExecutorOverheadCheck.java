@@ -67,11 +67,16 @@ final class ExecutorOverheadCheck {
     }
   }
 
-  // Spark ignores the factor when the overhead is set explicitly, so the fix has to change that
+  /**
+   * The setting to change. A fixed overhead below 4g, where any factor still gives Spark's 384 MB
+   * minimum, and whenever the overhead is set explicitly, because Spark then ignores the factor.
+   * Otherwise the factor, so the overhead keeps following the executor memory.
+   */
   static String overheadFix(SparkConf conf, long recommendedMb) {
-    return conf.contains(MEMORY_OVERHEAD)
+    long executorMb = executorMemoryMb(conf);
+    return conf.contains(MEMORY_OVERHEAD) || executorMb < ExecutorMemoryUtil.FIXED_OVERHEAD_BELOW_MB
         ? MEMORY_OVERHEAD + "=" + recommendedMb + "m"
-        : MEMORY_OVERHEAD_FACTOR + "=" + ExecutorMemoryUtil.RECOMMENDED_OVERHEAD_FACTOR;
+        : MEMORY_OVERHEAD_FACTOR + "=" + ExecutorMemoryUtil.recommendedOverheadFactor(executorMb);
   }
 
   // Like Spark, a size without a unit is read as MiB

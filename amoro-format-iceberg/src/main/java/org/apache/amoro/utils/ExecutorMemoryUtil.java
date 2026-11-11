@@ -52,6 +52,11 @@ public final class ExecutorMemoryUtil {
   // Executors of RECOMMENDED_OVERHEAD_UP_TO_MB or less need this share as overhead
   public static final double RECOMMENDED_OVERHEAD_FACTOR = 0.15;
   public static final long RECOMMENDED_OVERHEAD_UP_TO_MB = 6144L;
+  // Native memory needs more than Spark's 384 MB minimum below 4g: a 2g executor was OOMKilled at
+  // 384
+  public static final long RECOMMENDED_MIN_OVERHEAD_MB = 512L;
+  // Below this size a factor can't raise the overhead above Spark's minimum, so it has to be fixed
+  public static final long FIXED_OVERHEAD_BELOW_MB = 4096L;
 
   private static final long GIB = 1L << 30;
 
@@ -141,12 +146,21 @@ public final class ExecutorMemoryUtil {
     return Math.max(MIN_OVERHEAD_MB, (long) (executorMemoryMb * overheadFactor));
   }
 
-  /** The smallest memory overhead to use for an executor of this size, in MB. */
+  /**
+   * The smallest memory overhead to use for an executor of this size, in MB: {@link
+   * #RECOMMENDED_OVERHEAD_FACTOR} up to {@link #RECOMMENDED_OVERHEAD_UP_TO_MB} and Spark's default
+   * factor above, at least {@link #RECOMMENDED_MIN_OVERHEAD_MB}.
+   */
   public static long recommendedOverheadMb(long executorMemoryMb) {
-    double factor =
-        executorMemoryMb <= RECOMMENDED_OVERHEAD_UP_TO_MB
-            ? RECOMMENDED_OVERHEAD_FACTOR
-            : DEFAULT_OVERHEAD_FACTOR;
-    return Math.max(MIN_OVERHEAD_MB, (long) (executorMemoryMb * factor));
+    return Math.max(
+        RECOMMENDED_MIN_OVERHEAD_MB,
+        (long) (executorMemoryMb * recommendedOverheadFactor(executorMemoryMb)));
+  }
+
+  /** The overhead factor to recommend for an executor of this size. */
+  public static double recommendedOverheadFactor(long executorMemoryMb) {
+    return executorMemoryMb <= RECOMMENDED_OVERHEAD_UP_TO_MB
+        ? RECOMMENDED_OVERHEAD_FACTOR
+        : DEFAULT_OVERHEAD_FACTOR;
   }
 }
