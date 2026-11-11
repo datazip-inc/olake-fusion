@@ -89,9 +89,13 @@ public final class ExecutorMemoryUtil {
     return BASE_KEY_BYTES + maxKeyLength;
   }
 
-  /** The most changed keys a task can hold: one per data row, and at most one per delete row. */
-  public static long changedKeysPerTask(long dataRows, long eqDeleteRows) {
-    return Math.min(dataRows, eqDeleteRows);
+  /**
+   * The most changed keys a task can hold. With the bloom filter, only delete keys found in the
+   * task's data rows are kept: one per data row, and at most one per delete row. Without it (few
+   * delete rows), every delete key is kept.
+   */
+  public static long changedKeysPerTask(long dataRows, long eqDeleteRows, boolean bloomFilter) {
+    return bloomFilter ? Math.min(dataRows, eqDeleteRows) : eqDeleteRows;
   }
 
   /**

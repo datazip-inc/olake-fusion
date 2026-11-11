@@ -43,18 +43,24 @@ public class TestExecutorMemoryUtil {
 
   @Test
   public void changedKeysAreCappedByDataRows() {
-    Assertions.assertEquals(100, ExecutorMemoryUtil.changedKeysPerTask(100, 500));
+    Assertions.assertEquals(100, ExecutorMemoryUtil.changedKeysPerTask(100, 500, true));
   }
 
   @Test
   public void changedKeysAreCappedByDeleteRows() {
-    Assertions.assertEquals(100, ExecutorMemoryUtil.changedKeysPerTask(500, 100));
+    Assertions.assertEquals(100, ExecutorMemoryUtil.changedKeysPerTask(500, 100, true));
   }
 
   @Test
   public void changedKeysAreZeroWithoutDataOrDeleteRows() {
-    Assertions.assertEquals(0, ExecutorMemoryUtil.changedKeysPerTask(0, 500));
-    Assertions.assertEquals(0, ExecutorMemoryUtil.changedKeysPerTask(500, 0));
+    Assertions.assertEquals(0, ExecutorMemoryUtil.changedKeysPerTask(0, 500, true));
+    Assertions.assertEquals(0, ExecutorMemoryUtil.changedKeysPerTask(500, 0, true));
+  }
+
+  @Test
+  public void withoutBloomFilterEveryDeleteRowIsAChangedKey() {
+    Assertions.assertEquals(500, ExecutorMemoryUtil.changedKeysPerTask(100, 500, false));
+    Assertions.assertEquals(100, ExecutorMemoryUtil.changedKeysPerTask(500, 100, false));
   }
 
   @Test

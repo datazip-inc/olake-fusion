@@ -337,7 +337,7 @@ public abstract class CombinedDeleteFilter<T extends StructLike> {
   public long changedKeysPerTask() {
     long eqDeleteRecordCnt =
         eqDeleteFilesByDeleteIds.values().stream().mapToLong(ContentFile::recordCount).sum();
-    return ExecutorMemoryUtil.changedKeysPerTask(dataRecordCnt, eqDeleteRecordCnt);
+    return ExecutorMemoryUtil.changedKeysPerTask(dataRecordCnt, eqDeleteRecordCnt, filterEqDelete);
   }
 
   /**

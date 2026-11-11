@@ -348,6 +348,8 @@ public class TestIcebergCombinedReader extends TableTestBase {
       Assert.assertEquals(1, Iterables.size(records));
     }
     Assert.assertEquals(32, dataReader.getDeleteFilter().maxKeyLength());
+    // No bloom filter: all 196 delete rows are kept, though the task has only 6 data rows
+    Assert.assertEquals(196, dataReader.getDeleteFilter().changedKeysPerTask());
     dataReader.close();
   }
 
