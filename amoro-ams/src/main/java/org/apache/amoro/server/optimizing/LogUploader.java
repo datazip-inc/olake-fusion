@@ -33,10 +33,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -47,7 +49,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * the same file wait, so the order holds.
  *
  * <p>A chunk is due when its buffer reaches 1 MiB (the append wakes this thread at once) or holds
- * lines older than 30 s. On dispose, every buffer is closed and uploaded once more.
+ * lines older than 30 s. On shutdown, every buffer is closed and uploaded twice: by {@link
+ * #flushAll()} right after the Thrift server stops, and by {@link #dispose()} at the end.
  */
 public class LogUploader {
 
@@ -85,6 +88,23 @@ public class LogUploader {
     writer.enableChunking(CHUNK_THRESHOLD_BYTES, this::wake);
     executor.scheduleWithFixedDelay(() -> runSafely(false), 0, TICK_MS, TimeUnit.MILLISECONDS);
     LOG.info("Optimizing log uploader started, target {}", store.describe());
+  }
+
+  /**
+   * Closes and uploads every buffer now, waiting up to 30 s, and keeps running. Called on shutdown
+   * right after the Thrift server stops, so the optimizer's lines reach S3 before the slower
+   * services stop and the pod's grace period may end.
+   */
+  public void flushAll() {
+    try {
+      executor.submit(() -> runSafely(true)).get(FINAL_FLUSH_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    } catch (TimeoutException e) {
+      LOG.warn("Upload of optimizing logs did not finish in time; it continues in the background");
+    } catch (RejectedExecutionException | ExecutionException e) {
+      // Already disposed, or runSafely failed (it logs its own errors).
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+    }
   }
 
   /** Closes and uploads every buffer once more, waiting up to 30 s, then stops. */

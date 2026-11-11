@@ -302,10 +302,11 @@ public class AmoroServiceContainer {
       LOG.info("Stopping optimizing server[serving:{}] ...", optimizingServiceServer.isServing());
       optimizingServiceServer.stop();
     }
+    // The optimizer sends no more lines: upload them now. The services below can take minutes to
+    // stop, longer than a pod's grace period.
     if (logUploader != null) {
-      LOG.info("Stopping optimizing log uploader...");
-      logUploader.dispose();
-      logUploader = null;
+      LOG.info("Uploading optimizing logs...");
+      logUploader.flushAll();
     }
     if (tableService != null) {
       LOG.info("Stopping table service...");
@@ -320,6 +321,12 @@ public class AmoroServiceContainer {
     if (processService != null) {
       LOG.info("Stopping process server...");
       processService.dispose();
+    }
+    // Last, so the final upload also takes the lines the services above wrote while stopping.
+    if (logUploader != null) {
+      LOG.info("Stopping optimizing log uploader...");
+      logUploader.dispose();
+      logUploader = null;
     }
   }
 
