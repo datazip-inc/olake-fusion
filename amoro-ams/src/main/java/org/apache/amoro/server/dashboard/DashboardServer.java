@@ -57,6 +57,7 @@ import org.apache.amoro.server.dashboard.controller.TelemetryController;
 import org.apache.amoro.server.dashboard.controller.TerminalController;
 import org.apache.amoro.server.dashboard.controller.VersionController;
 import org.apache.amoro.server.dashboard.response.ErrorResponse;
+import org.apache.amoro.server.optimizing.S3LogReader;
 import org.apache.amoro.server.resource.OptimizerManager;
 import org.apache.amoro.server.table.TableManager;
 import org.apache.amoro.server.terminal.TerminalManager;
@@ -107,6 +108,7 @@ public class DashboardServer {
       TableManager tableManager,
       OptimizerManager optimizerManager,
       TerminalManager terminalManager,
+      S3LogReader s3LogReader,
       AmoroServiceContainer ams) {
     PlatformFileManager platformFileManager = new PlatformFileManager();
     this.catalogController = new CatalogController(catalogManager, platformFileManager);
@@ -126,7 +128,7 @@ public class DashboardServer {
     this.overviewController = new OverviewController(manager);
     APITokenManager apiTokenManager = new APITokenManager();
     this.apiTokenController = new ApiTokenController(apiTokenManager);
-    this.logController = new LogController();
+    this.logController = new LogController(s3LogReader);
     this.telemetryController = new TelemetryController();
 
     String authType = serviceConfig.get(AmoroManagementConf.HTTP_SERVER_REST_AUTH_TYPE);

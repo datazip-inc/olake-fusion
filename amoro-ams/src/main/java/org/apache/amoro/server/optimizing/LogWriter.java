@@ -28,17 +28,23 @@ import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.databind.ObjectMapp
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 
 /**
  * Writes optimizing logs to the AMS disk, and is their only writer. Layout matches what {@code
@@ -52,7 +58,12 @@ import java.util.Map;
  * dashboard only sees the logs the serving node received, unless {@code LOG_DIR} is shared or logs
  * move to a central store.
  *
- * <p>AMS does not delete these logs; retention is handled by olake-worker.
+ * <p>In NFS storage mode, AMS does not delete these logs; retention is handled by olake-worker.
+ *
+ * <p>In S3 storage mode, {@link LogUploader} turns on chunking: each local file is the buffer of
+ * the file's open chunk (see {@link LogChunks}). This class tracks the buffers, and under its lock
+ * closes a buffer into a pending chunk, so a write, a close and a read snapshot never interleave.
+ * Uploads never run under the lock, and appends never call S3.
  */
 public class LogWriter {
 
@@ -70,6 +81,11 @@ public class LogWriter {
   // driver.log is the only file with more than one writer (the optimizer and AMS itself both
   // append to it); every other file has a single writer. One lock is enough for either case.
   private final Object lock = new Object();
+  // Guarded by lock. Null in NFS storage mode.
+  private Chunking chunking;
+  // Guarded by lock. Counts closed buffers, so a reader can tell that a chunk was closed while it
+  // read the S3 chunks.
+  private long closeGeneration;
 
   private LogWriter(String logBaseDir) {
     this.logBaseDir = logBaseDir;
@@ -140,24 +156,223 @@ public class LogWriter {
    *     drop a log line, so the caller sees the failure.
    */
   private void write(Path path, StringBuilder content) {
+    byte[] bytes = content.toString().getBytes(StandardCharsets.UTF_8);
+    Runnable onBufferFull = null;
     synchronized (lock) {
       try {
         Files.createDirectories(path.getParent());
-        Files.write(
-            path,
-            content.toString().getBytes(StandardCharsets.UTF_8),
-            StandardOpenOption.CREATE,
-            StandardOpenOption.APPEND);
+        Files.write(path, bytes, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
       } catch (IOException e) {
         throw new UncheckedIOException("Failed to persist optimizing log lines to " + path, e);
       }
+      if (chunking != null) {
+        BufferState state =
+            chunking.buffers.computeIfAbsent(
+                path, p -> new BufferState(System.currentTimeMillis()));
+        state.bytes += bytes.length;
+        if (state.bytes >= chunking.thresholdBytes) {
+          onBufferFull = chunking.onBufferFull;
+        }
+      }
     }
+    // Outside the lock: only wakes the uploader, never waits for it.
+    if (onBufferFull != null) {
+      onBufferFull.run();
+    }
+  }
+
+  /**
+   * Turns on chunking (S3 storage mode). Buffers already on disk are tracked as due at once.
+   *
+   * @param thresholdBytes buffer size that makes a chunk due
+   * @param onBufferFull called, outside the lock, when a write makes a buffer reach the threshold;
+   *     must not block
+   */
+  void enableChunking(long thresholdBytes, Runnable onBufferFull) {
+    synchronized (lock) {
+      chunking = new Chunking(thresholdBytes, onBufferFull);
+      for (Path buffer : listBuffers()) {
+        BufferState state = new BufferState(0);
+        try {
+          state.bytes = Files.size(buffer);
+        } catch (IOException e) {
+          // Size is only used for the threshold; the age of 0 already makes the buffer due.
+        }
+        chunking.buffers.put(buffer, state);
+      }
+    }
+  }
+
+  void disableChunking() {
+    synchronized (lock) {
+      chunking = null;
+    }
+  }
+
+  /**
+   * Buffers whose chunk is due: at least the threshold in size, or holding lines older than
+   * maxAgeMillis. With all set, every buffer.
+   */
+  List<Path> dueBuffers(long nowMillis, long maxAgeMillis, boolean all) {
+    synchronized (lock) {
+      List<Path> due = new ArrayList<>();
+      if (chunking == null) {
+        return due;
+      }
+      chunking.buffers.forEach(
+          (path, state) -> {
+            if (all
+                || state.bytes >= chunking.thresholdBytes
+                || nowMillis - state.firstWriteMillis >= maxAgeMillis) {
+              due.add(path);
+            }
+          });
+      return due;
+    }
+  }
+
+  /**
+   * Closes a buffer: renames it to its pending chunk, so new lines start a fresh buffer.
+   *
+   * @return false if the buffer no longer exists
+   * @throws IOException if the rename fails; the buffer is then kept
+   */
+  boolean closeBuffer(Path buffer, Path pending) throws IOException {
+    synchronized (lock) {
+      try {
+        Files.move(buffer, pending, StandardCopyOption.ATOMIC_MOVE);
+      } catch (NoSuchFileException e) {
+        if (chunking != null) {
+          chunking.buffers.remove(buffer);
+        }
+        return false;
+      }
+      if (chunking != null) {
+        chunking.buffers.remove(buffer);
+      }
+      closeGeneration++;
+      return true;
+    }
+  }
+
+  /** Deletes a process directory if it is empty. A concurrent write recreates it. */
+  boolean deleteDirIfEmpty(Path dir) {
+    synchronized (lock) {
+      try {
+        Files.deleteIfExists(dir);
+        return true;
+      } catch (IOException e) {
+        // Not empty (a buffer or a pending chunk is left), or not deletable now; retried later.
+        return false;
+      }
+    }
+  }
+
+  /**
+   * Snapshot of a process's local files in S3 storage mode: the open buffers and the pending
+   * chunks. Pending files are immutable, so only their paths are taken; a pending file deleted
+   * later was uploaded first, so the reader then finds it in S3.
+   *
+   * @throws UncheckedIOException if the directory cannot be listed or a buffer cannot be read
+   */
+  LocalSnapshot snapshot(long processId) {
+    Path dir = processDir(processId);
+    synchronized (lock) {
+      LocalSnapshot snapshot = new LocalSnapshot(closeGeneration);
+      if (!Files.isDirectory(dir)) {
+        return snapshot;
+      }
+      try (DirectoryStream<Path> stream =
+          Files.newDirectoryStream(dir, "*" + LogChunks.BUFFER_SUFFIX)) {
+        for (Path file : stream) {
+          String bufferBase = LogChunks.bufferBase(file.getFileName().toString());
+          if (bufferBase != null) {
+            snapshot.buffers.put(bufferBase, Files.readAllBytes(file));
+          }
+        }
+      } catch (IOException e) {
+        throw new UncheckedIOException("Failed to read local optimizing logs in " + dir, e);
+      }
+      snapshot.pending.putAll(LogChunks.listPending(dir));
+      return snapshot;
+    }
+  }
+
+  long closeGeneration() {
+    synchronized (lock) {
+      return closeGeneration;
+    }
+  }
+
+  Path baseDir() {
+    return Paths.get(logBaseDir);
+  }
+
+  Path processDir(long processId) {
+    return Paths.get(logBaseDir, String.valueOf(processId));
+  }
+
+  private List<Path> listBuffers() {
+    List<Path> buffers = new ArrayList<>();
+    Path base = baseDir();
+    if (!Files.isDirectory(base)) {
+      return buffers;
+    }
+    try (DirectoryStream<Path> processDirs =
+        Files.newDirectoryStream(
+            base, path -> Files.isDirectory(path) && LogChunks.isProcessDir(path))) {
+      for (Path dir : processDirs) {
+        try (DirectoryStream<Path> files = Files.newDirectoryStream(dir)) {
+          for (Path file : files) {
+            if (LogChunks.bufferBase(file.getFileName().toString()) != null) {
+              buffers.add(file);
+            }
+          }
+        }
+      }
+    } catch (IOException e) {
+      throw new UncheckedIOException("Failed to list optimizing log buffers in " + base, e);
+    }
+    return buffers;
   }
 
   private Path resolvePath(OptimizingTaskId taskId) {
     Path processDir = Paths.get(logBaseDir, String.valueOf(taskId.getProcessId()));
     return processDir.resolve(
         taskId.getTaskId() == 0 ? DRIVER_LOG_FILE : taskId.getTaskId() + ".log");
+  }
+
+  /** Local files of one process, taken under the lock. */
+  static final class LocalSnapshot {
+    final long closeGeneration;
+    // File base -> content of the open buffer.
+    final Map<String, byte[]> buffers = new HashMap<>();
+    // File base -> counter -> pending chunk file.
+    final Map<String, TreeMap<Long, Path>> pending = new HashMap<>();
+
+    LocalSnapshot(long closeGeneration) {
+      this.closeGeneration = closeGeneration;
+    }
+  }
+
+  private static final class Chunking {
+    final long thresholdBytes;
+    final Runnable onBufferFull;
+    final Map<Path, BufferState> buffers = new HashMap<>();
+
+    Chunking(long thresholdBytes, Runnable onBufferFull) {
+      this.thresholdBytes = thresholdBytes;
+      this.onBufferFull = onBufferFull;
+    }
+  }
+
+  private static final class BufferState {
+    final long firstWriteMillis;
+    long bytes;
+
+    BufferState(long firstWriteMillis) {
+      this.firstWriteMillis = firstWriteMillis;
+    }
   }
 
   private static String envOrDefault(String key, String defaultValue) {
