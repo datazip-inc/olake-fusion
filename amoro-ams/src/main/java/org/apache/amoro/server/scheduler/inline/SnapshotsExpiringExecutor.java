@@ -48,6 +48,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Clock;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -322,7 +324,7 @@ public class SnapshotsExpiringExecutor extends PeriodicTableScheduler {
   }
 
   /**
-   * The expired snapshots as {@code {snapshot_id, commit_time}}; above {@link
+   * The expired snapshots as {@code {snapshot_id=<id>, commit_time=<UTC ISO-8601>}}; above {@link
    * #MAX_LOGGED_SNAPSHOTS}, the first ones and "and N more".
    */
   private static String expiredMessage(SnapshotExpirySummary summary) {
@@ -330,7 +332,13 @@ public class SnapshotsExpiringExecutor extends PeriodicTableScheduler {
     String listed =
         expired.stream()
             .limit(MAX_LOGGED_SNAPSHOTS)
-            .map(s -> "{" + s.snapshotId() + ", " + s.timestampMillis() + "}")
+            .map(
+                s ->
+                    "{snapshot_id="
+                        + s.snapshotId()
+                        + ", commit_time="
+                        + Instant.ofEpochMilli(s.timestampMillis()).truncatedTo(ChronoUnit.SECONDS)
+                        + "}")
             .collect(Collectors.joining(", "));
     int more = expired.size() - Math.min(expired.size(), MAX_LOGGED_SNAPSHOTS);
     return String.format(
