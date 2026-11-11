@@ -55,7 +55,7 @@ public class LogController {
   private static final String DRIVER_LOG_FILE = LogWriter.DRIVER_LOG_FILE;
   private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
-  // Null in NFS storage mode: logs are read from local disk only.
+  // Null in local storage mode: logs are read from LOG_DIR only.
   private final S3LogReader s3LogReader;
 
   public LogController(S3LogReader s3LogReader) {

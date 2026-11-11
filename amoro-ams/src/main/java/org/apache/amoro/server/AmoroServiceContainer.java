@@ -126,7 +126,7 @@ public class AmoroServiceContainer {
   private DefaultOptimizingService optimizingService;
   private ProcessService processService;
   private TerminalManager terminalManager;
-  // Null in NFS storage mode.
+  // Null in local storage mode (OLAKE_STORAGE_MODE not s3).
   private S3LogStore logStore;
   private LogUploader logUploader;
   private Configurations serviceConfig;

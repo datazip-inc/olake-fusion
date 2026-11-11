@@ -58,7 +58,8 @@ import java.util.TreeMap;
  * dashboard only sees the logs the serving node received, unless {@code LOG_DIR} is shared or logs
  * move to a central store.
  *
- * <p>In NFS storage mode, AMS does not delete these logs; retention is handled by olake-worker.
+ * <p>In local storage mode ({@code OLAKE_STORAGE_MODE} not {@code s3}), logs stay in {@code
+ * LOG_DIR} and AMS does not delete them; retention is handled by olake-worker.
  *
  * <p>In S3 storage mode, {@link LogUploader} turns on chunking: each local file is the buffer of
  * the file's open chunk (see {@link LogChunks}). This class tracks the buffers, and under its lock
@@ -81,7 +82,7 @@ public class LogWriter {
   // driver.log is the only file with more than one writer (the optimizer and AMS itself both
   // append to it); every other file has a single writer. One lock is enough for either case.
   private final Object lock = new Object();
-  // Guarded by lock. Null in NFS storage mode.
+  // Guarded by lock. Null in local storage mode.
   private Chunking chunking;
   // Guarded by lock. Counts closed buffers, so a reader can tell that a chunk was closed while it
   // read the S3 chunks.

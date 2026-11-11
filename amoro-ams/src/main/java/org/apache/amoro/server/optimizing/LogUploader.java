@@ -53,7 +53,7 @@ public class LogUploader {
 
   private static final Logger LOG = LoggerFactory.getLogger(LogUploader.class);
 
-  // Same chunk size as olake-worker.
+  // Same as olake-worker's largest (steady-state) chunk size.
   static final long CHUNK_THRESHOLD_BYTES = 1 << 20;
   static final long FLUSH_INTERVAL_MS = 30_000;
   private static final long TICK_MS = 5_000;
