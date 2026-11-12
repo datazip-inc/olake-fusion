@@ -131,6 +131,8 @@ public class TestTelemetry {
     // A duplicate catalog name, thrown by createCatalog itself.
     Assertions.assertEquals("catalog_error", categoryOf(new AlreadyExistsException(HOST)));
     Assertions.assertEquals("config_invalid", categoryOf(new BadRequestException(HOST)));
+    // Iceberg rejects bad catalog settings with IllegalArgumentException.
+    Assertions.assertEquals("config_invalid", categoryOf(new IllegalArgumentException(HOST)));
   }
 
   @Test
@@ -142,6 +144,6 @@ public class TestTelemetry {
   @Test
   public void subclassOfAMappedExceptionIsClassified() {
     // NumberFormatException is not listed; its superclass IllegalArgumentException is.
-    Assertions.assertEquals("internal_error", categoryOf(new NumberFormatException(HOST)));
+    Assertions.assertEquals("config_invalid", categoryOf(new NumberFormatException(HOST)));
   }
 }

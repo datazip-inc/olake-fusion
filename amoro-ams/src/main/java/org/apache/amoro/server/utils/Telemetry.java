@@ -162,7 +162,15 @@ public class Telemetry {
         "NotFoundException",
         "NoSuchIcebergTableException",
         "NoSuchIcebergViewException"),
-    CONFIG_INVALID("BadRequestException", "UnprocessableEntityException", "InvalidInputException"),
+    /**
+     * Iceberg throws IllegalArgumentException for bad catalog settings (a missing warehouse, a bad
+     * URI, an unknown catalog-impl), which are user config mistakes.
+     */
+    CONFIG_INVALID(
+        "BadRequestException",
+        "UnprocessableEntityException",
+        "InvalidInputException",
+        "IllegalArgumentException"),
     CATALOG_ERROR(
         "AlreadyExistsException",
         "CommitStateUnknownException",
@@ -182,7 +190,6 @@ public class Telemetry {
         "ClassNotFoundException",
         "NullPointerException",
         "AssertionError",
-        "IllegalArgumentException",
         "IllegalStateException"),
     /** Fallback for failures not mapped above, as olake errs.Unclassified. */
     UNCLASSIFIED;
