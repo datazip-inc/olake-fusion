@@ -323,7 +323,8 @@ public class TestSnapshotsExpiringExecutor extends SnapshotExpiryTestBase {
     verify(telemetry)
         .trackSnapshotExpiryCompleted(
             eq("FAILED"), anyLong(), eq(3), eq(0), eq(0), eq(0), anyLong(), anyInt(), anyLong());
-    verify(telemetry, never()).trackFailure(any(), anyString(), any());
+    verify(telemetry, never()).trackFailure(any(), anyString(), any(Throwable.class));
+    verify(telemetry, never()).trackFailure(any(), anyString(), anyString());
   }
 
   @Test
