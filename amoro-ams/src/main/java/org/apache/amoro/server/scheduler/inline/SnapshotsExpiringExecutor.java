@@ -35,8 +35,8 @@ import org.apache.amoro.server.scheduler.PeriodicTableScheduler;
 import org.apache.amoro.server.table.DefaultTableRuntime;
 import org.apache.amoro.server.table.TableService;
 import org.apache.amoro.server.utils.Command;
-import org.apache.amoro.server.utils.Telemetry;
 import org.apache.amoro.server.utils.SnowflakeIdGenerator;
+import org.apache.amoro.server.utils.Telemetry;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
 import org.apache.amoro.table.TableProperties;
 import org.apache.amoro.utils.CronUtils;
@@ -150,10 +150,8 @@ public class SnapshotsExpiringExecutor extends PeriodicTableScheduler {
           tableRuntime.getTableIdentifier(),
           t);
       Telemetry.getInstance()
-              .trackFailure(
-                      Command.EXPIRE_SNAPSHOTS,
-                      Telemetry.errorSource(tableRuntime.getFormat()),
-                      t);
+          .trackFailure(
+              Command.EXPIRE_SNAPSHOTS, Telemetry.errorSource(tableRuntime.getFormat()), t);
     }
   }
 
