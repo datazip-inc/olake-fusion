@@ -46,6 +46,7 @@ enum FailureCategory {
       "SQLNonTransientConnectionException"),
   TIMEOUT(
       "SocketTimeoutException",
+      "TimeoutException",
       "ConnectTimeoutException",
       "OperationTimeoutException",
       "SQLTimeoutException"),

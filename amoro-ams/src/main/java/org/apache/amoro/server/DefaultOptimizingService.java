@@ -76,6 +76,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -597,6 +598,9 @@ public class DefaultOptimizingService extends StatedPersistentBase
                           .forEach(task -> retryTask(task, queue)));
           if (isExpired) {
             LOG.info("Optimizer {} has been expired, unregister it", keepingTask.getOptimizer());
+            Telemetry.getInstance()
+                .trackFailure(
+                    Telemetry.Command.OPTIMIZER_EXPIRED, null, new TimeoutException("heartbeat"));
             unregisterOptimizer(token);
           } else {
             LOG.debug("Optimizer {} is being touched, keep it", keepingTask.getOptimizer());
