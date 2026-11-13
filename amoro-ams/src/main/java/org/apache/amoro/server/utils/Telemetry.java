@@ -116,7 +116,9 @@ public class Telemetry {
     // Optimizer bookkeeping in AMS, retried on a loop.
     KEEP_OPTIMIZERS,
     RETRY_OPTIMIZING_TASK,
-    SYNC_OPTIMIZER_GROUPS
+    SYNC_OPTIMIZER_GROUPS,
+    // An optimizer that stopped heart-beating, e.g. after a crash or an OOM kill.
+    OPTIMIZER_EXPIRED
   }
 
   /** Set from the AMS configuration; {@code null} means "not configured, fall back to the env". */
