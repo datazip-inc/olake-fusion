@@ -118,7 +118,9 @@ public class Telemetry {
     RETRY_OPTIMIZING_TASK,
     SYNC_OPTIMIZER_GROUPS,
     // An optimizer that stopped heart-beating, e.g. after a crash or an OOM kill.
-    OPTIMIZER_EXPIRED
+    OPTIMIZER_EXPIRED,
+    // No optimizer registered within a few minutes of AMS starting, e.g. a pod that never started.
+    OPTIMIZER_NOT_REGISTERED
   }
 
   /** Set from the AMS configuration; {@code null} means "not configured, fall back to the env". */

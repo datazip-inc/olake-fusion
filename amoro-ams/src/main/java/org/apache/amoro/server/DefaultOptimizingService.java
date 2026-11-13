@@ -658,11 +658,17 @@ public class DefaultOptimizingService extends StatedPersistentBase
   }
 
   private class OptimizingConfigWatcher implements Runnable {
+    /** How long AMS waits for an optimizer to register before reporting that none has. */
+    private static final long OPTIMIZER_REGISTER_GRACE_MS = 10 * 60 * 1000L;
+
     private final ScheduledExecutorService scheduler =
         Executors.newSingleThreadScheduledExecutor(
             new ThreadFactoryBuilder().setNameFormat("resource-group-watcher-%d").build());
+    private final AtomicBoolean optimizerNotRegisteredTracked = new AtomicBoolean(false);
+    private long startedAt;
 
     void start() {
+      startedAt = System.currentTimeMillis();
       run();
       scheduler.scheduleAtFixedRate(
           this, refreshGroupInterval, refreshGroupInterval, TimeUnit.MILLISECONDS);
@@ -671,6 +677,20 @@ public class DefaultOptimizingService extends StatedPersistentBase
     @Override
     public void run() {
       syncGroups();
+      checkOptimizerRegistered();
+    }
+
+    /** Once per AMS process: no optimizer has registered within the grace period. */
+    private void checkOptimizerRegistered() {
+      if (authOptimizers.isEmpty()
+          && System.currentTimeMillis() - startedAt > OPTIMIZER_REGISTER_GRACE_MS
+          && optimizerNotRegisteredTracked.compareAndSet(false, true)) {
+        Telemetry.getInstance()
+            .trackFailure(
+                Telemetry.Command.OPTIMIZER_NOT_REGISTERED,
+                null,
+                new TimeoutException("optimizer registration"));
+      }
     }
 
     private void syncGroups() {
