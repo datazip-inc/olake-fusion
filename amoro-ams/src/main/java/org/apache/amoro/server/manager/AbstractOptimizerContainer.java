@@ -24,6 +24,7 @@ import org.apache.amoro.OptimizerProperties;
 import org.apache.amoro.resource.InternalResourceContainer;
 import org.apache.amoro.resource.Resource;
 import org.apache.amoro.resource.ResourceStatus;
+import org.apache.amoro.server.utils.Command;
 import org.apache.amoro.server.utils.Telemetry;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
 import org.apache.amoro.utils.PropertyUtil;
@@ -67,13 +68,13 @@ public abstract class AbstractOptimizerContainer implements InternalResourceCont
     try {
       startupStats = doScaleOut(resource);
     } catch (Throwable t) {
-      Telemetry.getInstance().trackFailure(Telemetry.Command.START_OPTIMIZER, containerType(), t);
+      Telemetry.getInstance().trackFailure(Command.START_OPTIMIZER, containerType(), t);
       throw t;
     }
     resource.getProperties().putAll(startupStats);
   }
 
-  /** The container implementation, never its configured name: FlinkOptimizerContainer -> flink. */
+  /** The container implementation, never its configured name: SparkOptimizerContainer -> spark. */
   private String containerType() {
     return StringUtils.removeEnd(getClass().getSimpleName(), "OptimizerContainer")
         .toLowerCase(Locale.ROOT);

@@ -36,6 +36,7 @@ import org.apache.amoro.server.AmoroManagementConf;
 import org.apache.amoro.server.dashboard.utils.AmsUtil;
 import org.apache.amoro.server.persistence.PersistentBase;
 import org.apache.amoro.server.persistence.mapper.CatalogMetaMapper;
+import org.apache.amoro.server.utils.Command;
 import org.apache.amoro.server.utils.Telemetry;
 import org.apache.amoro.shade.guava32.com.google.common.annotations.VisibleForTesting;
 import org.apache.amoro.shade.guava32.com.google.common.cache.CacheBuilder;
@@ -97,8 +98,7 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
                     c.getCatalogName(),
                     c.getCatalogType(),
                     e);
-                Telemetry.getInstance()
-                    .trackFailure(Telemetry.Command.LOAD_CATALOG, c.getCatalogType(), e);
+                Telemetry.getInstance().trackFailure(Command.LOAD_CATALOG, c.getCatalogType(), e);
               }
             });
     LOG.info("DefaultCatalogManager initialized, total catalogs: {}", serverCatalogMap.size());
@@ -199,8 +199,7 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
           "Create catalog {}, type:{}", catalogMeta.getCatalogName(), catalogMeta.getCatalogType());
       created = true;
     } catch (Throwable t) {
-      Telemetry.getInstance()
-          .trackFailure(Telemetry.Command.CREATE_CATALOG, catalogMeta.getCatalogType(), t);
+      Telemetry.getInstance().trackFailure(Command.CREATE_CATALOG, catalogMeta.getCatalogType(), t);
       throw t;
     } finally {
       Telemetry.getInstance()
@@ -250,7 +249,7 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
       disposeCatalog(catalogName);
     } catch (Throwable t) {
       String catalogType = existing == null ? null : existing.getMetadata().getCatalogType();
-      Telemetry.getInstance().trackFailure(Telemetry.Command.DROP_CATALOG, catalogType, t);
+      Telemetry.getInstance().trackFailure(Command.DROP_CATALOG, catalogType, t);
       throw t;
     }
   }
@@ -270,8 +269,7 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
       LOG.info("Update catalog metadata: {}", catalogMeta.getCatalogName());
       updated = true;
     } catch (Throwable t) {
-      Telemetry.getInstance()
-          .trackFailure(Telemetry.Command.UPDATE_CATALOG, catalogMeta.getCatalogType(), t);
+      Telemetry.getInstance().trackFailure(Command.UPDATE_CATALOG, catalogMeta.getCatalogType(), t);
       throw t;
     } finally {
       Telemetry.getInstance()

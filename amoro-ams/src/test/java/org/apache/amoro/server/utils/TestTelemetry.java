@@ -42,7 +42,7 @@ public class TestTelemetry {
   private static final String HOST = "secret-host.internal";
 
   private static Map<String, Object> failureProps(Throwable error) {
-    return Telemetry.failureProps(Telemetry.Command.CREATE_CATALOG, "rest", error);
+    return Telemetry.failureProps(Command.CREATE_CATALOG, "rest", error);
   }
 
   /** The chain a Generic REST catalog with an unknown host produces in createCatalog. */
