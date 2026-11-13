@@ -72,6 +72,7 @@ import org.apache.amoro.server.dashboard.model.CatalogSettingInfo.ConfigFileItem
 import org.apache.amoro.server.dashboard.response.OkResponse;
 import org.apache.amoro.server.dashboard.utils.DesensitizationUtil;
 import org.apache.amoro.server.dashboard.utils.PropertiesUtil;
+import org.apache.amoro.server.utils.Command;
 import org.apache.amoro.server.utils.Telemetry;
 import org.apache.amoro.shade.guava32.com.google.common.base.Objects;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
@@ -615,7 +616,7 @@ public class CatalogController {
               "Duplicate catalog name!", new AlreadyExistsException("Catalog " + info.getName()));
       Telemetry.getInstance()
           .trackFailure(
-              Telemetry.Command.CREATE_CATALOG,
+              Command.CREATE_CATALOG,
               CatalogUtil.normalizeMetastoreType(info.getType()),
               duplicate);
       throw duplicate;

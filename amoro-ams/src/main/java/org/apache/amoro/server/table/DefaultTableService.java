@@ -40,6 +40,7 @@ import org.apache.amoro.server.persistence.TableRuntimeMeta;
 import org.apache.amoro.server.persistence.TableRuntimeState;
 import org.apache.amoro.server.persistence.mapper.TableMetaMapper;
 import org.apache.amoro.server.persistence.mapper.TableRuntimeMapper;
+import org.apache.amoro.server.utils.Command;
 import org.apache.amoro.server.utils.Telemetry;
 import org.apache.amoro.shade.guava32.com.google.common.annotations.VisibleForTesting;
 import org.apache.amoro.shade.guava32.com.google.common.base.MoreObjects;
@@ -283,8 +284,7 @@ public class DefaultTableService extends PersistentBase implements TableService 
             serverCatalog.name(),
             e);
         Telemetry.getInstance()
-            .trackFailure(
-                Telemetry.Command.EXPLORE_CATALOG, serverCatalog.getMetadata().getCatalogType(), e);
+            .trackFailure(Command.EXPLORE_CATALOG, serverCatalog.getMetadata().getCatalogType(), e);
       }
     }
 
@@ -332,7 +332,7 @@ public class DefaultTableService extends PersistentBase implements TableService 
                                   ex);
                               Telemetry.getInstance()
                                   .trackFailure(
-                                      Telemetry.Command.LIST_TABLES,
+                                      Command.LIST_TABLES,
                                       externalCatalog.getMetadata().getCatalogType(),
                                       ex);
                               failedDatabases.add(database);
@@ -381,7 +381,7 @@ public class DefaultTableService extends PersistentBase implements TableService 
                                 "TableExplorer sync table {} error", tableIdentity.toString(), e);
                             Telemetry.getInstance()
                                 .trackFailure(
-                                    Telemetry.Command.REGISTER_TABLE,
+                                    Command.REGISTER_TABLE,
                                     externalCatalog.getMetadata().getCatalogType(),
                                     e);
                           }
@@ -409,7 +409,7 @@ public class DefaultTableService extends PersistentBase implements TableService 
                                 e);
                             Telemetry.getInstance()
                                 .trackFailure(
-                                    Telemetry.Command.DISPOSE_TABLE,
+                                    Command.DISPOSE_TABLE,
                                     externalCatalog.getMetadata().getCatalogType(),
                                     e);
                           }

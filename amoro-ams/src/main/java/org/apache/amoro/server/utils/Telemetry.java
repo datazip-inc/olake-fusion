@@ -92,37 +92,6 @@ public class Telemetry {
    */
   static final String FAILURE_EVENT = "Failure - Fusion";
 
-  /**
-   * An operation whose failures are reported. Failure telemetry follows the OLake connector's
-   * TrackFailure (olake utils/telemetry) and its categories (olake utils/errs). Enum names are sent
-   * lower-cased: CREATE_CATALOG -> create_catalog.
-   */
-  public enum Command {
-    CREATE_CATALOG,
-    UPDATE_CATALOG,
-    DROP_CATALOG,
-    // Building a stored catalog when AMS starts.
-    LOAD_CATALOG,
-    // Table sync, run every explore interval.
-    EXPLORE_CATALOG,
-    LIST_TABLES,
-    // Registering a table newly found in the catalog; dispose is the reverse.
-    REGISTER_TABLE,
-    DISPOSE_TABLE,
-    // Launching an optimizer in its container; the source is the container type, e.g. flink.
-    START_OPTIMIZER,
-    // A started optimizer registering with AMS.
-    REGISTER_OPTIMIZER,
-    // Optimizer bookkeeping in AMS, retried on a loop.
-    KEEP_OPTIMIZERS,
-    RETRY_OPTIMIZING_TASK,
-    SYNC_OPTIMIZER_GROUPS,
-    // An optimizer that stopped heart-beating, e.g. after a crash or an OOM kill.
-    OPTIMIZER_EXPIRED,
-    // No optimizer registered within a few minutes of AMS starting, e.g. a pod that never started.
-    OPTIMIZER_NOT_REGISTERED
-  }
-
   /** Set from the AMS configuration; {@code null} means "not configured, fall back to the env". */
   private static volatile Boolean configuredDisabled;
 

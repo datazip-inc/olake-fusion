@@ -53,6 +53,7 @@ import org.apache.amoro.server.resource.QuotaProvider;
 import org.apache.amoro.server.table.DefaultTableRuntime;
 import org.apache.amoro.server.table.RuntimeHandlerChain;
 import org.apache.amoro.server.table.TableService;
+import org.apache.amoro.server.utils.Command;
 import org.apache.amoro.server.utils.Telemetry;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Sets;
@@ -302,7 +303,7 @@ public class DefaultOptimizingService extends StatedPersistentBase
       return optimizer.getToken();
     } catch (Throwable t) {
       // A started optimizer that AMS turns away, e.g. for an unknown group or a bad heartbeat.
-      Telemetry.getInstance().trackFailure(Telemetry.Command.REGISTER_OPTIMIZER, null, t);
+      Telemetry.getInstance().trackFailure(Command.REGISTER_OPTIMIZER, null, t);
       throw t;
     }
   }
@@ -599,8 +600,7 @@ public class DefaultOptimizingService extends StatedPersistentBase
           if (isExpired) {
             LOG.info("Optimizer {} has been expired, unregister it", keepingTask.getOptimizer());
             Telemetry.getInstance()
-                .trackFailure(
-                    Telemetry.Command.OPTIMIZER_EXPIRED, null, new TimeoutException("heartbeat"));
+                .trackFailure(Command.OPTIMIZER_EXPIRED, null, new TimeoutException("heartbeat"));
             unregisterOptimizer(token);
           } else {
             LOG.debug("Optimizer {} is being touched, keep it", keepingTask.getOptimizer());
@@ -609,7 +609,7 @@ public class DefaultOptimizingService extends StatedPersistentBase
         } catch (InterruptedException ignored) {
         } catch (Throwable t) {
           LOG.error("OptimizerKeeper has encountered a problem.", t);
-          Telemetry.getInstance().trackFailure(Telemetry.Command.KEEP_OPTIMIZERS, null, t);
+          Telemetry.getInstance().trackFailure(Command.KEEP_OPTIMIZERS, null, t);
         }
       }
     }
@@ -636,7 +636,7 @@ public class DefaultOptimizingService extends StatedPersistentBase
             "Retry task {} failed due to {}, will check it in next round",
             task.getTaskId(),
             e.getMessage());
-        Telemetry.getInstance().trackFailure(Telemetry.Command.RETRY_OPTIMIZING_TASK, null, e);
+        Telemetry.getInstance().trackFailure(Command.RETRY_OPTIMIZING_TASK, null, e);
       }
     }
 
@@ -687,7 +687,7 @@ public class DefaultOptimizingService extends StatedPersistentBase
           && optimizerNotRegisteredTracked.compareAndSet(false, true)) {
         Telemetry.getInstance()
             .trackFailure(
-                Telemetry.Command.OPTIMIZER_NOT_REGISTERED,
+                Command.OPTIMIZER_NOT_REGISTERED,
                 null,
                 new TimeoutException("optimizer registration"));
       }
@@ -716,7 +716,7 @@ public class DefaultOptimizingService extends StatedPersistentBase
             });
       } catch (Throwable t) {
         LOG.error("Sync optimizer groups failed, will retry later.", t);
-        Telemetry.getInstance().trackFailure(Telemetry.Command.SYNC_OPTIMIZER_GROUPS, null, t);
+        Telemetry.getInstance().trackFailure(Command.SYNC_OPTIMIZER_GROUPS, null, t);
       }
     }
 
