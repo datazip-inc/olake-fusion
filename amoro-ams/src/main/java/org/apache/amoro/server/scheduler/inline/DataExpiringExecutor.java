@@ -14,8 +14,6 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
- * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.scheduler.inline;
@@ -28,8 +26,6 @@ import org.apache.amoro.server.optimizing.maintainer.TableMaintainers;
 import org.apache.amoro.server.scheduler.PeriodicTableScheduler;
 import org.apache.amoro.server.table.TableService;
 import org.apache.amoro.server.table.cleanup.CleanupOperation;
-import org.apache.amoro.server.utils.Command;
-import org.apache.amoro.server.utils.Telemetry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -85,9 +81,6 @@ public class DataExpiringExecutor extends PeriodicTableScheduler {
       tableMaintainer.expireData();
     } catch (Throwable t) {
       LOG.error("unexpected expire error of table {} ", tableRuntime.getTableIdentifier(), t);
-      Telemetry.getInstance()
-          .trackFailure(
-              Command.EXPIRE_DATA, Telemetry.errorSource(tableRuntime.getFormat()), t);
     }
   }
 }

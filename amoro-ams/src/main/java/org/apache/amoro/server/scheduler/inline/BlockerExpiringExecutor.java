@@ -14,8 +14,6 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
- * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.scheduler.inline;
@@ -25,8 +23,6 @@ import org.apache.amoro.server.persistence.PersistentBase;
 import org.apache.amoro.server.persistence.mapper.TableBlockerMapper;
 import org.apache.amoro.server.scheduler.PeriodicTableScheduler;
 import org.apache.amoro.server.table.TableService;
-import org.apache.amoro.server.utils.Command;
-import org.apache.amoro.server.utils.Telemetry;
 
 public class BlockerExpiringExecutor extends PeriodicTableScheduler {
 
@@ -59,11 +55,6 @@ public class BlockerExpiringExecutor extends PeriodicTableScheduler {
       persistency.doExpiring(tableRuntime);
     } catch (Throwable t) {
       logger.error("table {} expire blocker failed.", tableRuntime.getTableIdentifier(), t);
-      Telemetry.getInstance()
-          .trackFailure(
-              Command.EXPIRE_BLOCKERS,
-              Telemetry.errorSource(tableRuntime.getFormat()),
-              t);
     }
   }
 
