@@ -127,6 +127,26 @@ public class TestTelemetry {
   }
 
   @Test
+  public void optimizerFailuresAreClassified() {
+    // An optimizer registering for a group that does not exist.
+    Assertions.assertEquals(
+        "object_not_found",
+        categoryOf(new org.apache.amoro.exception.ObjectNotExistsException("Optimizer group g")));
+    // An optimizer registering with a heartbeat interval too long for AMS. It keeps the forbidden
+    // error code, so that the optimizer still exits instead of retrying.
+    org.apache.amoro.exception.OptimizerConfigException rejection =
+        new org.apache.amoro.exception.OptimizerConfigException(HOST);
+    Assertions.assertEquals("config_invalid", categoryOf(rejection));
+    Assertions.assertEquals(
+        org.apache.amoro.ErrorCodes.FORBIDDEN_ERROR_CODE,
+        org.apache.amoro.exception.AmoroRuntimeException.normalize(rejection).getErrorCode());
+    Assertions.assertEquals(
+        "internal_error",
+        categoryOf(
+            new org.apache.amoro.exception.IllegalTaskStateException(null, "ACKED", "PLANNED")));
+  }
+
+  @Test
   public void catalogFailuresAreClassified() {
     // A duplicate catalog name, thrown by createCatalog itself.
     Assertions.assertEquals("catalog_error", categoryOf(new AlreadyExistsException(HOST)));
