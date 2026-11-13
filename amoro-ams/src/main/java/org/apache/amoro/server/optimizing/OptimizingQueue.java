@@ -52,8 +52,8 @@ import org.apache.amoro.server.resource.OptimizerThread;
 import org.apache.amoro.server.resource.QuotaProvider;
 import org.apache.amoro.server.table.DefaultTableRuntime;
 import org.apache.amoro.server.table.blocker.TableBlocker;
-import org.apache.amoro.server.utils.IcebergTableUtil;
 import org.apache.amoro.server.utils.Command;
+import org.apache.amoro.server.utils.IcebergTableUtil;
 import org.apache.amoro.server.utils.Telemetry;
 import org.apache.amoro.shade.guava32.com.google.common.annotations.VisibleForTesting;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
@@ -368,9 +368,7 @@ public class OptimizingQueue extends PersistentBase {
       LOG.error("Planning table {} failed", tableRuntime.getTableIdentifier(), throwable);
       Telemetry.getInstance()
           .trackFailure(
-              Command.PLAN_OPTIMIZING,
-              Telemetry.errorSource(tableRuntime.getFormat()),
-              throwable);
+              Command.PLAN_OPTIMIZING, Telemetry.errorSource(tableRuntime.getFormat()), throwable);
       throw throwable;
     }
   }
@@ -813,9 +811,7 @@ public class OptimizingQueue extends PersistentBase {
           LOG.error("{} Commit optimizing failed ", tableRuntime.getTableIdentifier(), t);
           Telemetry.getInstance()
               .trackFailure(
-                  Command.COMMIT_OPTIMIZING,
-                  Telemetry.errorSource(tableRuntime.getFormat()),
-                  t);
+                  Command.COMMIT_OPTIMIZING, Telemetry.errorSource(tableRuntime.getFormat()), t);
           status = ProcessStatus.FAILED;
           failedReason = ExceptionUtil.getErrorMessage(t, 4000);
           endTime = System.currentTimeMillis();

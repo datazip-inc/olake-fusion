@@ -113,9 +113,7 @@ public class TableRuntimeRefreshExecutor extends PeriodicTableScheduler {
       logger.error("Refreshing table {} failed.", tableRuntime.getTableIdentifier(), throwable);
       Telemetry.getInstance()
           .trackFailure(
-              Command.REFRESH_TABLE,
-              Telemetry.errorSource(tableRuntime.getFormat()),
-              throwable);
+              Command.REFRESH_TABLE, Telemetry.errorSource(tableRuntime.getFormat()), throwable);
     }
   }
 
