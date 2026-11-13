@@ -101,7 +101,17 @@ enum FailureCategory {
       "UncheckedSQLException",
       "GoogleJsonResponseException",
       "SQLIntegrityConstraintViolationException"),
+  CONCURRENCY_CONFLICT(
+      "CommitFailedException",
+      "ConcurrentModificationException",
+      "LockException",
+      "WaitingForLockException",
+      "VersionMismatchException",
+      "SQLTransactionRollbackException"),
+  SCHEMA_UNSUPPORTED("ValidationException"),
+  RESOURCE_EXHAUSTED("OutOfMemoryError", "ResourceNumberLimitExceededException"),
   UNSUPPORTED_FEATURE("UnsupportedOperationException", "SQLFeatureNotSupportedException"),
+  CANCELED("UncheckedInterruptedException"),
   INTERNAL_ERROR(
       "NoClassDefFoundError",
       "ClassNotFoundException",
