@@ -381,7 +381,7 @@ public class DefaultTableService extends PersistentBase implements TableService 
                                 "TableExplorer sync table {} error", tableIdentity.toString(), e);
                             Telemetry.getInstance()
                                 .trackFailure(
-                                    Telemetry.Command.SYNC_TABLE,
+                                    Telemetry.Command.REGISTER_TABLE,
                                     externalCatalog.getMetadata().getCatalogType(),
                                     e);
                           }

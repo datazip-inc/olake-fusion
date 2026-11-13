@@ -106,7 +106,8 @@ public class Telemetry {
     // Table sync, run every explore interval.
     EXPLORE_CATALOG,
     LIST_TABLES,
-    SYNC_TABLE,
+    // Registering a table newly found in the catalog; dispose is the reverse.
+    REGISTER_TABLE,
     DISPOSE_TABLE
   }
 
