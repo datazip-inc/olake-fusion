@@ -44,7 +44,10 @@ RUN AMORO_VERSION=`cat pom.xml | grep 'amoro-parent' -C 3 | grep -Eo '<version>.
 FROM eclipse-temurin:17-jdk-jammy
 
 ARG MAVEN_MIRROR=https://repo.maven.apache.org/maven2
+# The release tag this image is built for, reported by telemetry; empty for local builds.
+ARG FUSION_VERSION=
 
+ENV FUSION_VERSION=${FUSION_VERSION}
 ENV AMORO_HOME /usr/local/amoro
 ENV AMORO_CONF_DIR ${AMORO_HOME}/conf
 ENV LOG_LEVEL info
