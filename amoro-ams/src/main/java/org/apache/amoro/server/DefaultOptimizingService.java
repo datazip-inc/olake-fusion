@@ -33,6 +33,7 @@ import org.apache.amoro.config.TableConfiguration;
 import org.apache.amoro.exception.ForbiddenException;
 import org.apache.amoro.exception.IllegalTaskStateException;
 import org.apache.amoro.exception.ObjectNotExistsException;
+import org.apache.amoro.exception.OptimizerConfigException;
 import org.apache.amoro.exception.PluginRetryAuthException;
 import org.apache.amoro.resource.ResourceGroup;
 import org.apache.amoro.server.catalog.CatalogManager;
@@ -278,7 +279,7 @@ public class DefaultOptimizingService extends StatedPersistentBase
           .ifPresent(
               interval -> {
                 if (Long.parseLong(interval) >= optimizerTouchTimeout) {
-                  throw new ForbiddenException(
+                  throw new OptimizerConfigException(
                       String.format(
                           "The %s:%s configuration should be less than AMS's %s:%s",
                           OptimizerProperties.OPTIMIZER_HEART_BEAT_INTERVAL,
