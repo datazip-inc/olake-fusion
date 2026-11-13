@@ -92,127 +92,6 @@ public class Telemetry {
    */
   static final String FAILURE_EVENT = "Failure - Fusion";
 
-  /**
-   * An operation whose failures are reported. Failure telemetry follows the OLake connector's
-   * TrackFailure (olake utils/telemetry) and its categories (olake utils/errs). Enum names are sent
-   * lower-cased: CREATE_CATALOG -> create_catalog.
-   */
-  public enum Command {
-    CREATE_CATALOG,
-    UPDATE_CATALOG,
-    DROP_CATALOG,
-    // Building a stored catalog when AMS starts.
-    LOAD_CATALOG,
-    // Table sync, run every explore interval.
-    EXPLORE_CATALOG,
-    LIST_TABLES,
-    // Registering a table newly found in the catalog; dispose is the reverse.
-    REGISTER_TABLE,
-    DISPOSE_TABLE
-  }
-
-  /**
-   * Each category lists the exception simple class names it covers, as olake
-   * destination/iceberg/errors.go. Names, not classes: most come from catalog clients that are not
-   * on the AMS classpath.
-   */
-  enum Category {
-    DNS_RESOLUTION_FAILED("UnknownHostException"),
-    NETWORK_UNREACHABLE(
-        "ConnectException",
-        "NoRouteToHostException",
-        "HttpHostConnectException",
-        "NoHttpResponseException",
-        "ConnectionClosedException",
-        "SocketException",
-        "TTransportException",
-        "MetaException",
-        "RuntimeMetaException",
-        "ServiceUnavailableException",
-        "InternalServiceException",
-        "SQLTransientConnectionException",
-        "SQLNonTransientConnectionException"),
-    TIMEOUT(
-        "SocketTimeoutException",
-        "ConnectTimeoutException",
-        "OperationTimeoutException",
-        "SQLTimeoutException"),
-    TLS_FAILED("SSLHandshakeException", "CertificateException", "SSLPeerUnverifiedException"),
-    AUTH_FAILED(
-        "NotAuthorizedException",
-        "SaslException",
-        "LoginException",
-        "GSSException",
-        "GoogleAuthException",
-        "TokenResponseException",
-        "SQLInvalidAuthorizationSpecException"),
-    PERMISSION_DENIED(
-        "ForbiddenException",
-        "AccessDeniedException",
-        "AccessControlException",
-        "GlueEncryptionException"),
-    OBJECT_NOT_FOUND(
-        "NoSuchTableException",
-        "NoSuchNamespaceException",
-        "NoSuchViewException",
-        "EntityNotFoundException",
-        "NoSuchKeyException",
-        "NoSuchWarehouseException",
-        "NoSuchObjectException",
-        "UnknownDBException",
-        "NotFoundException",
-        "NoSuchIcebergTableException",
-        "NoSuchIcebergViewException"),
-    /**
-     * Iceberg throws IllegalArgumentException for bad catalog settings (a missing warehouse, a bad
-     * URI, an unknown catalog-impl), which are user config mistakes.
-     */
-    CONFIG_INVALID(
-        "BadRequestException",
-        "UnprocessableEntityException",
-        "InvalidInputException",
-        "IllegalArgumentException"),
-    CATALOG_ERROR(
-        "AlreadyExistsException",
-        "CommitStateUnknownException",
-        "ServiceFailureException",
-        "RESTException",
-        "NamespaceNotEmptyException",
-        "InvalidObjectException",
-        "InvalidOperationException",
-        "TException",
-        "TApplicationException",
-        "UncheckedSQLException",
-        "GoogleJsonResponseException",
-        "SQLIntegrityConstraintViolationException"),
-    UNSUPPORTED_FEATURE("UnsupportedOperationException", "SQLFeatureNotSupportedException"),
-    INTERNAL_ERROR(
-        "NoClassDefFoundError",
-        "ClassNotFoundException",
-        "NullPointerException",
-        "AssertionError",
-        "IllegalStateException"),
-    /** Fallback for failures not mapped above, as olake errs.Unclassified. */
-    UNCLASSIFIED;
-
-    private final String[] exceptions;
-
-    Category(String... exceptions) {
-      this.exceptions = exceptions;
-    }
-  }
-
-  /** Exception simple class name to category. */
-  private static final Map<String, Category> FAILURE_CATEGORIES = new HashMap<>();
-
-  static {
-    for (Category category : Category.values()) {
-      for (String exception : category.exceptions) {
-        FAILURE_CATEGORIES.put(exception, category);
-      }
-    }
-  }
-
   /** Set from the AMS configuration; {@code null} means "not configured, fall back to the env". */
   private static volatile Boolean configuredDisabled;
 
@@ -594,12 +473,12 @@ public class Telemetry {
     // Root first, so the most specific mapped cause wins over a broader wrapper above it.
     List<Throwable> chain = ExceptionUtils.getThrowableList(error);
     Collections.reverse(chain);
-    Category category =
+    FailureCategory category =
         chain.stream()
-            .map(Telemetry::categoryOf)
+            .map(FailureCategory::of)
             .filter(Objects::nonNull)
             .findFirst()
-            .orElse(Category.UNCLASSIFIED);
+            .orElse(FailureCategory.UNCLASSIFIED);
 
     Map<String, Object> props = new HashMap<>();
     props.put("command", wire(command));
@@ -607,21 +486,10 @@ public class Telemetry {
     props.put("category", wire(category));
     props.put("fusion_version", FUSION_VERSION);
     props.put("optimizer_version", optimizerVersion);
-    if (category == Category.UNCLASSIFIED) {
+    if (category == FailureCategory.UNCLASSIFIED) {
       props.put("error_type", chain.get(0).getClass().getName());
     }
     return props;
-  }
-
-  /** The category of the exception's class, or of the nearest superclass that has one. */
-  private static Category categoryOf(Throwable t) {
-    for (Class<?> c = t.getClass(); c != null; c = c.getSuperclass()) {
-      Category category = FAILURE_CATEGORIES.get(c.getSimpleName());
-      if (category != null) {
-        return category;
-      }
-    }
-    return null;
   }
 
   private static String wire(Enum<?> value) {

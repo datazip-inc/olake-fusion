@@ -33,6 +33,7 @@ import org.apache.amoro.config.TableConfiguration;
 import org.apache.amoro.exception.ForbiddenException;
 import org.apache.amoro.exception.IllegalTaskStateException;
 import org.apache.amoro.exception.ObjectNotExistsException;
+import org.apache.amoro.exception.OptimizerConfigException;
 import org.apache.amoro.exception.PluginRetryAuthException;
 import org.apache.amoro.resource.ResourceGroup;
 import org.apache.amoro.server.catalog.CatalogManager;
@@ -52,6 +53,7 @@ import org.apache.amoro.server.resource.QuotaProvider;
 import org.apache.amoro.server.table.DefaultTableRuntime;
 import org.apache.amoro.server.table.RuntimeHandlerChain;
 import org.apache.amoro.server.table.TableService;
+import org.apache.amoro.server.utils.Command;
 import org.apache.amoro.server.utils.Telemetry;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Sets;
@@ -75,6 +77,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -272,30 +275,37 @@ public class DefaultOptimizingService extends StatedPersistentBase
   @Override
   public String authenticate(OptimizerRegisterInfo registerInfo) {
     LOG.info("Register optimizer {}.", registerInfo);
-    Optional.ofNullable(
-            registerInfo.getProperties().get(OptimizerProperties.OPTIMIZER_HEART_BEAT_INTERVAL))
-        .ifPresent(
-            interval -> {
-              if (Long.parseLong(interval) >= optimizerTouchTimeout) {
-                throw new ForbiddenException(
-                    String.format(
-                        "The %s:%s configuration should be less than AMS's %s:%s",
-                        OptimizerProperties.OPTIMIZER_HEART_BEAT_INTERVAL,
-                        interval,
-                        AmoroManagementConf.OPTIMIZER_HB_TIMEOUT.key(),
-                        optimizerTouchTimeout));
-              }
-            });
+    try {
+      Optional.ofNullable(
+              registerInfo.getProperties().get(OptimizerProperties.OPTIMIZER_HEART_BEAT_INTERVAL))
+          .ifPresent(
+              interval -> {
+                if (Long.parseLong(interval) >= optimizerTouchTimeout) {
+                  throw new OptimizerConfigException(
+                      String.format(
+                          "The %s:%s configuration should be less than AMS's %s:%s",
+                          OptimizerProperties.OPTIMIZER_HEART_BEAT_INTERVAL,
+                          interval,
+                          AmoroManagementConf.OPTIMIZER_HB_TIMEOUT.key(),
+                          optimizerTouchTimeout));
+                }
+              });
 
-    OptimizingQueue queue = getQueueByGroup(registerInfo.getGroupName());
-    retireUntaggedRegistrations(registerInfo);
-    // An optimizer that Kubernetes restarted registers again under the same resource id. Retire
-    // the registration of the process it replaces, so that one optimizer never holds two entries.
-    // NOTE: For multioptimizers we might need to remove it
-    retirePreviousRegistrations(registerInfo.getResourceId());
-    OptimizerInstance optimizer = new OptimizerInstance(registerInfo, queue.getContainerName());
-    registerOptimizer(optimizer, true);
-    return optimizer.getToken();
+      OptimizingQueue queue = getQueueByGroup(registerInfo.getGroupName());
+      retireUntaggedRegistrations(registerInfo);
+      // An optimizer that Kubernetes restarted registers again under the same resource id. Retire
+      // the registration of the process it replaces, so that one optimizer never holds two
+      // entries.
+      // NOTE: For multioptimizers we might need to remove it
+      retirePreviousRegistrations(registerInfo.getResourceId());
+      OptimizerInstance optimizer = new OptimizerInstance(registerInfo, queue.getContainerName());
+      registerOptimizer(optimizer, true);
+      return optimizer.getToken();
+    } catch (Throwable t) {
+      // A started optimizer that AMS turns away, e.g. for an unknown group or a bad heartbeat.
+      Telemetry.getInstance().trackFailure(Command.REGISTER_OPTIMIZER, null, t);
+      throw t;
+    }
   }
 
   // tagged optimizer :
@@ -589,6 +599,8 @@ public class DefaultOptimizingService extends StatedPersistentBase
                           .forEach(task -> retryTask(task, queue)));
           if (isExpired) {
             LOG.info("Optimizer {} has been expired, unregister it", keepingTask.getOptimizer());
+            Telemetry.getInstance()
+                .trackFailure(Command.OPTIMIZER_EXPIRED, null, new TimeoutException("heartbeat"));
             unregisterOptimizer(token);
           } else {
             LOG.debug("Optimizer {} is being touched, keep it", keepingTask.getOptimizer());
@@ -597,6 +609,7 @@ public class DefaultOptimizingService extends StatedPersistentBase
         } catch (InterruptedException ignored) {
         } catch (Throwable t) {
           LOG.error("OptimizerKeeper has encountered a problem.", t);
+          Telemetry.getInstance().trackFailure(Command.KEEP_OPTIMIZERS, null, t);
         }
       }
     }
@@ -623,6 +636,7 @@ public class DefaultOptimizingService extends StatedPersistentBase
             "Retry task {} failed due to {}, will check it in next round",
             task.getTaskId(),
             e.getMessage());
+        Telemetry.getInstance().trackFailure(Command.RETRY_OPTIMIZING_TASK, null, e);
       }
     }
 
@@ -644,11 +658,17 @@ public class DefaultOptimizingService extends StatedPersistentBase
   }
 
   private class OptimizingConfigWatcher implements Runnable {
+    /** How long AMS waits for an optimizer to register before reporting that none has. */
+    private static final long OPTIMIZER_REGISTER_GRACE_MS = 10 * 60 * 1000L;
+
     private final ScheduledExecutorService scheduler =
         Executors.newSingleThreadScheduledExecutor(
             new ThreadFactoryBuilder().setNameFormat("resource-group-watcher-%d").build());
+    private final AtomicBoolean optimizerNotRegisteredTracked = new AtomicBoolean(false);
+    private long startedAt;
 
     void start() {
+      startedAt = System.currentTimeMillis();
       run();
       scheduler.scheduleAtFixedRate(
           this, refreshGroupInterval, refreshGroupInterval, TimeUnit.MILLISECONDS);
@@ -657,6 +677,20 @@ public class DefaultOptimizingService extends StatedPersistentBase
     @Override
     public void run() {
       syncGroups();
+      checkOptimizerRegistered();
+    }
+
+    /** Once per AMS process: no optimizer has registered within the grace period. */
+    private void checkOptimizerRegistered() {
+      if (authOptimizers.isEmpty()
+          && System.currentTimeMillis() - startedAt > OPTIMIZER_REGISTER_GRACE_MS
+          && optimizerNotRegisteredTracked.compareAndSet(false, true)) {
+        Telemetry.getInstance()
+            .trackFailure(
+                Command.OPTIMIZER_NOT_REGISTERED,
+                null,
+                new TimeoutException("optimizer registration"));
+      }
     }
 
     private void syncGroups() {
@@ -682,6 +716,7 @@ public class DefaultOptimizingService extends StatedPersistentBase
             });
       } catch (Throwable t) {
         LOG.error("Sync optimizer groups failed, will retry later.", t);
+        Telemetry.getInstance().trackFailure(Command.SYNC_OPTIMIZER_GROUPS, null, t);
       }
     }
 
