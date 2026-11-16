@@ -52,13 +52,12 @@ public class SparkOptimizingTaskFunction implements Function<OptimizingTask, Opt
     // AMS writes this thread's lines to <processId>/<taskId>.log.
     OptimizingTaskLogContext.setExecutorContext(processId, taskId);
 
-    OptimizingTaskResult result;
     try {
-      result = OptimizerExecutor.executeTask(config, threadId, task, LOG);
+      return OptimizerExecutor.executeTask(config, threadId, task, LOG);
     } finally {
       OptimizingTaskLogContext.clearContext();
+      // Does not wait: the driver waits for the task's lines before it reports the result.
+      SparkOptimizingLogSupport.afterExecutorTask(processId, taskId);
     }
-    // The task's lines reach the driver before its result does.
-    return SparkOptimizingLogSupport.afterTask(result);
   }
 }

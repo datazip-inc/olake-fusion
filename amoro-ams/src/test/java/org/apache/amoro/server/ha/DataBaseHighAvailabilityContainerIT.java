@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.ha;
@@ -21,7 +23,8 @@ package org.apache.amoro.server.ha;
 import org.apache.amoro.config.Configurations;
 import org.apache.amoro.server.AmoroManagementConf;
 import org.apache.amoro.server.persistence.DataSourceFactory;
-import org.apache.amoro.server.table.DerbyPersistence;
+import org.apache.amoro.server.table.PostgresPersistence;
+import org.apache.amoro.utils.PostgresTestDatabase;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Assume;
@@ -43,15 +46,15 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 /**
- * Derby-based integration tests for the DATABASE HA container: leader election, failover on crash,
- * non-preemptive recovery, and demotion on heartbeat loss. Calls
+ * PostgreSQL-based integration tests for the DATABASE HA container: leader election, failover on
+ * crash, non-preemptive recovery, and demotion on heartbeat loss. Calls
  * org.apache.amoro.server.ha.DataBaseHighAvailabilityContainer via reflection
  * (waitLeaderShip/waitFollowerShip/close). If the class is absent on this branch (PR not merged),
  * safely skip all tests in @BeforeClass.
  */
 public class DataBaseHighAvailabilityContainerIT {
 
-  @ClassRule public static ExternalResource derby = new DerbyPersistence();
+  @ClassRule public static ExternalResource derby = new PostgresPersistence();
 
   private static boolean databaseHAAvailable;
 
@@ -62,13 +65,13 @@ public class DataBaseHighAvailabilityContainerIT {
     Assume.assumeTrue(
         "Skip DATABASE HA container tests because class not found (PR not merged)",
         databaseHAAvailable);
-    // If ha_lease is not present in the Derby init scripts, skip to avoid false positives.
+    // If ha_lease is not present in the test init scripts, skip to avoid false positives.
     Assume.assumeTrue("ha_lease table not present", checkHaLeaseTablePresent());
   }
 
   @After
   public void afterEach() {
-    // DerbyPersistence.after() automatically truncates all tables; ensure containers are closed.
+    // PostgresPersistence.after() automatically truncates all tables; ensure containers are closed.
   }
 
   @Test
@@ -354,9 +357,11 @@ public class DataBaseHighAvailabilityContainerIT {
     // Assert using ha_lease: unique leader row (count=1).
     Configurations conf = new Configurations();
     conf.set(
-        AmoroManagementConf.DB_CONNECTION_URL, HATestConfigs.detectDerbyUrlFromSqlSessionFactory());
-    conf.set(AmoroManagementConf.DB_TYPE, AmoroManagementConf.DB_TYPE_DERBY);
-    conf.set(AmoroManagementConf.DB_DRIVER_CLASS_NAME, "org.apache.derby.jdbc.EmbeddedDriver");
+        AmoroManagementConf.DB_CONNECTION_URL, HATestConfigs.detectJdbcUrlFromSqlSessionFactory());
+    conf.set(AmoroManagementConf.DB_TYPE, AmoroManagementConf.DB_TYPE_POSTGRES);
+    conf.set(AmoroManagementConf.DB_DRIVER_CLASS_NAME, PostgresTestDatabase.DRIVER);
+    conf.set(AmoroManagementConf.DB_USER_NAME, PostgresTestDatabase.USER);
+    conf.set(AmoroManagementConf.DB_PASSWORD, PostgresTestDatabase.PASSWORD);
     DataSource ds = DataSourceFactory.createDataSource(conf);
     try (Connection conn = ds.getConnection();
         Statement st = conn.createStatement()) {

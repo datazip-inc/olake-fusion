@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server;
@@ -26,7 +28,7 @@ import org.apache.amoro.server.manager.MetricManager;
 import org.apache.amoro.server.resource.DefaultOptimizerManager;
 import org.apache.amoro.server.resource.OptimizerManager;
 import org.apache.amoro.server.table.DefaultTableManager;
-import org.apache.amoro.server.table.DerbyPersistence;
+import org.apache.amoro.server.table.PostgresPersistence;
 import org.apache.amoro.server.table.TableManager;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -35,7 +37,7 @@ import org.junit.ClassRule;
 
 public abstract class AMSManagerTestBase {
 
-  @ClassRule public static DerbyPersistence DERBY = new DerbyPersistence();
+  @ClassRule public static PostgresPersistence DERBY = new PostgresPersistence();
 
   protected static DefaultCatalogManager CATALOG_MANAGER = null;
   protected static DefaultTableManager TABLE_MANAGER = null;

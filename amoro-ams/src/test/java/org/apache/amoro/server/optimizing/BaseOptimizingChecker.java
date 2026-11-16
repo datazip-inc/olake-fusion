@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.optimizing;
@@ -23,6 +25,7 @@ import org.apache.amoro.optimizing.MetricsSummary;
 import org.apache.amoro.optimizing.OptimizingType;
 import org.apache.amoro.process.ProcessStatus;
 import org.apache.amoro.server.persistence.PersistentBase;
+import org.apache.amoro.server.persistence.mapper.SnapshotExpiryProcessMapper;
 import org.apache.amoro.server.persistence.mapper.TableMetaMapper;
 import org.apache.amoro.server.persistence.mapper.TableProcessMapper;
 import org.apache.amoro.server.process.TableProcessMeta;
@@ -121,10 +124,7 @@ public class BaseOptimizingChecker extends PersistentBase {
       success =
           waitUntilFinish(
               () -> {
-                List<TableProcessMeta> tableOptimizingProcesses =
-                    getAs(
-                        TableProcessMapper.class,
-                        mapper -> mapper.listProcessMeta(identifier.getId(), null, null));
+                List<TableProcessMeta> tableOptimizingProcesses = compactionRuns(identifier);
                 if (tableOptimizingProcesses == null || tableOptimizingProcesses.isEmpty()) {
                   LOG.info("optimize history is empty");
                   return Status.RUNNING;
@@ -155,10 +155,7 @@ public class BaseOptimizingChecker extends PersistentBase {
 
     if (success) {
       List<TableProcessMeta> result =
-          getAs(
-                  TableProcessMapper.class,
-                  mapper -> mapper.listProcessMeta(identifier.getId(), null, null))
-              .stream()
+          compactionRuns(identifier).stream()
               .filter(p -> p.getProcessId() > lastProcessId)
               .filter(p -> p.getStatus().equals(ProcessStatus.SUCCESS))
               .collect(Collectors.toList());
@@ -188,13 +185,20 @@ public class BaseOptimizingChecker extends PersistentBase {
                     tableIdentifier.getDatabase(),
                     tableIdentifier.getTableName()));
     List<TableProcessMeta> tableOptimizingProcesses =
-        getAs(
-                TableProcessMapper.class,
-                mapper -> mapper.listProcessMeta(identifier.getId(), null, null))
-            .stream()
+        compactionRuns(identifier).stream()
             .filter(p -> p.getProcessId() > lastProcessId)
             .collect(Collectors.toList());
     Assert.assertTrue("optimize is not stopped", tableOptimizingProcesses.isEmpty());
+  }
+
+  /** The table's runs without snapshot expiry runs, newest first. */
+  private List<TableProcessMeta> compactionRuns(ServerTableIdentifier identifier) {
+    return getAs(
+            TableProcessMapper.class,
+            mapper -> mapper.listProcessMetaWithSnapshotExpiry(identifier.getId(), null, null))
+        .stream()
+        .filter(p -> !SnapshotExpiryProcessMapper.PROCESS_TYPE.equals(p.getProcessType()))
+        .collect(Collectors.toList());
   }
 
   protected boolean waitUntilFinish(Supplier<Status> statusSupplier, final long timeout)

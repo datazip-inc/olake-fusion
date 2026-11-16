@@ -417,7 +417,7 @@ public class DefaultTableRuntime extends AbstractTableRuntime
         .updateState(PROCESS_ID_KEY, any -> 0L)
         .commit();
     this.pendingCronType = null;
-    // Written once the table is IDLE again, so a failed write throws without leaving it PLANNING.
+    // Best effort, and written once the table is IDLE again.
     if (failed) {
       appendDriverLogEntry(processId, "ERROR", describeThrowable(throwable, reason), throwable);
     }
@@ -576,6 +576,7 @@ public class DefaultTableRuntime extends AbstractTableRuntime
     return true;
   }
 
+  // Best effort: never throws, as callers run inside the optimizing state machine.
   public void appendDriverLogEntry(
       long processId, String level, String message, Throwable throwable) {
     LogWriter.get()

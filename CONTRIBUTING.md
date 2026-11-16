@@ -38,7 +38,7 @@ debug mode, and the formatting rules the build enforces.
 
 Related repositories:
 
-- Core project: [datazip-inc/olake](https://github.com/datazip-inc/olake)
+- OLake Go (ingestion): [datazip-inc/olake-go](https://github.com/datazip-inc/olake-go)
 - UI project: [datazip-inc/olake-ui](https://github.com/datazip-inc/olake-ui)
 - Docs and website: [datazip-inc/olake-docs](https://github.com/datazip-inc/olake-docs/)
 
@@ -433,7 +433,7 @@ limitations under the License.
 For any questions, concerns, or queries:
 
 - Start a discussion on our [Slack](https://olake.io/slack/) channel.
-- Browse [GitHub Discussions](https://github.com/datazip-inc/olake/discussions) for ongoing conversations.
+- Browse [GitHub Discussions](https://github.com/datazip-inc/olake-go/discussions) for ongoing conversations.
 - Do not hesitate to open an [issue](https://github.com/datazip-inc/olake-fusion/issues/new) if something is unclear.
 
 We look forward to your feedback and contributions to improve this project.

@@ -31,6 +31,21 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    services:
+      # Unit tests keep AMS and test Hive metastore data in PostgreSQL.
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: iceberg
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U iceberg"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     strategy:
       matrix:
         jdk: [ '17' ]

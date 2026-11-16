@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.scheduler.inline;
@@ -21,6 +23,7 @@ package org.apache.amoro.server.scheduler.inline;
 import org.apache.amoro.TableRuntime;
 import org.apache.amoro.server.persistence.PersistentBase;
 import org.apache.amoro.server.persistence.mapper.OptimizingProcessMapper;
+import org.apache.amoro.server.persistence.mapper.SnapshotExpiryProcessMapper;
 import org.apache.amoro.server.persistence.mapper.TableProcessMapper;
 import org.apache.amoro.server.scheduler.PeriodicTableScheduler;
 import org.apache.amoro.server.table.TableService;
@@ -88,6 +91,11 @@ public class OptimizingExpiringExecutor extends PeriodicTableScheduler {
                   mapper ->
                       mapper.deleteTaskRuntimesBefore(
                           tableRuntime.getTableIdentifier().getId(), minProcessId)),
+          () ->
+              doAs(
+                  SnapshotExpiryProcessMapper.class,
+                  mapper ->
+                      mapper.deleteBefore(tableRuntime.getTableIdentifier().getId(), minProcessId)),
           () ->
               doAs(
                   OptimizingProcessMapper.class,

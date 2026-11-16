@@ -995,8 +995,8 @@ public class OptimizingQueue extends PersistentBase {
           () -> clearProcess(this));
     }
 
-    // Called once the process is persisted as completed. Throws if the entry cannot be written, so
-    // the failure is not lost silently; the process state is already final by then.
+    // Called once the process is persisted as completed. Best effort: may run inside an outer
+    // transaction (completeTask), so it must not throw. The reason is also in failedReason.
     private void appendFailureEntry() {
       if (status != ProcessStatus.SUCCESS && failedReason != null) {
         tableRuntime.appendDriverLogEntry(processId, "ERROR", failedReason, null);
