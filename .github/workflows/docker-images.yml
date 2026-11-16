@@ -123,7 +123,7 @@ jobs:
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Build dist module with Maven
-        run: ./mvnw clean package -pl 'dist' -am -e -DskipTests -B -ntp -Psupport-all-formats -Pno-extended-disk-storage -Pno-plugin-bin
+        run: ./mvnw clean package -pl 'dist' -am -e -DskipTests -B -ntp -Pno-extended-disk-storage -Pno-plugin-bin
 
       - name: Build and Push Fusion Docker Image to olakego/fusion
         uses: docker/build-push-action@v4
@@ -133,6 +133,8 @@ jobs:
           file: docker/amoro/Dockerfile
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
+          build-args: |
+            FUSION_VERSION=${{ inputs.tag }}
 
   docker-optimizer-spark:
     name: Push Fusion Spark Optimizer Docker Image to olakego/fusion-spark
@@ -216,6 +218,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           build-args: |
+            FUSION_VERSION=${{ inputs.tag }}
             SPARK_VERSION=${{ matrix.spark }}
             SPARK_JAVA_TAG=${{ matrix.spark }}-java17
             OPTIMIZER_JOB=amoro-optimizer/amoro-optimizer-spark/target/amoro-optimizer-spark-${{ env.SPARK_MAJOR_VERSION}}_${{ env.SCALA_BINARY_VERSION}}-${{ env.AMORO_VERSION }}-jar-with-dependencies.jar

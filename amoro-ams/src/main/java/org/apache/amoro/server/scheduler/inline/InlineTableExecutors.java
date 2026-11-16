@@ -23,6 +23,9 @@ package org.apache.amoro.server.scheduler.inline;
 import org.apache.amoro.config.Configurations;
 import org.apache.amoro.server.AmoroManagementConf;
 import org.apache.amoro.server.table.TableService;
+import org.apache.amoro.server.utils.Telemetry;
+
+import java.time.Clock;
 
 public class InlineTableExecutors {
 
@@ -49,7 +52,8 @@ public class InlineTableExecutors {
           new SnapshotsExpiringExecutor(
               tableService,
               conf.getInteger(AmoroManagementConf.EXPIRE_SNAPSHOTS_THREAD_COUNT),
-              conf.get(AmoroManagementConf.EXPIRE_SNAPSHOTS_INTERVAL));
+              Clock.systemDefaultZone(),
+              Telemetry.getInstance());
     }
     if (conf.getBoolean(AmoroManagementConf.CLEAN_ORPHAN_FILES_ENABLED)) {
       this.orphanFilesCleaningExecutor =

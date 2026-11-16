@@ -40,7 +40,7 @@ artifacts() {
   local scala_binary
   scala_binary="$(echo "$SCALA_VERSION" | cut -d. -f1-2)"
   ./mvnw -B -ntp clean package -pl dist -am -DskipTests \
-    -Psupport-all-formats -Pno-extended-disk-storage -Pno-plugin-bin
+    -Pno-extended-disk-storage -Pno-plugin-bin
   ./mvnw -B -ntp package -pl amoro-optimizer/amoro-optimizer-spark -am -DskipTests \
     -Dspark.version="$SPARK_VERSION" -Dscala.version="$SCALA_VERSION" -Dscala.binary.version="$scala_binary"
   ./mvnw -B -ntp -f integration-tests/pom.xml test-compile

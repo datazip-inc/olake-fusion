@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.dashboard.controller;
@@ -57,6 +59,7 @@ import static org.apache.amoro.properties.CatalogMetaProperties.TABLE_FORMATS;
 import io.javalin.http.Context;
 import org.apache.amoro.TableFormat;
 import org.apache.amoro.api.CatalogMeta;
+import org.apache.amoro.exception.AlreadyExistsException;
 import org.apache.amoro.properties.CatalogMetaProperties;
 import org.apache.amoro.server.AmoroManagementConf;
 import org.apache.amoro.server.catalog.CatalogManager;
@@ -69,6 +72,7 @@ import org.apache.amoro.server.dashboard.model.CatalogSettingInfo.ConfigFileItem
 import org.apache.amoro.server.dashboard.response.OkResponse;
 import org.apache.amoro.server.dashboard.utils.DesensitizationUtil;
 import org.apache.amoro.server.dashboard.utils.PropertiesUtil;
+import org.apache.amoro.server.utils.Telemetry;
 import org.apache.amoro.shade.guava32.com.google.common.base.Objects;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
 import org.apache.amoro.shade.guava32.com.google.common.collect.ImmutableMap;
@@ -604,7 +608,17 @@ public class CatalogController {
     CatalogRegisterInfo info = ctx.bodyAsClass(CatalogRegisterInfo.class);
     validateCatalogRegisterInfo(info);
     if (catalogService.catalogExist(info.getName())) {
-      throw new RuntimeException("Duplicate catalog name!");
+      // Rejected before the catalog manager, which reports every other creation failure. The cause
+      // classifies it as the manager's own duplicate check does.
+      RuntimeException duplicate =
+          new RuntimeException(
+              "Duplicate catalog name!", new AlreadyExistsException("Catalog " + info.getName()));
+      Telemetry.getInstance()
+          .trackFailure(
+              Telemetry.Command.CREATE_CATALOG,
+              CatalogUtil.normalizeMetastoreType(info.getType()),
+              duplicate);
+      throw duplicate;
     }
     CatalogMeta catalogMeta = constructCatalogMeta(info, null);
     catalogService.createCatalog(catalogMeta);

@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server;
@@ -150,5 +152,12 @@ public class TestAmoroManagementConfValidator {
         () -> AmoroManagementConfValidator.validateConfig(configurations));
     configurations.setInteger(AmoroManagementConf.SYNC_HIVE_TABLES_THREAD_COUNT, 10);
     AmoroManagementConfValidator.validateConfig(configurations);
+  }
+
+  @Test
+  public void snapshotExpiryExecutorIsOnWithoutTheKey() {
+    // Tables still need an expiry cron; Helm's config.yaml does not set this key.
+    Assert.assertTrue(
+        new Configurations().getBoolean(AmoroManagementConf.EXPIRE_SNAPSHOTS_ENABLED));
   }
 }

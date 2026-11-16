@@ -14,12 +14,15 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.hive;
 
 import org.apache.amoro.utils.DynConstructors;
 import org.apache.amoro.utils.DynMethods;
+import org.apache.amoro.utils.PostgresTestDatabase;
 import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
@@ -143,9 +146,6 @@ public class HMSMockServer {
       LOG.info("hive local dir: {}", hiveLocalDir.getAbsolutePath());
       FileUtils.deleteQuietly(hiveLocalDir);
 
-      File derbyLogFile = new File(hiveLocalDir, "derby.log");
-      System.setProperty("derby.stream.error.file", derbyLogFile.getAbsolutePath());
-
       TServerSocket socket = new TServerSocket(port);
       this.server = newThriftServer(socket, poolSize, hiveConf);
       this.executorService = Executors.newSingleThreadExecutor();
@@ -257,8 +257,7 @@ public class HMSMockServer {
     FileSystem fs = warehouseRoot.getFileSystem(hiveConf);
     //    FileSystem fs = Util.getFs(warehouseRoot, hiveConf);
     for (FileStatus fileStatus : fs.listStatus(warehouseRoot)) {
-      if (!fileStatus.getPath().getName().equals("derby.log")
-          && !fileStatus.getPath().getName().equals("metastore_db")) {
+      if (!fileStatus.getPath().getName().equals("metastore_db")) {
         fs.delete(fileStatus.getPath(), true);
       }
     }
@@ -278,17 +277,21 @@ public class HMSMockServer {
   private TServer newThriftServer(TServerSocket socket, int poolSize, HiveConf conf)
       throws Exception {
     HiveConf serverConf = new HiveConf(conf);
-    String derbyPath = getDerbyPath();
-    LOG.info("DerbyPath: {}", derbyPath);
-    String derbyUrl = "jdbc:derby:;databaseName=" + derbyPath + ";create=true";
+    String metastoreUrl = PostgresTestDatabase.create("hms_test");
+    LOG.info("Metastore database: {}", metastoreUrl);
     // when test iceberg with hive catalog, Exception `java.sql.SQLSyntaxErrorException: Table/View
     // 'HIVE_LOCKS' does
     // not exist.` will throw, this is a bug of hive scheamtools, see
     // https://issues.apache.org/jira/browse/HIVE-21302.
     // so we set up metastore first to avoid this bug.
-    setupMetastoreDB(derbyUrl);
+    setupMetastoreDB(metastoreUrl);
 
-    serverConf.set(HiveConf.ConfVars.METASTORECONNECTURLKEY.varname, derbyUrl);
+    serverConf.set(HiveConf.ConfVars.METASTORECONNECTURLKEY.varname, metastoreUrl);
+    serverConf.set(
+        HiveConf.ConfVars.METASTORE_CONNECTION_DRIVER.varname, PostgresTestDatabase.DRIVER);
+    serverConf.set(
+        HiveConf.ConfVars.METASTORE_CONNECTION_USER_NAME.varname, PostgresTestDatabase.USER);
+    serverConf.set(HiveConf.ConfVars.METASTOREPWD.varname, PostgresTestDatabase.PASSWORD);
     baseHandler = HMS_HANDLER_CTOR.newInstance("new db based metaserver", serverConf);
     IHMSHandler handler = GET_BASE_HMS_HANDLER.invoke(serverConf, baseHandler, false);
 
@@ -337,15 +340,12 @@ public class HMSMockServer {
     return newHiveConf;
   }
 
-  private String getDerbyPath() {
-    File metastoreDB = new File(hiveLocalDir, "metastore_db");
-    return metastoreDB.getAbsolutePath().replace("\\", "/");
-  }
-
   private void setupMetastoreDB(String jdbcUrl) throws SQLException, IOException {
-    Connection connection = DriverManager.getConnection(jdbcUrl);
+    Connection connection =
+        DriverManager.getConnection(
+            jdbcUrl, PostgresTestDatabase.USER, PostgresTestDatabase.PASSWORD);
     ClassLoader classLoader = ClassLoader.getSystemClassLoader();
-    InputStream inputStream = classLoader.getResourceAsStream("hive-schema-3.1.0.derby.sql");
+    InputStream inputStream = classLoader.getResourceAsStream("hive-schema-3.1.0.postgres.sql");
     connection.setAutoCommit(true);
     try (Reader reader = new InputStreamReader(inputStream)) {
       runScript(connection, reader);
@@ -371,7 +371,6 @@ public class HMSMockServer {
         LOG.debug("Running: {}", command);
         statement.execute(command.toString());
         statement.close();
-        connection.commit();
         command = null;
       } else {
         command.append(line);
