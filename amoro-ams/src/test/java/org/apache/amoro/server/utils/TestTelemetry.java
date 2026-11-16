@@ -42,7 +42,7 @@ public class TestTelemetry {
   private static final String HOST = "secret-host.internal";
 
   private static Map<String, Object> failureProps(Throwable error) {
-    return Telemetry.failureProps(Telemetry.Command.CREATE_CATALOG, "rest", error);
+    return Telemetry.failureProps(Command.CREATE_CATALOG, "rest", error);
   }
 
   /** The chain a Generic REST catalog with an unknown host produces in createCatalog. */
@@ -124,6 +124,26 @@ public class TestTelemetry {
   @Test
   public void notFoundFailuresAreClassified() {
     Assertions.assertEquals("object_not_found", categoryOf(new NoSuchNamespaceException(HOST)));
+  }
+
+  @Test
+  public void optimizerFailuresAreClassified() {
+    // An optimizer registering for a group that does not exist.
+    Assertions.assertEquals(
+        "object_not_found",
+        categoryOf(new org.apache.amoro.exception.ObjectNotExistsException("Optimizer group g")));
+    // An optimizer registering with a heartbeat interval too long for AMS. It keeps the forbidden
+    // error code, so that the optimizer still exits instead of retrying.
+    org.apache.amoro.exception.OptimizerConfigException rejection =
+        new org.apache.amoro.exception.OptimizerConfigException(HOST);
+    Assertions.assertEquals("config_invalid", categoryOf(rejection));
+    Assertions.assertEquals(
+        org.apache.amoro.ErrorCodes.FORBIDDEN_ERROR_CODE,
+        org.apache.amoro.exception.AmoroRuntimeException.normalize(rejection).getErrorCode());
+    Assertions.assertEquals(
+        "internal_error",
+        categoryOf(
+            new org.apache.amoro.exception.IllegalTaskStateException(null, "ACKED", "PLANNED")));
   }
 
   @Test

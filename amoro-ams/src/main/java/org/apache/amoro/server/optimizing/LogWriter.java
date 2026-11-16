@@ -23,6 +23,7 @@ package org.apache.amoro.server.optimizing;
 import org.apache.amoro.api.OptimizingLogLine;
 import org.apache.amoro.api.OptimizingTaskId;
 import org.apache.amoro.log.OptimizingTaskLogContext;
+import org.apache.amoro.server.utils.Command;
 import org.apache.amoro.server.utils.Telemetry;
 import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.core.JsonProcessingException;
 import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
@@ -140,8 +141,7 @@ public class LogWriter {
     for (String report : lostLinesReports) {
       LOG.warn("Optimizer lost optimizing log lines: {}", report);
       Telemetry.getInstance()
-          .trackFailure(
-              Telemetry.Command.SHIP_LOGS, "optimizer", new LostLogLinesException(report));
+          .trackFailure(Command.SHIP_LOGS, "optimizer", new LostLogLinesException(report));
     }
   }
 
@@ -191,7 +191,7 @@ public class LogWriter {
       return;
     }
     lastWriteFailureReport = now;
-    Telemetry.getInstance().trackFailure(Telemetry.Command.WRITE_LOGS, "ams", error);
+    Telemetry.getInstance().trackFailure(Command.WRITE_LOGS, "ams", error);
   }
 
   /** Lines the optimizer could not ship, as it reported them. Telemetry sends its class name. */
