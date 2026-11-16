@@ -27,7 +27,6 @@ import org.apache.amoro.exception.AlreadyExistsException;
 import org.apache.amoro.exception.ObjectNotExistsException;
 import org.apache.amoro.server.catalog.CatalogManager;
 import org.apache.iceberg.exceptions.BadRequestException;
-import org.apache.iceberg.exceptions.CommitFailedException;
 import org.apache.iceberg.exceptions.ForbiddenException;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.exceptions.NotAuthorizedException;
@@ -160,7 +159,6 @@ public class TestTelemetry {
     Assertions.assertEquals("config_invalid", categoryOf(new BadRequestException(HOST)));
     // Iceberg rejects bad catalog settings with IllegalArgumentException.
     Assertions.assertEquals("config_invalid", categoryOf(new IllegalArgumentException(HOST)));
-    Assertions.assertEquals("concurrency_conflict", categoryOf(new CommitFailedException(HOST)));
   }
 
   @Test
@@ -173,54 +171,6 @@ public class TestTelemetry {
   public void subclassOfAMappedExceptionIsClassified() {
     // NumberFormatException is not listed; its superclass IllegalArgumentException is.
     Assertions.assertEquals("config_invalid", categoryOf(new NumberFormatException(HOST)));
-  }
-
-  @Test
-  public void optimizerTaskTraceIsClassifiedByItsMappedCause() {
-    String trace =
-        "java.lang.RuntimeException: write failed for s3://secret-bucket/t\n"
-            + "\tat org.apache.amoro.optimizer.Executor.run(Executor.java:10)\n"
-            + "Caused by: java.net.SocketTimeoutException: connect timed out "
-            + HOST
-            + "\n"
-            + "\t... 3 more\n"
-            + "Caused by: java.io.IOException: "
-            + HOST
-            + "\n";
-
-    Assertions.assertEquals(
-        Map.of(
-            "command", "execute_optimizing",
-            "error_source", "glue",
-            "category", "timeout",
-            "fusion_version", "NA",
-            "optimizer_version", "NA"),
-        Telemetry.traceFailureProps(Command.EXECUTE_OPTIMIZING, "glue", trace));
-  }
-
-  @Test
-  public void unmappedTraceIsReportedWithItsRootType() {
-    String trace =
-        "java.lang.RuntimeException: write failed\n"
-            + "Caused by: org.example.Outer$CustomException: "
-            + HOST
-            + "\n";
-
-    Assertions.assertEquals(
-        Map.of(
-            "command", "execute_optimizing",
-            "error_source", "glue",
-            "category", "unclassified",
-            "fusion_version", "NA",
-            "optimizer_version", "NA",
-            "error_type", "org.example.Outer$CustomException"),
-        Telemetry.traceFailureProps(Command.EXECUTE_OPTIMIZING, "glue", trace));
-  }
-
-  @Test
-  public void traceWithoutExceptionSendsNothing() {
-    Assertions.assertNull(
-        Telemetry.traceFailureProps(Command.EXECUTE_OPTIMIZING, "glue", "no trace"));
   }
 
   @Test

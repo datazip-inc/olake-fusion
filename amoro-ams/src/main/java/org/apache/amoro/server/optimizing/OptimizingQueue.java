@@ -54,6 +54,7 @@ import org.apache.amoro.server.table.DefaultTableRuntime;
 import org.apache.amoro.server.table.blocker.TableBlocker;
 import org.apache.amoro.server.utils.Command;
 import org.apache.amoro.server.utils.IcebergTableUtil;
+import org.apache.amoro.server.utils.OptimizerTaskException;
 import org.apache.amoro.server.utils.Telemetry;
 import org.apache.amoro.shade.guava32.com.google.common.annotations.VisibleForTesting;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
@@ -659,7 +660,7 @@ public class OptimizingQueue extends PersistentBase {
                 .trackFailure(
                     Command.EXECUTE_OPTIMIZING,
                     Telemetry.errorSource(catalogManager, tableRuntime.getTableIdentifier()),
-                    taskRuntime.getFailReason());
+                    new OptimizerTaskException(taskRuntime.getFailReason()));
             if (tableRuntime.isAllowPartialCommit()
                 && tableRuntime.getOptimizingStatus().isProcessing()
                 && tableRuntime.getOptimizingStatus() != OptimizingStatus.COMMITTING) {
