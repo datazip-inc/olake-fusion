@@ -28,6 +28,10 @@ public class OptimizingTaskLogContext {
 
   public static final String PROCESS_ID_KEY = "processId";
   public static final String TASK_ID_KEY = "taskId";
+  // Task id of an appendLogs line that reports lost log lines instead of carrying one. Its text is
+  // a message, which AMS writes to the process driver.log as an ERROR entry and reports in
+  // telemetry.
+  public static final int LOST_LINES_TASK_ID = -1;
 
   // Driver lines carry no taskId, so AMS writes them to the process driver.log.
   public static void setDriverContext(long processId) {

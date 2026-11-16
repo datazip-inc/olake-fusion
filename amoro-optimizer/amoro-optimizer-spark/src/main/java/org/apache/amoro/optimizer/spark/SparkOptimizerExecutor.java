@@ -54,10 +54,11 @@ public class SparkOptimizerExecutor extends OptimizerExecutor {
   @Override
   protected OptimizingTaskResult executeTask(OptimizingTask task) {
     OptimizingTaskResult result;
+    boolean functionReturned = false;
     String threadName = Thread.currentThread().getName();
     long startTime = System.currentTimeMillis();
 
-    SparkOptimizingLogSupport.beforeTask();
+    SparkOptimizingLogSupport.beforeDriverTask(task.getTaskId());
     // AMS writes this thread's lines to <processId>/driver.log.
     OptimizingTaskLogContext.setDriverContext(task.getTaskId().getProcessId());
 
@@ -68,6 +69,7 @@ public class SparkOptimizerExecutor extends OptimizerExecutor {
           new SparkOptimizingTaskFunction(getConfig(), threadId);
       List<OptimizingTaskResult> results = jsc.parallelize(of, 1).map(taskFunction).collect();
       result = results.get(0);
+      functionReturned = true;
       LOG.info(
           "Optimizer executor[{}] executed task[{}] and cost {} ms",
           threadName,
@@ -85,8 +87,9 @@ public class SparkOptimizerExecutor extends OptimizerExecutor {
     } finally {
       OptimizingTaskLogContext.clearContext();
     }
-    // The task's lines, the executor's included, reach AMS before its result does.
-    return SparkOptimizingLogSupport.afterTask(result);
+    // Normally the task's lines, the executor's included, reach AMS before its result does.
+    SparkOptimizingLogSupport.afterDriverTask(task.getTaskId(), functionReturned);
+    return result;
   }
 
   private String jobDescription(OptimizingTask task) {

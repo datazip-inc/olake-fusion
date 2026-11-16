@@ -22,12 +22,13 @@ package org.apache.amoro.optimizer.spark;
 
 import org.apache.amoro.api.OptimizingLogLine;
 import org.apache.amoro.api.OptimizingTaskId;
-import org.apache.amoro.api.OptimizingTaskResult;
 import org.apache.amoro.client.OptimizingClientPools;
 import org.apache.amoro.log.OptimizingTaskLogContext;
 import org.apache.amoro.optimizer.common.OptimizerConfig;
 import org.apache.amoro.optimizer.spark.OptimizingLogSender.LogLine;
+import org.apache.amoro.optimizer.spark.OptimizingLogSender.TaskKey;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
+import org.apache.amoro.shade.thrift.org.apache.thrift.TApplicationException;
 import org.apache.amoro.shade.thrift.org.apache.thrift.TException;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
@@ -47,6 +48,8 @@ import org.apache.spark.rpc.RpcEndpointRef;
 import org.apache.spark.rpc.RpcEnv;
 import org.apache.spark.rpc.RpcTimeout;
 import org.apache.spark.rpc.ThreadSafeRpcEndpoint;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import scala.PartialFunction;
 import scala.concurrent.duration.FiniteDuration;
 import scala.reflect.ClassTag;
@@ -57,8 +60,10 @@ import scala.runtime.BoxedUnit;
 import java.io.Serializable;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -70,15 +75,29 @@ import java.util.concurrent.TimeUnit;
  * driver over Spark RPC; the driver sends its own lines and the executors' lines to AMS through
  * {@code OptimizingService.appendLogs}.
  *
- * <p>No line is dropped: a batch leaves a buffer only once the next hop accepted it, and a task
- * whose lines were not delivered fails, so compaction stops rather than run without its logs. ERROR
- * lines are sent right away, so a crash right after them does not lose them.
+ * <p>Shipping never blocks a compaction thread, and never fails a task: logs are not worth failing
+ * a compaction for. Logging only buffers a line; an ERROR line also asks for an immediate send. At
+ * its end, an executor task queues an end marker behind its lines and returns at once, so its Spark
+ * core is free for the next task. Before the driver reports the task's result to AMS, it waits a
+ * bounded time until AMS accepted the task's lines (the executor's, up to the end marker, and the
+ * driver's own), so a finished run normally shows its full log.
+ *
+ * <p>Buffers are bounded, so an unreachable driver or AMS cannot run a JVM out of memory. Lines
+ * that do not fit are dropped and counted per task; the driver then reports the loss to AMS, which
+ * writes it to the run's driver.log and reports it in telemetry. An AMS without {@code appendLogs}
+ * (an older version) turns shipping off.
  */
 final class SparkOptimizingLogSupport {
 
-  // How long a task waits at its end for its lines to be delivered before it fails.
-  private static final long TASK_DELIVERY_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(30);
-  private static final long ERROR_DELIVERY_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(2);
+  private static final Logger LOG = LoggerFactory.getLogger(SparkOptimizingLogSupport.class);
+
+  // How long the driver waits at a task's end for its lines to reach AMS. The result goes to AMS
+  // either way; lines that are late are still delivered afterwards.
+  private static final long TASK_DELIVERY_WAIT_MS = TimeUnit.SECONDS.toMillis(10);
+  // Buffer limits, well below the 1 GB default heap of the driver and of an executor. The driver
+  // buffers its executors' lines too, so it gets more.
+  private static final long EXECUTOR_BUFFER_BYTES = 32L * 1024L * 1024L;
+  private static final long DRIVER_BUFFER_BYTES = 64L * 1024L * 1024L;
   private static final String ENDPOINT_NAME = "amoro-optimizing-log";
 
   // Set on the driver only. Executors send to the driver through DriverSender.
@@ -86,7 +105,7 @@ final class SparkOptimizingLogSupport {
 
   private SparkOptimizingLogSupport() {}
 
-  /** Starts log shipping on the driver. Throws if it cannot: compaction needs its logs. */
+  /** Starts log shipping on the driver. Throws if it cannot. */
   static void registerOnDriver(OptimizerConfig config) {
     SparkEnv env = SparkEnv.get();
     Preconditions.checkState(env != null, "SparkEnv is not available");
@@ -104,33 +123,55 @@ final class SparkOptimizingLogSupport {
   }
 
   /**
-   * Prepares log shipping before a task, on the driver or an executor. Throws if it cannot, so the
-   * task does not run with its lines going nowhere.
+   * Prepares log shipping before a task, on the driver or an executor. Never throws: a task runs
+   * even if its lines cannot be shipped.
    */
   static void beforeTask() {
-    // Installs once per JVM, and again should Log4j have been reconfigured since.
-    LogAppender.install();
-    if (amsSender == null) {
-      // An executor JVM. In Spark local mode tasks run in the driver JVM, which sends to AMS
-      // itself.
-      DriverSender.INSTANCE.connect();
+    try {
+      // Installs once per JVM, and again should Log4j have been reconfigured since.
+      LogAppender.install();
+      if (amsSender == null) {
+        // An executor JVM. In Spark local mode tasks run in the driver JVM, which sends to AMS
+        // itself.
+        DriverSender.INSTANCE.connect();
+      }
+    } catch (Throwable t) {
+      LOG.warn("Failed to prepare optimizing log shipping; the task runs without it", t);
     }
   }
 
+  /** On the driver, before a task: forgets an end marker left by an earlier run of the task. */
+  static void beforeDriverTask(OptimizingTaskId taskId) {
+    beforeTask();
+    amsSender.forgetTaskEnd(new TaskKey(taskId.getProcessId(), taskId.getTaskId()));
+  }
+
   /**
-   * Waits until this JVM's buffered lines reached the next hop: AMS from the driver, the driver
-   * from an executor. A task whose lines did not arrive in time fails; one that failed already
-   * keeps its own error.
+   * At the end of a task's Spark function: queues the task's end marker behind its lines and asks
+   * for them to be sent. Does not wait.
    */
-  static OptimizingTaskResult afterTask(OptimizingTaskResult result) {
+  static void afterExecutorTask(long processId, int taskId) {
     OptimizingLogSender sender = sender();
-    if (sender.deliver(TASK_DELIVERY_TIMEOUT_MS) || result.getErrorMessage() != null) {
-      return result;
+    sender.add(LogLine.taskEnd(processId, taskId, sender.takeDropped(processId, taskId)));
+    sender.flushAsync();
+  }
+
+  /**
+   * On the driver, before the task's result goes to AMS: waits a bounded time for the task's lines
+   * to reach AMS, and reports lines that were dropped. Never changes the result.
+   *
+   * @param functionReturned true if the task's Spark function returned, so its end marker is on the
+   *     way; false if the Spark job failed, and only the driver's own lines are waited for
+   */
+  static void afterDriverTask(OptimizingTaskId taskId, boolean functionReturned) {
+    try {
+      amsSender.awaitTask(
+          new TaskKey(taskId.getProcessId(), taskId.getTaskId()),
+          functionReturned,
+          TASK_DELIVERY_WAIT_MS);
+    } catch (Throwable t) {
+      LOG.warn("Failed to check delivery of optimizing logs of task {}", taskId, t);
     }
-    OptimizingTaskResult failed =
-        new OptimizingTaskResult(result.getTaskId(), result.getThreadId());
-    failed.setErrorMessage("Optimizing logs could not be delivered to " + sender.target);
-    return failed;
   }
 
   private static OptimizingLogSender sender() {
@@ -196,8 +237,10 @@ final class SparkOptimizingLogSupport {
       sender.add(
           new LogLine(
               Long.parseLong(processId), taskId == null ? 0 : Integer.parseInt(taskId), ndjson));
-      if (event.getLevel().isMoreSpecificThan(Level.ERROR) && !sender.isFailing()) {
-        sender.deliver(ERROR_DELIVERY_TIMEOUT_MS);
+      if (event.getLevel().isMoreSpecificThan(Level.ERROR)) {
+        // Sent now rather than on the next tick, so a crash right after it is less likely to
+        // lose it.
+        sender.flushAsync();
       }
     }
   }
@@ -213,7 +256,10 @@ final class SparkOptimizingLogSupport {
     }
   }
 
-  /** Driver endpoint: hands each executor batch to the AMS sender, then confirms it. */
+  /**
+   * Driver endpoint: hands each executor batch to the AMS sender, and replies whether it took it. A
+   * batch that does not fit in the driver's buffer is refused, and the executor sends it again.
+   */
   static final class LogEndpoint implements ThreadSafeRpcEndpoint {
     private final RpcEnv rpcEnv;
     private final AmsSender sender;
@@ -238,25 +284,37 @@ final class SparkOptimizingLogSupport {
 
         @Override
         public BoxedUnit apply(Object message) {
-          ((LogBatch) message).lines.forEach(sender::add);
-          context.reply(Boolean.TRUE);
+          context.reply(sender.offerAll(((LogBatch) message).lines));
           return BoxedUnit.UNIT;
         }
       };
     }
   }
 
-  /** Driver: sends lines to AMS. */
+  /** Driver: sends lines to AMS, and tracks which tasks' lines AMS accepted. */
   static final class AmsSender extends OptimizingLogSender {
+    // End markers that arrived and that no task waits for yet. Bounded, in case a marker is never
+    // waited for, such as one from a speculative run of a task.
+    private static final int MAX_PENDING_TASK_ENDS = 10_000;
+
     // Log calls get their own client pool (pools are cached per URL) with bounded waits, so an AMS
     // that stops answering does not hold up log delivery forever.
     private static final String CALL_TIMEOUTS = "socketTimeout=30000&connectTimeout=10000";
 
     private final String amsUrl;
     private volatile String token;
+    // Guarded by lock. For each task end marker: the number of lines buffered before it, and the
+    // lines its executor dropped.
+    private final Map<TaskKey, long[]> taskEnds =
+        new LinkedHashMap<TaskKey, long[]>() {
+          @Override
+          protected boolean removeEldestEntry(Map.Entry<TaskKey, long[]> eldest) {
+            return size() > MAX_PENDING_TASK_ENDS;
+          }
+        };
 
     AmsSender(String amsUrl) {
-      super("AMS", TimeUnit.SECONDS.toMillis(1));
+      super("AMS", TimeUnit.SECONDS.toMillis(1), DRIVER_BUFFER_BYTES);
       this.amsUrl = amsUrl + (amsUrl.contains("?") ? "&" : "?") + CALL_TIMEOUTS;
     }
 
@@ -269,7 +327,89 @@ final class SparkOptimizingLogSupport {
         lines.add(
             new OptimizingLogLine(new OptimizingTaskId(line.processId, line.taskId), line.ndjson));
       }
-      OptimizingClientPools.getClient(amsUrl).appendLogs(currentToken, lines);
+      try {
+        OptimizingClientPools.getClient(amsUrl).appendLogs(currentToken, lines);
+      } catch (TApplicationException e) {
+        if (e.getType() != TApplicationException.UNKNOWN_METHOD) {
+          throw e;
+        }
+        LOG.warn(
+            "AMS does not support optimizing log shipping (an older version); optimizing logs "
+                + "are not stored until AMS is upgraded");
+        disable();
+      }
+    }
+
+    // The marker ends its task's lines here: it is not sent to AMS.
+    @Override
+    protected void onTaskEnd(LogLine marker) {
+      taskEnds.put(marker.key(), new long[] {addedLines, marker.droppedLines});
+      lock.notifyAll();
+      flushAsync();
+    }
+
+    void forgetTaskEnd(TaskKey key) {
+      synchronized (lock) {
+        taskEnds.remove(key);
+      }
+    }
+
+    /**
+     * Waits up to {@code timeoutMs} until AMS accepted the task's lines: the driver's lines so far
+     * and, if {@code expectTaskEnd}, the executor's lines up to the task's end marker. Reports
+     * lines of the task that were dropped to AMS.
+     */
+    void awaitTask(TaskKey key, boolean expectTaskEnd, long timeoutMs) throws InterruptedException {
+      long deadline = System.currentTimeMillis() + timeoutMs;
+      flushAsync();
+      long dropped;
+      String late = null;
+      synchronized (lock) {
+        long linesToSend = addedLines;
+        dropped = takeDropped(key.processId, 0) + takeDropped(key.processId, key.taskId);
+        if (expectTaskEnd) {
+          long[] taskEnd;
+          while ((taskEnd = taskEnds.remove(key)) == null && waitUntil(deadline)) {}
+          if (taskEnd == null) {
+            late = "did not reach the Spark driver";
+          } else {
+            linesToSend = Math.max(linesToSend, taskEnd[0]);
+            dropped += taskEnd[1];
+          }
+        }
+        while (late == null && !disabled && sentLines < linesToSend) {
+          if (!waitUntil(deadline)) {
+            late = "did not reach AMS";
+          }
+        }
+      }
+      if (late != null) {
+        LOG.warn(
+            "Optimizing logs of task {} {} within {} ms; they are still sent",
+            key,
+            late,
+            timeoutMs);
+      }
+      if (dropped > 0) {
+        String report =
+            String.format(
+                "%d optimizing log lines of task %s were dropped because the optimizer's log "
+                    + "buffer was full",
+                dropped, key);
+        LOG.warn(report);
+        add(LogLine.unbounded(key.processId, OptimizingTaskLogContext.LOST_LINES_TASK_ID, report));
+        flushAsync();
+      }
+    }
+
+    // Under lock. False once the deadline passed.
+    private boolean waitUntil(long deadline) throws InterruptedException {
+      long remaining = deadline - System.currentTimeMillis();
+      if (remaining <= 0) {
+        return false;
+      }
+      lock.wait(remaining);
+      return true;
     }
   }
 
@@ -286,7 +426,7 @@ final class SparkOptimizingLogSupport {
     private volatile RpcEndpointRef driver;
 
     private DriverSender() {
-      super("the Spark driver", 200L);
+      super("the Spark driver", 200L, EXECUTOR_BUFFER_BYTES);
     }
 
     /** Finds the driver's endpoint, once per executor JVM. */
@@ -307,7 +447,9 @@ final class SparkOptimizingLogSupport {
     protected void send(List<LogLine> batch) {
       RpcEndpointRef endpoint = driver;
       Preconditions.checkState(endpoint != null, "Not connected to the Spark driver");
-      endpoint.askSync(new LogBatch(batch), askTimeout, ACK);
+      Preconditions.checkState(
+          endpoint.askSync(new LogBatch(batch), askTimeout, ACK),
+          "The Spark driver's log buffer is full");
     }
   }
 }

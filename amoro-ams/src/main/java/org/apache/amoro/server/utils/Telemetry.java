@@ -108,7 +108,11 @@ public class Telemetry {
     LIST_TABLES,
     // Registering a table newly found in the catalog; dispose is the reverse.
     REGISTER_TABLE,
-    DISPOSE_TABLE
+    DISPOSE_TABLE,
+    // AMS writing optimizing logs to its disk.
+    WRITE_LOGS,
+    // The optimizer shipping optimizing logs to AMS.
+    SHIP_LOGS
   }
 
   /**
