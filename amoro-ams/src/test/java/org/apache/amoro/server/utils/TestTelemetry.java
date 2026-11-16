@@ -25,12 +25,14 @@ import org.apache.amoro.TableFormat;
 import org.apache.amoro.api.CatalogMeta;
 import org.apache.amoro.exception.AlreadyExistsException;
 import org.apache.amoro.exception.ObjectNotExistsException;
+import org.apache.amoro.exception.OptimizingCommitException;
 import org.apache.amoro.server.catalog.CatalogManager;
 import org.apache.iceberg.exceptions.BadRequestException;
 import org.apache.iceberg.exceptions.ForbiddenException;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.exceptions.NotAuthorizedException;
 import org.apache.iceberg.exceptions.RESTException;
+import org.apache.iceberg.exceptions.ValidationException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -171,6 +173,23 @@ public class TestTelemetry {
   public void subclassOfAMappedExceptionIsClassified() {
     // NumberFormatException is not listed; its superclass IllegalArgumentException is.
     Assertions.assertEquals("config_invalid", categoryOf(new NumberFormatException(HOST)));
+  }
+
+  @Test
+  public void conflictingCompactionCommitIsReportedWithItsValidationException() {
+    // How UnKeyedTableCommit reports a rewrite that conflicts with a concurrent write: Iceberg's
+    // ValidationException, wrapped by the commit.
+    Throwable failure =
+        new OptimizingCommitException(
+            "unexpected commit error ",
+            new ValidationException(
+                "Found conflicting files that can contain records matching true: %s", HOST));
+    Map<String, Object> props = failureProps(failure);
+
+    // ValidationException is not mapped, so the conflict is sent unclassified, with its root type.
+    Assertions.assertEquals("unclassified", props.get("category"));
+    Assertions.assertEquals(ValidationException.class.getName(), props.get("error_type"));
+    props.values().forEach(v -> Assertions.assertFalse(String.valueOf(v).contains(HOST)));
   }
 
   @Test
