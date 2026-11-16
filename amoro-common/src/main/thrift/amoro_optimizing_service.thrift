@@ -50,9 +50,14 @@ struct OptimizerRegisterInfo {
     6: optional map<string, string> properties;
 }
 
+// A log line the optimizer ships to AMS. senderId names the JVM that logged the line and seq is
+// its position in that JVM's output; together they let AMS skip lines it already wrote when a
+// batch is sent again. A line without them is always written.
 struct OptimizingLogLine {
     1: OptimizingTaskId taskId;
     2: string ndjson;
+    3: optional string senderId;
+    4: optional i64 seq;
 }
 
 service OptimizingService {

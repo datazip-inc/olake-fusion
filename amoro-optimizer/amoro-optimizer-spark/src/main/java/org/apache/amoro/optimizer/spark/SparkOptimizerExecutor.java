@@ -57,7 +57,7 @@ public class SparkOptimizerExecutor extends OptimizerExecutor {
     String threadName = Thread.currentThread().getName();
     long startTime = System.currentTimeMillis();
 
-    SparkOptimizingLogSupport.beforeTask();
+    SparkLogShipping.beforeTask();
     // AMS writes this thread's lines to <processId>/driver.log.
     OptimizingTaskLogContext.setDriverContext(task.getTaskId().getProcessId());
 
@@ -85,8 +85,10 @@ public class SparkOptimizerExecutor extends OptimizerExecutor {
     } finally {
       OptimizingTaskLogContext.clearContext();
     }
-    // The task's lines, the executor's included, reach AMS before its result does.
-    return SparkOptimizingLogSupport.afterTask(result);
+    // Gives the task's lines, the executor's included, a bounded chance to reach AMS before its
+    // result does. Never changes the result.
+    SparkLogShipping.afterTask();
+    return result;
   }
 
   private String jobDescription(OptimizingTask task) {

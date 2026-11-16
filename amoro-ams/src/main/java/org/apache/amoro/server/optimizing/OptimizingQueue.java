@@ -814,7 +814,7 @@ public class OptimizingQueue extends PersistentBase {
           persistAndSetCompleted(false);
           trackCompleted();
         }
-        // Outside the try: a failed write must not be taken for a failed commit.
+        // Once the outcome is persisted, so the entry describes the final state.
         appendFailureEntry();
       } finally {
         lock.unlock();
@@ -995,8 +995,8 @@ public class OptimizingQueue extends PersistentBase {
           () -> clearProcess(this));
     }
 
-    // Called once the process is persisted as completed. Throws if the entry cannot be written, so
-    // the failure is not lost silently; the process state is already final by then.
+    // Called once the process is persisted as completed. Best effort, never throws: some callers
+    // run inside a database transaction that a failed log write must not roll back.
     private void appendFailureEntry() {
       if (status != ProcessStatus.SUCCESS && failedReason != null) {
         tableRuntime.appendDriverLogEntry(processId, "ERROR", failedReason, null);

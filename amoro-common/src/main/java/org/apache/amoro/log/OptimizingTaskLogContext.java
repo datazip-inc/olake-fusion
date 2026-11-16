@@ -22,25 +22,29 @@ package org.apache.amoro.log;
 
 import org.apache.logging.log4j.ThreadContext;
 
-// manages per-thread logging context using Log4j2 thread context: "processId", plus "taskId" on a
-// Spark executor. The Spark optimizer ships the lines of threads with a processId to AMS.
+// manages per-thread logging context using Log4j2 thread context: "processId", plus "taskId" and
+// the Spark task "attempt" on a Spark executor. The Spark optimizer ships the lines of threads with
+// a processId to AMS.
 public class OptimizingTaskLogContext {
 
   public static final String PROCESS_ID_KEY = "processId";
   public static final String TASK_ID_KEY = "taskId";
+  public static final String ATTEMPT_KEY = "attempt";
 
   // Driver lines carry no taskId, so AMS writes them to the process driver.log.
   public static void setDriverContext(long processId) {
     ThreadContext.put(PROCESS_ID_KEY, String.valueOf(processId));
   }
 
-  public static void setExecutorContext(long processId, int taskId) {
+  public static void setExecutorContext(long processId, int taskId, int attempt) {
     ThreadContext.put(PROCESS_ID_KEY, String.valueOf(processId));
     ThreadContext.put(TASK_ID_KEY, String.valueOf(taskId));
+    ThreadContext.put(ATTEMPT_KEY, String.valueOf(attempt));
   }
 
   public static void clearContext() {
     ThreadContext.remove(PROCESS_ID_KEY);
     ThreadContext.remove(TASK_ID_KEY);
+    ThreadContext.remove(ATTEMPT_KEY);
   }
 }

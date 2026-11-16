@@ -22,8 +22,9 @@ package org.apache.amoro.server.optimizing;
 
 import org.apache.amoro.api.OptimizingLogLine;
 import org.apache.amoro.api.OptimizingTaskId;
-import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.core.JsonProcessingException;
 import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -35,7 +36,9 @@ import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -48,6 +51,10 @@ import java.util.Map;
  * <p>Lines are written in arrival order. Task id 0 marks a process-level line (task ids start at 1,
  * see {@code OptimizingQueue}), which goes to {@code driver.log}.
  *
+ * <p>The optimizer sends a batch again when it did not get AMS's confirmation, so a batch can
+ * arrive twice. A line that carries a sender id and sequence number is skipped when AMS already
+ * wrote a line of that sender with the same or a higher number to the same file.
+ *
  * <p>HA caveat: each AMS node writes to its own {@code LOG_DIR}. With more than one AMS node, the
  * dashboard only sees the logs the serving node received, unless {@code LOG_DIR} is shared or logs
  * move to a central store.
@@ -56,6 +63,7 @@ import java.util.Map;
  */
 public class LogWriter {
 
+  private static final Logger LOG = LoggerFactory.getLogger(LogWriter.class);
   private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
   // Same time format as the optimizer's JSON log lines.
   private static final DateTimeFormatter DRIVER_LOG_TIME_FORMAT =
@@ -63,13 +71,23 @@ public class LogWriter {
 
   public static final String DRIVER_LOG_FILE = "driver.log";
   private static final String DEFAULT_LOG_DIR = "/mnt/amoro-logs/compaction";
+  // Bounds the memory of the duplicate check. Losing an entry only means a batch sent again for
+  // that sender and file may be written twice.
+  private static final int MAX_TRACKED_STREAMS = 100_000;
 
   private static final LogWriter INSTANCE = new LogWriter(envOrDefault("LOG_DIR", DEFAULT_LOG_DIR));
 
   private final String logBaseDir;
-  // driver.log is the only file with more than one writer (the optimizer and AMS itself both
-  // append to it); every other file has a single writer. One lock is enough for either case.
+  // Guards the files and writtenSeq. driver.log has two writers (the optimizer and AMS itself).
   private final Object lock = new Object();
+  // Highest sequence number written per sender and file, least recently used first.
+  private final Map<String, Long> writtenSeq =
+      new LinkedHashMap<String, Long>(16, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, Long> eldest) {
+          return size() > MAX_TRACKED_STREAMS;
+        }
+      };
 
   private LogWriter(String logBaseDir) {
     this.logBaseDir = logBaseDir;
@@ -85,72 +103,95 @@ public class LogWriter {
 
   /**
    * Creates the log directory at startup, so the dashboard finds it before the first optimizing
-   * run.
-   *
-   * @throws UncheckedIOException if the directory cannot be created
+   * run. A failure is logged and not thrown: AMS runs without its logs rather than not at all.
    */
   public void createLogDir() {
     try {
       Files.createDirectories(Paths.get(logBaseDir));
     } catch (IOException e) {
-      throw new UncheckedIOException("Failed to create optimizing log directory " + logBaseDir, e);
+      LOG.warn("Failed to create optimizing log directory {}", logBaseDir, e);
     }
   }
 
-  /** Appends lines, grouped so each target file is opened once per call. */
+  /**
+   * Appends lines the optimizer sent, grouped so each target file is opened once per call.
+   *
+   * @throws UncheckedIOException if a file cannot be written. The optimizer then sends the batch
+   *     again; the lines already written are skipped on that retry.
+   */
   public void append(List<OptimizingLogLine> lines) {
-    Map<Path, StringBuilder> contentByPath = new LinkedHashMap<>();
-    for (OptimizingLogLine line : lines) {
-      contentByPath
-          .computeIfAbsent(resolvePath(line.getTaskId()), path -> new StringBuilder())
-          .append(line.getNdjson())
-          .append('\n');
+    synchronized (lock) {
+      Map<Path, List<OptimizingLogLine>> linesByPath = new LinkedHashMap<>();
+      // Highest sequence number taken in this call, so a line repeated within a batch is skipped
+      // too.
+      Map<String, Long> takenSeq = new HashMap<>();
+      for (OptimizingLogLine line : lines) {
+        Path path = resolvePath(line.getTaskId());
+        if (line.isSetSenderId() && line.isSetSeq()) {
+          String stream = line.getSenderId() + '|' + path;
+          long seq = line.getSeq();
+          Long written =
+              takenSeq.containsKey(stream) ? takenSeq.get(stream) : writtenSeq.get(stream);
+          if (written != null && seq <= written) {
+            continue;
+          }
+          takenSeq.put(stream, seq);
+        }
+        linesByPath.computeIfAbsent(path, p -> new ArrayList<>()).add(line);
+      }
+      for (Map.Entry<Path, List<OptimizingLogLine>> entry : linesByPath.entrySet()) {
+        StringBuilder content = new StringBuilder();
+        for (OptimizingLogLine line : entry.getValue()) {
+          content.append(line.getNdjson()).append('\n');
+        }
+        write(entry.getKey(), content);
+        // Recorded per file once it is written, so a failure on a later file does not mark this
+        // file's lines, or the failed file's lines, wrongly.
+        for (OptimizingLogLine line : entry.getValue()) {
+          if (line.isSetSenderId() && line.isSetSeq()) {
+            writtenSeq.merge(line.getSenderId() + '|' + entry.getKey(), line.getSeq(), Math::max);
+          }
+        }
+      }
     }
-    contentByPath.forEach(this::write);
   }
 
   /**
    * Appends a line written by AMS itself (not by the optimizer) to the process driver.log.
    *
-   * @throws UncheckedIOException if the entry cannot be serialized or persisted; we cannot afford
-   *     to silently drop a log line, so the caller sees the failure.
+   * <p>Best effort: a failure is logged and never thrown. Callers run inside the process state
+   * machine, often in a database transaction, which a failed log write must not roll back or
+   * interrupt. The message is also kept in the process's fail reason in the database.
    */
   public void appendDriverEntry(long processId, String level, String message, String stackTrace) {
-    Map<String, String> logEntry = new LinkedHashMap<>();
-    logEntry.put("level", level);
-    logEntry.put("time", DRIVER_LOG_TIME_FORMAT.format(Instant.now()));
-    logEntry.put("processId", String.valueOf(processId));
-    logEntry.put("taskId", "");
-    logEntry.put("logger", "");
-    logEntry.put("message", message);
-    logEntry.put("stackTrace", stackTrace == null ? "" : stackTrace);
-    String ndjson;
     try {
-      ndjson = OBJECT_MAPPER.writeValueAsString(logEntry);
-    } catch (JsonProcessingException e) {
-      throw new UncheckedIOException(
-          "Failed to serialize " + level + " entry for driver log of process " + processId, e);
+      Map<String, String> logEntry = new LinkedHashMap<>();
+      logEntry.put("level", level);
+      logEntry.put("time", DRIVER_LOG_TIME_FORMAT.format(Instant.now()));
+      logEntry.put("processId", String.valueOf(processId));
+      logEntry.put("taskId", "");
+      logEntry.put("logger", "");
+      logEntry.put("message", message);
+      logEntry.put("stackTrace", stackTrace == null ? "" : stackTrace);
+      OptimizingLogLine line =
+          new OptimizingLogLine(
+              new OptimizingTaskId(processId, 0), OBJECT_MAPPER.writeValueAsString(logEntry));
+      append(Collections.singletonList(line));
+    } catch (Exception e) {
+      LOG.warn("Failed to append {} entry to driver log of process {}", level, processId, e);
     }
-    OptimizingLogLine line = new OptimizingLogLine(new OptimizingTaskId(processId, 0), ndjson);
-    append(Collections.singletonList(line));
   }
 
-  /**
-   * @throws UncheckedIOException if the lines cannot be persisted; we cannot afford to silently
-   *     drop a log line, so the caller sees the failure.
-   */
   private void write(Path path, StringBuilder content) {
-    synchronized (lock) {
-      try {
-        Files.createDirectories(path.getParent());
-        Files.write(
-            path,
-            content.toString().getBytes(StandardCharsets.UTF_8),
-            StandardOpenOption.CREATE,
-            StandardOpenOption.APPEND);
-      } catch (IOException e) {
-        throw new UncheckedIOException("Failed to persist optimizing log lines to " + path, e);
-      }
+    try {
+      Files.createDirectories(path.getParent());
+      Files.write(
+          path,
+          content.toString().getBytes(StandardCharsets.UTF_8),
+          StandardOpenOption.CREATE,
+          StandardOpenOption.APPEND);
+    } catch (IOException e) {
+      throw new UncheckedIOException("Failed to persist optimizing log lines to " + path, e);
     }
   }
 

@@ -25,6 +25,7 @@ import org.apache.amoro.api.OptimizingTaskResult;
 import org.apache.amoro.log.OptimizingTaskLogContext;
 import org.apache.amoro.optimizer.common.OptimizerConfig;
 import org.apache.amoro.optimizer.common.OptimizerExecutor;
+import org.apache.spark.TaskContext;
 import org.apache.spark.api.java.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,9 +49,12 @@ public class SparkOptimizingTaskFunction implements Function<OptimizingTask, Opt
     long processId = task.getTaskId().getProcessId();
     int taskId = task.getTaskId().getTaskId();
 
-    SparkOptimizingLogSupport.beforeTask();
-    // AMS writes this thread's lines to <processId>/<taskId>.log.
-    OptimizingTaskLogContext.setExecutorContext(processId, taskId);
+    SparkLogShipping.beforeTask();
+    // AMS writes this thread's lines to <processId>/<taskId>.log. The attempt tells apart the lines
+    // of a Spark retry of the same task, which go to the same file.
+    TaskContext sparkTask = TaskContext.get();
+    OptimizingTaskLogContext.setExecutorContext(
+        processId, taskId, sparkTask == null ? 0 : sparkTask.attemptNumber());
 
     OptimizingTaskResult result;
     try {
@@ -58,7 +62,9 @@ public class SparkOptimizingTaskFunction implements Function<OptimizingTask, Opt
     } finally {
       OptimizingTaskLogContext.clearContext();
     }
-    // The task's lines reach the driver before its result does.
-    return SparkOptimizingLogSupport.afterTask(result);
+    // Gives the task's lines a bounded chance to reach the driver before its result does. Never
+    // changes the result.
+    SparkLogShipping.afterTask();
+    return result;
   }
 }
