@@ -48,4 +48,7 @@ public interface TableService extends TableRuntimeHandler {
    * @return managed table.
    */
   AmoroTable<?> loadTable(ServerTableIdentifier identifier);
+
+  /** The type of the catalog holding the table as a telemetry error source; null if unknown. */
+  String errorSource(ServerTableIdentifier identifier);
 }

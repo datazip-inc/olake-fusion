@@ -92,6 +92,7 @@ public class TestSnapshotsExpiringExecutor extends SnapshotExpiryTestBase {
     tableService = mock(TableService.class);
     when(tableService.contains(any())).thenReturn(true);
     when(tableService.loadTable(any())).thenAnswer(invocation -> mock(AmoroTable.class));
+    when(tableService.errorSource(any())).thenReturn("glue");
     configurations = new HashMap<>();
     attemptConfigurations = new ArrayList<>();
     attempt = configuration -> summary(10, 7);

@@ -367,7 +367,9 @@ public class OptimizingQueue extends PersistentBase {
       LOG.error("Planning table {} failed", tableRuntime.getTableIdentifier(), throwable);
       Telemetry.getInstance()
           .trackFailure(
-              Command.PLAN_OPTIMIZING, Telemetry.errorSource(tableRuntime.getFormat()), throwable);
+              Command.PLAN_OPTIMIZING,
+              Telemetry.errorSource(catalogManager, tableRuntime.getTableIdentifier()),
+              throwable);
         tableRuntime.planFailed(ExceptionUtil.getErrorMessage(throwable, 4000), throwable);
       throw throwable;
     }
@@ -656,7 +658,7 @@ public class OptimizingQueue extends PersistentBase {
             Telemetry.getInstance()
                 .trackFailure(
                     Command.EXECUTE_OPTIMIZING,
-                    Telemetry.errorSource(tableRuntime.getFormat()),
+                    Telemetry.errorSource(catalogManager, tableRuntime.getTableIdentifier()),
                     taskRuntime.getFailReason());
             if (tableRuntime.isAllowPartialCommit()
                 && tableRuntime.getOptimizingStatus().isProcessing()
@@ -819,7 +821,9 @@ public class OptimizingQueue extends PersistentBase {
           LOG.error("{} Commit optimizing failed ", tableRuntime.getTableIdentifier(), t);
           Telemetry.getInstance()
               .trackFailure(
-                  Command.COMMIT_OPTIMIZING, Telemetry.errorSource(tableRuntime.getFormat()), t);
+                  Command.COMMIT_OPTIMIZING,
+                  Telemetry.errorSource(catalogManager, tableRuntime.getTableIdentifier()),
+                  t);
           status = ProcessStatus.FAILED;
           failedReason = ExceptionUtil.getErrorMessage(t, 4000);
           endTime = System.currentTimeMillis();

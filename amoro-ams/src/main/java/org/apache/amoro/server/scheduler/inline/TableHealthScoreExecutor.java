@@ -97,8 +97,7 @@ public class TableHealthScoreExecutor extends PeriodicTableScheduler {
       logger.warn(
           "Failed to calculate health score for table {}", tableRuntime.getTableIdentifier(), t);
       Telemetry.getInstance()
-          .trackFailure(
-              Command.EVALUATE_TABLE_HEALTH, Telemetry.errorSource(tableRuntime.getFormat()), t);
+          .trackFailure(Command.EVALUATE_TABLE_HEALTH, errorSource(tableRuntime), t);
     }
   }
 }

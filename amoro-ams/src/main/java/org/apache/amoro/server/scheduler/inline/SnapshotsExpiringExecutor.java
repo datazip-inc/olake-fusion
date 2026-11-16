@@ -149,9 +149,7 @@ public class SnapshotsExpiringExecutor extends PeriodicTableScheduler {
           "Snapshot expiry of table {} could not be recorded",
           tableRuntime.getTableIdentifier(),
           t);
-      Telemetry.getInstance()
-          .trackFailure(
-              Command.EXPIRE_SNAPSHOTS, Telemetry.errorSource(tableRuntime.getFormat()), t);
+      Telemetry.getInstance().trackFailure(Command.EXPIRE_SNAPSHOTS, errorSource(tableRuntime), t);
     }
   }
 

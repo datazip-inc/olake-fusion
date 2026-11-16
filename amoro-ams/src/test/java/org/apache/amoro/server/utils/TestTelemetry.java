@@ -20,7 +20,12 @@
 
 package org.apache.amoro.server.utils;
 
+import org.apache.amoro.ServerTableIdentifier;
+import org.apache.amoro.TableFormat;
+import org.apache.amoro.api.CatalogMeta;
 import org.apache.amoro.exception.AlreadyExistsException;
+import org.apache.amoro.exception.ObjectNotExistsException;
+import org.apache.amoro.server.catalog.CatalogManager;
 import org.apache.iceberg.exceptions.BadRequestException;
 import org.apache.iceberg.exceptions.CommitFailedException;
 import org.apache.iceberg.exceptions.ForbiddenException;
@@ -29,6 +34,7 @@ import org.apache.iceberg.exceptions.NotAuthorizedException;
 import org.apache.iceberg.exceptions.RESTException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 import javax.net.ssl.SSLHandshakeException;
 
@@ -185,11 +191,11 @@ public class TestTelemetry {
     Assertions.assertEquals(
         Map.of(
             "command", "execute_optimizing",
-            "error_source", "iceberg",
+            "error_source", "glue",
             "category", "timeout",
             "fusion_version", "NA",
             "optimizer_version", "NA"),
-        Telemetry.traceFailureProps(Command.EXECUTE_OPTIMIZING, "iceberg", trace));
+        Telemetry.traceFailureProps(Command.EXECUTE_OPTIMIZING, "glue", trace));
   }
 
   @Test
@@ -203,17 +209,34 @@ public class TestTelemetry {
     Assertions.assertEquals(
         Map.of(
             "command", "execute_optimizing",
-            "error_source", "iceberg",
+            "error_source", "glue",
             "category", "unclassified",
             "fusion_version", "NA",
             "optimizer_version", "NA",
             "error_type", "org.example.Outer$CustomException"),
-        Telemetry.traceFailureProps(Command.EXECUTE_OPTIMIZING, "iceberg", trace));
+        Telemetry.traceFailureProps(Command.EXECUTE_OPTIMIZING, "glue", trace));
   }
 
   @Test
   public void traceWithoutExceptionSendsNothing() {
     Assertions.assertNull(
-        Telemetry.traceFailureProps(Command.EXECUTE_OPTIMIZING, "iceberg", "no trace"));
+        Telemetry.traceFailureProps(Command.EXECUTE_OPTIMIZING, "glue", "no trace"));
+  }
+
+  @Test
+  public void errorSourceIsTheCatalogTypeOfTheTable() {
+    CatalogManager catalogManager = Mockito.mock(CatalogManager.class);
+    CatalogMeta meta = new CatalogMeta();
+    meta.setCatalogType("glue");
+    Mockito.when(catalogManager.getCatalogMeta("lake")).thenReturn(meta);
+    Mockito.when(catalogManager.getCatalogMeta("gone"))
+        .thenThrow(new ObjectNotExistsException("Catalog gone"));
+
+    Assertions.assertEquals("glue", Telemetry.errorSource(catalogManager, table("lake")));
+    Assertions.assertNull(Telemetry.errorSource(catalogManager, table("gone")));
+  }
+
+  private static ServerTableIdentifier table(String catalog) {
+    return ServerTableIdentifier.of(1L, catalog, "db", "t", TableFormat.ICEBERG);
   }
 }
