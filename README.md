@@ -19,7 +19,7 @@
 -->
 <div align="center">
 <h1 style="border-bottom: none">
-  <a href="https://datazip.io/olake" target="_blank">
+  <a href="https://olake.io/olake-fusion/" target="_blank">
     <img alt="OLake" src="https://github.com/user-attachments/assets/d204f25f-5289-423c-b3f2-44b2194bdeaf" width="100" height="100"/>
   </a>
   <br>OLake-Fusion
@@ -104,7 +104,7 @@ Helpful next reads:
 Contributions of all sizes are welcome.
 
 - This project: [CONTRIBUTING.md](CONTRIBUTING.md) — build, IDE setup, debug mode, and PR requirements
-- Core project: [datazip-inc/olake](https://github.com/datazip-inc/olake/blob/master/CONTRIBUTING.md)
+- OLake Go (ingestion): [datazip-inc/olake-go](https://github.com/datazip-inc/olake-go/blob/master/CONTRIBUTING.md)
 - UI project: [OLake UI Repository](https://github.com/datazip-inc/olake-ui)
 - Docs and website: [OLake Docs Repository](https://github.com/datazip-inc/olake-docs/)
 - Contributor rewards: [Bounty Program](https://olake.io/docs/fusion/community/issues-and-prs#goodies)
