@@ -200,8 +200,9 @@ Core logic, do not change casually: `evaluateCronTriggers` (the only path into a
   set to the run's **target** (pre-commit) snapshot, while `refresh` stores Fusion's own `OPTIMIZE`
   snapshot as current. The next fire therefore sees a changed snapshot, marks `PENDING`, and the
   planner evaluates the table. If it finds nothing, `completeEmptyProcess` moves
-  `lastOptimizedSnapshotId` to the snapshot the planner read, so later fires on an unchanged table
-  take the tick-level skip without planning.
+  `lastOptimizedSnapshotId` to the snapshot the planner read and sets `lastOptimizingType` to the
+  type that fired, so later fires of that type and of lower types (MINOR below MAJOR below FULL) on
+  an unchanged table take the tick-level skip without planning, while higher types still plan once.
 - `markAsPending` writes the `table_process` row before it moves the status, and does not check
   `IDLE` itself. If the status is no longer `IDLE`, the row stays `PENDING` while the table keeps its
   current process id.

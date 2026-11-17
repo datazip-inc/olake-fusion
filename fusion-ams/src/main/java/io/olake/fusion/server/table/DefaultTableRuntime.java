@@ -324,6 +324,15 @@ public class DefaultTableRuntime extends AbstractTableRuntime implements TableRu
     return this;
   }
 
+  private static boolean isOptimizingType(String name) {
+    for (OptimizingType type : OptimizingType.values()) {
+      if (type.name().equals(name)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   private String triggeredTypeName(long processId) {
     TableProcessMeta processMeta =
         getAs(TableProcessMapper.class, m -> m.getProcessMeta(processId));
@@ -465,10 +474,10 @@ public class DefaultTableRuntime extends AbstractTableRuntime implements TableRu
       return;
     }
 
+    String triggeredType = triggeredTypeName(getProcessId());
     String reason =
         String.format(
-            "cron fired for %s but planner evaluated and found no data to process",
-            triggeredTypeName(getProcessId()));
+            "cron fired for %s but planner evaluated and found no data to process", triggeredType);
 
     finalizePlanningProcess(ProcessStatus.SKIPPED, reason);
 
@@ -483,6 +492,12 @@ public class DefaultTableRuntime extends AbstractTableRuntime implements TableRu
             state -> {
               state.setLastOptimizedSnapshotId(targetSnapshotId);
               state.setLastOptimizedChangeSnapshotId(targetChangeSnapshotId);
+              // Only the type that fired is known to have nothing to do in this snapshot; a higher
+              // type may still have work (an empty MINOR says nothing about MAJOR's files). Record
+              // it, so the cron check still plans the higher types on this snapshot.
+              if (isOptimizingType(triggeredType)) {
+                state.setLastOptimizingType(triggeredType);
+              }
               return state;
             })
         .updateState(PENDING_INPUT_KEY, any -> new AbstractOptimizingEvaluator.PendingInput())

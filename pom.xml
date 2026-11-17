@@ -1238,6 +1238,9 @@
                         <environmentVariables>
                             <!-- Test runs must never report usage telemetry. -->
                             <TELEMETRY_DISABLED>true</TELEMETRY_DISABLED>
+                            <!-- Where AMS writes optimizing logs; the default under /mnt is not writable on
+                                 developer machines, and AMS fails to start without it. -->
+                            <LOG_DIR>${project.build.directory}/optimizing-logs</LOG_DIR>
                         </environmentVariables>
                     </configuration>
                 </plugin>
