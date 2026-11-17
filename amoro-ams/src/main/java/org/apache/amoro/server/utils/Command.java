@@ -49,6 +49,15 @@ public enum Command {
   OPTIMIZER_EXPIRED,
   // No optimizer registered within a few minutes of AMS starting, e.g. a pod that never started.
   OPTIMIZER_NOT_REGISTERED,
+  // Compaction. Planning is retried on every scheduling round.
+  PLAN_OPTIMIZING,
+  // A task that failed on the optimizer and used up its retries.
+  EXECUTE_OPTIMIZING,
+  COMMIT_OPTIMIZING,
+  // Table maintenance, run on a schedule per table.
+  EXPIRE_SNAPSHOTS,
+  REFRESH_TABLE,
+  EVALUATE_TABLE_HEALTH,
   // AMS writing optimizing logs to its disk.
   WRITE_LOGS,
   // The optimizer shipping optimizing logs to AMS.
