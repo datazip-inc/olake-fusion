@@ -81,7 +81,7 @@ public class DefaultTableRuntime extends AbstractTableRuntime
 
   private static final Logger LOG = LoggerFactory.getLogger(DefaultTableRuntime.class);
 
-  private static final SnowflakeIdGenerator ID_GENERATOR = new SnowflakeIdGenerator();
+  public static final SnowflakeIdGenerator ID_GENERATOR = new SnowflakeIdGenerator();
 
   private static final StateKey<TableRuntimeOptimizingState> OPTIMIZING_STATE_KEY =
       StateKey.stateKey("optimizing_state")

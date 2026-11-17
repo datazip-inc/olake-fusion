@@ -36,7 +36,6 @@ import org.apache.amoro.server.scheduler.PeriodicTableScheduler;
 import org.apache.amoro.server.table.DefaultTableRuntime;
 import org.apache.amoro.server.table.TableService;
 import org.apache.amoro.server.utils.Command;
-import org.apache.amoro.server.utils.SnowflakeIdGenerator;
 import org.apache.amoro.server.utils.Telemetry;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
 import org.apache.amoro.table.TableProperties;
@@ -83,8 +82,6 @@ public class SnapshotsExpiringExecutor extends PeriodicTableScheduler {
   private static final int MAX_LOGGED_SNAPSHOTS = 100;
   /** Highest Iceberg table format version snapshot expiry runs on; v3 tables are rejected. */
   static final int MAX_FORMAT_VERSION = 2;
-
-  private static final SnowflakeIdGenerator ID_GENERATOR = new SnowflakeIdGenerator();
 
   private final Clock clock;
   private final Telemetry telemetry;
@@ -192,7 +189,7 @@ public class SnapshotsExpiringExecutor extends PeriodicTableScheduler {
   private void run(TableRuntime tableRuntime, TableConfiguration configuration, long startTime) {
     ServerTableIdentifier identifier = tableRuntime.getTableIdentifier();
     persistency.failRunning(identifier.getId(), UNFINISHED_MESSAGE, startTime);
-    long processId = ID_GENERATOR.generateId();
+    long processId = DefaultTableRuntime.ID_GENERATOR.generateId();
     runLog(
         tableRuntime,
         processId,
