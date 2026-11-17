@@ -21,8 +21,10 @@
 package org.apache.amoro.server.utils;
 
 import org.apache.amoro.OptimizerProperties;
+import org.apache.amoro.ServerTableIdentifier;
 import org.apache.amoro.optimizing.OptimizingType;
 import org.apache.amoro.server.AmoroServiceContainer;
+import org.apache.amoro.server.catalog.CatalogManager;
 import org.apache.amoro.server.persistence.PlatformPropertyStore;
 import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
@@ -494,6 +496,18 @@ public class Telemetry {
 
   private static String wire(Enum<?> value) {
     return value.name().toLowerCase(Locale.ROOT);
+  }
+
+  /**
+   * The type of the catalog holding a table (glue/rest/hive/custom...) as an error source, matching
+   * the catalog failures. Null if the catalog can't be resolved; never throws.
+   */
+  public static String errorSource(CatalogManager catalogManager, ServerTableIdentifier table) {
+    try {
+      return catalogManager.getCatalogMeta(table.getCatalog()).getCatalogType();
+    } catch (Throwable t) {
+      return null;
+    }
   }
 
   public void trackInstalledFusion(int optimizerParallelism) {

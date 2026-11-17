@@ -14,6 +14,8 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
  */
 
 package org.apache.amoro.server.scheduler;
@@ -312,6 +314,11 @@ public abstract class PeriodicTableScheduler extends RuntimeHandlerChain {
 
   protected AmoroTable<?> loadTable(TableRuntime tableRuntime) {
     return tableService.loadTable(tableRuntime.getTableIdentifier());
+  }
+
+  /** The catalog type of the table, used as the error source of its failure reports. */
+  protected String errorSource(TableRuntime tableRuntime) {
+    return tableService.errorSource(tableRuntime.getTableIdentifier());
   }
 
   public Action getAction() {

@@ -250,6 +250,11 @@ public class DefaultTableService extends PersistentBase implements TableService 
   }
 
   @Override
+  public String errorSource(ServerTableIdentifier identifier) {
+    return Telemetry.errorSource(catalogManager, identifier);
+  }
+
+  @Override
   public void dispose() {
     tableExplorerScheduler.shutdown();
     if (tableExplorerExecutors != null) {
