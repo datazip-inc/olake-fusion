@@ -1,7 +1,7 @@
 # `io.olake.fusion.formats.iceberg.utils`
 
 Helpers for Iceberg table maintenance: snapshot lookup, the sets of files a table still references,
-dangling delete detection, and a batched file deleter.
+and dangling delete detection.
 
 ## Role in Fusion
 
@@ -14,7 +14,6 @@ plus the evaluator/planner factories; the two are separate copies.
 | Class | Responsibility | Main collaborators |
 | --- | --- | --- |
 | `IcebergTableUtil` | Static helpers: `getSnapshotId`, `getSnapshot`, `findFirstMatchSnapshot`, `findLatestOptimizingSnapshot`, `getAllContentFilePath`, `getAllStatisticsFilePath`, `getDanglingDeleteFiles`, `getAllManifestFiles`. | `TableEntriesScan`, Iceberg metadata tables |
-| `RollingFileCleaner` | Collects file paths (as an Iceberg `deleteWith` callback) and deletes them in groups of `CLEANED_FILE_GROUP_SIZE = 1_000`, then tries to delete empty parent directories. | `AuthenticatedFileIO` |
 
 ## How it works
 
@@ -33,15 +32,10 @@ plus the evaluator/planner factories; the two are separate copies.
   current snapshot (`TableEntriesScan` with `useSnapshot`) whose path is not in that set. On a scan
   `IOException` it logs and returns an empty set (fails safe).
 - `getAllManifestFiles(table)`: reads the `path` column of the `ALL_MANIFESTS` metadata table.
-- `RollingFileCleaner.addFile(path)`: ignores excluded paths (exact, URI path or parent directory),
-  records the path and its parent, and every 1000 files calls `doCleanFiles()` (bulk delete if the
-  FileIO supports it, else one by one; failures are logged, not thrown). `clear()` deletes the
-  remainder. `fileCount()` / `cleanedFileCount()` report collected and deleted counts.
 
 ## State, threads and concurrency
 
-`IcebergTableUtil` is stateless. `RollingFileCleaner` uses concurrent sets and atomic counters because
-Iceberg may call `deleteWith` from worker threads; one instance per expiry run.
+`IcebergTableUtil` is stateless.
 
 ## Contracts
 
@@ -50,8 +44,7 @@ Iceberg may call `deleteWith` from worker threads; one instance per expiry run.
 - `findLatestOptimizingSnapshot` depends on `snapshot.producer = OPTIMIZE` written by
   `UnKeyedTableCommit` and the `replace` operation of `RewriteFiles`.
 - Iceberg APIs (1.7.2): `MetadataTableUtils.createMetadataTableInstance`,
-  `MetadataTableType.ALL_ENTRIES` / `ALL_MANIFESTS` / `ENTRIES`, `ReachableFileUtil`,
-  `SupportsBulkOperations`, `BulkDeletionFailureException`.
+  `MetadataTableType.ALL_ENTRIES` / `ALL_MANIFESTS` / `ENTRIES`, `ReachableFileUtil`.
 
 ## Extending or changing it
 
@@ -60,10 +53,6 @@ would make orphan cleaning delete files that older snapshots, tags or branches s
 
 ## Invariants and pitfalls
 
-- A bulk delete failure only logs `numberFailedObjects()`; the cleaned counter is not updated for
-  that group, and failed files remain on storage.
-- `RollingFileCleaner.isFileExcluded` uses `new Path(uriPath).getParent()`, which assumes the path has
-  a parent.
 - All `CloseableIterable`s here are closed with try-with-resources.
 
 ## Tests

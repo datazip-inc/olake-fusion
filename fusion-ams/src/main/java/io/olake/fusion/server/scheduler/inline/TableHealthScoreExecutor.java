@@ -28,7 +28,9 @@ import io.olake.fusion.optimizing.plan.AbstractOptimizingEvaluator;
 import io.olake.fusion.server.scheduler.PeriodicTableScheduler;
 import io.olake.fusion.server.table.DefaultTableRuntime;
 import io.olake.fusion.server.table.TableService;
+import io.olake.fusion.server.utils.Command;
 import io.olake.fusion.server.utils.IcebergTableUtil;
+import io.olake.fusion.server.utils.Telemetry;
 import io.olake.fusion.table.BasicTableSnapshot;
 
 /**
@@ -94,6 +96,8 @@ public class TableHealthScoreExecutor extends PeriodicTableScheduler {
     } catch (Throwable t) {
       logger.warn(
           "Failed to calculate health score for table {}", tableRuntime.getTableIdentifier(), t);
+      Telemetry.getInstance()
+          .trackFailure(Command.EVALUATE_TABLE_HEALTH, errorSource(tableRuntime), t);
     }
   }
 }

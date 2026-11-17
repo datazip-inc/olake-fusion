@@ -85,8 +85,10 @@ not an unkeyed table.
 - `getTableFiles`: manifest entries via `IcebergFindFiles`, optionally filtered to one partition.
 - `getTableOperations`: `DDLReverser` over all `metadata.json` versions (see
   [`component/reverser`](component/reverser/README.md)).
-- `getOptimizingProcessesInfo`: looks up the `ServerTableIdentifier`, pages
-  `TableProcessMapper.listProcessMeta(tableId, type, status)` with `PageHelper.startPage`, loads
+- `getOptimizingProcessesInfo`: looks up the `ServerTableIdentifier`, splits `type` on commas
+  (for example `MINOR,MAJOR,FULL`), pages
+  `TableProcessMapper.listProcessMetaWithSnapshotExpiry(tableId, types, status)` with
+  `PageHelper.startPage` (compaction runs plus snapshot expiry runs, type `EXPIRY`), loads
   tasks with `OptimizingProcessMapper.selectOptimizeTaskMetas`, and builds `OptimizingProcessInfo`
   (task counts, input/output files, duration, status, fail reason, summary).
 - `getOptimizingTaskInfos`: one `OptimizingTaskInfo` per task of a process.

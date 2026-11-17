@@ -61,7 +61,7 @@ So a sequence of `doAs` calls inside `doAsTransaction` is one database transacti
    - For each declared version not yet recorded, `apply` inserts the history row and executes the whole script as one statement, then commits. If it fails and `isAlreadyApplied` finds the row, another instance applied it and startup continues; otherwise it throws `IllegalStateException` and the server does not start.
    - For recorded versions, `verifyUnchanged` fails startup if the script name differs or the checksum (SHA-256 of the script with `\r\n` → `\n`) changed.
 
-Current migrations: `V1__platform_property.sql` (creates `platform_property`). The init script does not create `platform_property` or `ams_schema_migration`; those come only from the migration path.
+Current migrations: `V1__platform_property.sql` (creates `platform_property`), `V2__snapshot_expiry_process.sql` (creates `snapshot_expiry_process`; released in v0.2.1, so its number and name must never change) and `V3__drop_unused_tables.sql` (drops tables of removed features). The init script does not create `platform_property` or `ams_schema_migration`; those come only from the migration path.
 
 The files `postgres/upgrade*.sql` are upstream Amoro upgrade notes; no code runs them.
 
@@ -80,7 +80,7 @@ The files `postgres/upgrade*.sql` are upstream Amoro upgrade notes; no code runs
 
 ## Extending or changing it
 
-- **Add a migration**: create `fusion-ams/src/main/resources/postgres/migration/V2__<name>.sql` (copy `V1__platform_property.sql`) using `IF NOT EXISTS` forms, and append `"V2__<name>.sql"` to `SchemaMigrator.MIGRATIONS`. Do not put DDL in Java. Decide whether `ams-postgres-init.sql` should also change; a fresh database runs both.
+- **Add a migration**: create `fusion-ams/src/main/resources/postgres/migration/V4__<name>.sql` (the next free number; copy `V1__platform_property.sql`) using `IF NOT EXISTS` forms, and append `"V4__<name>.sql"` to `SchemaMigrator.MIGRATIONS`. Never renumber or edit a migration that has been released. Do not put DDL in Java. Decide whether `ams-postgres-init.sql` should also change; a fresh database runs both.
 - **Add a mapper**: write the interface in `mapper`, then add `configuration.addMapper(NewMapper.class)` in `SqlSessionFactoryProvider.init`, or MyBatis will not find it.
 - **Multi-statement writes**: wrap them in `doAsTransaction` rather than calling `doAs` in sequence.
 

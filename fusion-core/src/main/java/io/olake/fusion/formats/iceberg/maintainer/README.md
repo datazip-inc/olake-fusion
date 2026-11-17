@@ -15,7 +15,7 @@ optimizing processes.
 
 | Class | Responsibility | Main collaborators |
 | --- | --- | --- |
-| `IcebergTableMaintainer` | All five jobs for an Iceberg `Table`. | `TableMaintainerContext`, `IcebergTableUtil`, `RollingFileCleaner`, `TableEntriesScan` |
+| `IcebergTableMaintainer` | All five jobs for an Iceberg `Table`. | `TableMaintainerContext`, `IcebergTableUtil`, `SnapshotExpirySummary`, `TableEntriesScan` |
 | `AutoCreateIcebergTagAction` | Creates the tag for the current period if missing. | `TagConfiguration`, `ManageSnapshots` |
 
 ## How it works
@@ -26,7 +26,7 @@ Properties (parsed in `TableConfigurations`, fusion-ams) and defaults:
 | --- | --- | --- |
 | Orphan files | `clean-orphan-file.enabled` (`false`) | `clean-orphan-file.min-existing-time-minutes` (`2880`) |
 | Dangling deletes | `clean-dangling-delete-files.enabled` (`true`) | |
-| Snapshot expiry | `table-expire.enabled` (`false`) | `snapshot.keep.duration` (`720min`), `snapshot.keep.min-count` (`1`), `snapshot.keep.flink.checkpoint-retention` (`7d`) |
+| Snapshot expiry | `snapshot-expire.enabled` (unset: on when `snapshot-expire.trigger.cron` is set) and Iceberg `gc.enabled` (`true`); runs when the cron fires | `snapshot.keep.duration` (`7d`; no unit means days), `snapshot.keep.min-count` (`30`, lowest accepted `10`), `snapshot.keep.flink.checkpoint-retention` (`7d`) |
 | Data expiry | `data-expire.enabled` (`false`) and Iceberg `gc.enabled` (`true`) | `data-expire.field`, `data-expire.level` (`partition`), `data-expire.retention-time`, `data-expire.base-on-rule` (`LAST_COMMIT_TIME`), `data-expire.datetime-string-pattern` (`yyyy-MM-dd`), `data-expire.datetime-number-format` (`TIMESTAMP_MS`) |
 | Tags | `tag.auto-create.enabled` (`false`) | `tag.auto-create.trigger.period` (`daily`), `tag.auto-create.trigger.offset.minutes` (`0`), `tag.auto-create.trigger.max-delay.minutes` (`60`), `tag.auto-create.max-age-ms` (`-1`), `tag.auto-create.tag-format` |
 
@@ -58,9 +58,12 @@ process's target snapshot (`fetchOptimizingPlanSnapshotTime`, via `OptimizingInf
 timestamp of the latest snapshot not produced by Fusion maintenance
 (`fetchLatestNonOptimizedSnapshotTime`, producers `OPTIMIZE`, `DATA_EXPIRATION`,
 `CLEAN_DANGLING_DELETE`). If a Flink checkpoint snapshot is younger than the Flink retention, it is
-kept too. Then Iceberg `expireSnapshots().retainLast(max(minCount, 1)).expireOlderThan(t)
-.deleteWith(cleaner::addFile).cleanExpiredFiles(true).commit()`; `RollingFileCleaner` deletes the
-collected files in groups of 1000 and the rest in `clear()`; it does not delete directories.
+kept too. Then `expireSnapshotsWithSummary(t, minCount)` runs Iceberg
+`expireSnapshots().retainLast(max(minCount, 1)).expireOlderThan(t).cleanExpiredFiles(false).commit()`
+and returns a `SnapshotExpirySummary` (counts before/retained/expired and the expired snapshots).
+**No file is deleted**: files of expired snapshots are left for orphan file cleaning. The server's
+`SnapshotsExpiringExecutor` calls `expireSnapshotsWithSummary` when the table's expiry cron fires
+and records the run in `snapshot_expiry_process`.
 
 ### `expireData()`
 
@@ -99,7 +102,7 @@ streams and concurrent maps.
 
 ## Extending or changing it
 
-Override the protected hooks (`expireSnapshotNeedToExcludeFiles`, `orphanFileCleanNeedToExcludeFiles`,
+Override the hooks (`orphanFileCleanNeedToExcludeFiles`,
 `mustOlderThan`) rather than the public jobs. Keep orphan cleaning based on **all** snapshots' files.
 
 ## Invariants and pitfalls
@@ -131,5 +134,5 @@ Override the protected hooks (`expireSnapshotNeedToExcludeFiles`, `orphanFileCle
 ## Related packages
 
 - [`../../../maintainer`](../../../maintainer/README.md): API and context.
-- [`../utils`](../utils/README.md): file listing helpers and `RollingFileCleaner`.
+- [`../utils`](../utils/README.md): file listing helpers.
 - [`../../../scan`](../../../scan/README.md): `TableEntriesScan`.

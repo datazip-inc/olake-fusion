@@ -170,9 +170,10 @@ List endpoints take `page` (default 1) and `pageSize` (default 20) and return `P
 ## State, threads and concurrency
 
 - Handlers run on Jetty request threads; controllers are singletons shared by all requests.
-- `LogController.LOG_BASE_DIR` is read once from env `LOG_DIR`, default
+- `LogController.LOG_BASE_DIR` is `LogWriter.getLogBaseDir()`: env `LOG_DIR`, default
   `/mnt/amoro-logs/compaction`. OLake-UI's `docker-compose-v1.yml` sets
-  `LOG_DIR: /mnt/amoro-logs/compaction`.
+  `LOG_DIR: /mnt/amoro-logs/compaction`. `LogWriter` is the only writer of these files; the
+  optimizer ships its lines through `appendLogs`.
 - `downloadProcessLogs` writes the tar directly to the servlet output stream; an I/O error after
   headers are sent is only logged.
 

@@ -106,7 +106,7 @@ Statuses are `OptimizingStatus` codes (`IDLE` 700, `PENDING` 600, `PLANNING` 500
 | `setTableSummary(summary, snapshotId)` | `TableHealthScoreExecutor` | Writes health scores and file counts to `table_summary` only, and refreshes `TableSummaryMetrics`. |
 | `setPendingInput`, `optimizingNotNecessary` | no caller in `fusion-ams/src/main` | Update `pending_input` (and IDLE → PENDING), or mark the current snapshot as optimized while IDLE. |
 
-`appendDriverLogEntry` writes to `$LOG_DIR/<processId>/driver.log`, defaulting to `/mnt/amoro-logs/compaction`.
+`appendDriverLogEntry` hands the entry to `optimizing.LogWriter`, which appends it to `$LOG_DIR/<processId>/driver.log` (default `/mnt/amoro-logs/compaction`); it never throws.
 
 Quota: `addTaskQuota` (called by `OptimizingQueue`) inserts into `optimizing_task_quota` (`doAsIgnoreError`) and keeps an in-memory window of `FusionServiceConstants.QUOTA_LOOK_BACK_TIME`; `calculateQuotaOccupy()` divides used time by `self-optimizing.quota` (a fraction is multiplied by the optimizer thread count from `OptimizerMapper.selectAll`).
 
@@ -123,7 +123,7 @@ Called with the table's properties, which for Iceberg tables already include cat
 | `self-optimizing.minor.trigger.cron`, `.major.trigger.cron`, `.full.trigger.cron` | `null` | Lite/Medium/Full crons |
 | `self-optimizing.allow-partial-commit`, `self-optimizing.execute.num-retries`, `self-optimizing.filter`, `self-optimizing.min-plan-interval` and the other `SELF_OPTIMIZING_*` keys | see `TableProperties` | planner tuning |
 | `gc.enabled` | `true` | gates the four cleanups below |
-| `table-expire.enabled`, `snapshot.keep.duration` (`720min`), `snapshot.keep.min-count` (`1`) | `false` / … | snapshot expiry |
+| `snapshot-expire.trigger.cron`, `snapshot-expire.enabled`, `snapshot.keep.duration` (`7d`), `snapshot.keep.min-count` (`30`, lowest `10`) | empty / on when the cron is set | snapshot expiry, run by `SnapshotsExpiringExecutor` when the cron fires; an invalid value fails only the expiry run (`TableConfiguration.snapshotExpireConfigError`) |
 | `clean-orphan-file.enabled` (`false`), `clean-orphan-file.min-existing-time-minutes` (`2880`) | | orphan files |
 | `clean-dangling-delete-files.enabled` | `true` | dangling deletes |
 | `data-expire.enabled` (`false`) and `DATA_EXPIRATION_*` keys | | data expiry |

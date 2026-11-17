@@ -148,6 +148,7 @@ debug-compile:
 debug-server: $(if $(NO_COMPILE),,debug-compile)
 	@echo "Starting Fusion on $(FUSION_URL) (admin / password), database $(DEBUG_DB)"
 	@AMORO_HOME="$(BIN_HOME)" AMORO_CONF_DIR="$(CURDIR)/$(COMPOSE_DIR)" CONSOLE_LOG_LEVEL=info \
+		LOG_DIR="$(BIN_HOME)/logs/compaction" \
 		AMS_SERVER__EXPOSE__HOST=127.0.0.1 \
 		OPTIMIZER_LOG_CONF_FILE="$(BIN_HOME)/conf/optimize/log4j2.xml" \
 		AMS_DATABASE_URL="jdbc:postgresql://localhost:5432/$(DEBUG_DB)" \

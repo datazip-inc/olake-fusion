@@ -23,6 +23,9 @@ package io.olake.fusion.server.scheduler.inline;
 import io.olake.fusion.config.Configurations;
 import io.olake.fusion.server.FusionManagementConf;
 import io.olake.fusion.server.table.TableService;
+import io.olake.fusion.server.utils.Telemetry;
+
+import java.time.Clock;
 
 public class InlineTableExecutors {
 
@@ -45,7 +48,8 @@ public class InlineTableExecutors {
           new SnapshotsExpiringExecutor(
               tableService,
               conf.getInteger(FusionManagementConf.EXPIRE_SNAPSHOTS_THREAD_COUNT),
-              conf.get(FusionManagementConf.EXPIRE_SNAPSHOTS_INTERVAL));
+              Clock.systemDefaultZone(),
+              Telemetry.getInstance());
     }
     if (conf.getBoolean(FusionManagementConf.CLEAN_ORPHAN_FILES_ENABLED)) {
       this.orphanFilesCleaningExecutor =

@@ -1,57 +1,57 @@
 # `io.olake.fusion.log`
 
-`OptimizingTaskLogContext`: puts the optimizing process id and task id into the Log4j2
-`ThreadContext` of the thread that runs a task, so that task logs can be tagged and routed per task.
+`OptimizingTaskLogContext`: puts the optimizing process id, and on a Spark executor the task id,
+into the Log4j2 `ThreadContext` of the thread that runs a task, so that the Spark optimizer can ship
+that thread's log lines to AMS.
 
 ## Role in Fusion
 
-**Optimizer.** `fusion-optimizer-spark`'s `SparkOptimizingTaskFunction#call` (runs on Spark
-executors) calls `setContext(processId, taskId)` before running the task and `clearContext()` in
-`finally`. The server does not use it.
+**Optimizer.** In `fusion-optimizer-spark`, `SparkOptimizerExecutor#executeTask` (driver) calls
+`setDriverContext(processId)` and `SparkOptimizingTaskFunction#call` (executors) calls
+`setExecutorContext(processId, taskId)`; both call `clearContext()` in `finally`.
+`SparkOptimizingLogSupport`'s appender ships only lines whose context has a `processId`.
+
+**Server.** `LogWriter` (`fusion-ams`, `server/optimizing`) uses `LOST_LINES_TASK_ID` to recognise
+a report of lines the optimizer dropped.
 
 ## Key classes
 
 | Class | Responsibility | Main collaborators |
 | --- | --- | --- |
-| `OptimizingTaskLogContext` | Static helpers: `setContext(long processId, int taskId)`, `clearContext()`, `isContextSet()`. Keys `PROCESS_ID_KEY = "processId"`, `TASK_ID_KEY = "taskId"`, `LOG_FILE_PATH_KEY = "logFilePath"`. | Log4j2 `ThreadContext`, `SparkOptimizingTaskFunction`, `conf/optimize/log4j2-routing.xml` |
+| `OptimizingTaskLogContext` | Static helpers: `setDriverContext(long processId)`, `setExecutorContext(long processId, int taskId)`, `clearContext()`. Keys `PROCESS_ID_KEY = "processId"`, `TASK_ID_KEY = "taskId"`; `LOST_LINES_TASK_ID = -1`. | Log4j2 `ThreadContext`, `SparkOptimizingLogSupport`, `LogWriter` |
 
 ## How it works
 
-1. `setContext` sets a thread-local flag and puts `processId` and `taskId` into `ThreadContext`.
-2. `SparkOptimizingTaskFunction` then also puts `processId`, `taskId` and
-   `logFilePath = "<processId>/<taskId>"` into SLF4J `MDC` (the same Log4j2 context map).
-3. `dist/src/main/fusion-bin/conf/optimize/log4j2-routing.xml` routes on `${ctx:logFilePath}`: when
-   it is set, logs go to `${LOG_DIR}/<processId>/<taskId>.log`; the patterns print
-   `%X{processId}` and `%X{taskId}`. The Spark driver sets `logFilePath` itself in
-   `SparkOptimizerExecutor`.
-4. `clearContext` removes the flag and the three keys.
+1. The driver thread of a task gets only `processId`; an executor thread gets `processId` and
+   `taskId`.
+2. `SparkOptimizingLogSupport.LogAppender` formats each line of such a thread as one JSON object
+   and buffers it. A line without `taskId` is sent with task id 0, which AMS writes to
+   `<LOG_DIR>/<processId>/driver.log`; an executor line goes to `<LOG_DIR>/<processId>/<taskId>.log`.
+3. Executors send their lines to the driver over Spark RPC; the driver sends all lines to AMS with
+   `OptimizingService.appendLogs`. AMS (`LogWriter`) is the only writer of the files.
+4. `clearContext` removes both keys.
 
 ## State, threads and concurrency
 
-All state is per thread (`ThreadLocal` flag and Log4j2's thread context). Spark reuses executor
-threads, so `clearContext` must run in `finally`, as it does today.
+All state is Log4j2's per-thread context. Spark reuses executor threads, so `clearContext` must run
+in `finally`, as it does today.
 
 ## Contracts
 
-The key names `processId`, `taskId` and `logFilePath` are used by the optimizer's Log4j2 routing
-configuration. They are bundled in the optimizer image, so code and config change together.
+- The key names `processId` and `taskId` are read by `SparkOptimizingLogSupport`'s appender and
+  printed in the shipped JSON lines that `LogController` parses.
+- `LOST_LINES_TASK_ID` is part of the `appendLogs` wire contract between the optimizer and AMS.
 
 ## Extending or changing it
 
-Add a key constant here, put it in `setContext`, remove it in `clearContext`, and reference it in
-`log4j2-routing.xml`.
-
-## Invariants and pitfalls
-
-- `isContextSet()` has no caller in the repo. The comment in `SparkOptimizingTaskFunction` says
-  `AbstractRewriteFilesExecutor.execute()` checks it, but no such check exists in the current tree.
-- `setContext` does not set `logFilePath`; `clearContext` removes it anyway.
+Add a key constant here, set it in the `set*Context` methods, remove it in `clearContext`, and add
+it to `SparkOptimizingLogSupport.LogAppender`'s JSON pattern if AMS should store it.
 
 ## Tests
 
-No unit tests. Check per-task log files with a local optimizer run (see CLAUDE.md, "Code that runs in
-the optimizer").
+No unit tests. Check per-task log files with a Spark optimizer run.
 
 ## Related packages
 
-- [`io.olake.fusion`](../README.md), `fusion-optimizer/fusion-optimizer-spark`
+- [`io.olake.fusion`](../README.md), `fusion-optimizer/fusion-optimizer-spark`,
+  `fusion-ams` `server/optimizing` (`LogWriter`)

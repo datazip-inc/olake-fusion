@@ -30,6 +30,7 @@ import io.olake.fusion.server.persistence.mapper.OptimizerMapper;
 import io.olake.fusion.server.persistence.mapper.OptimizingProcessMapper;
 import io.olake.fusion.server.persistence.mapper.PlatformPropertyMapper;
 import io.olake.fusion.server.persistence.mapper.ResourceMapper;
+import io.olake.fusion.server.persistence.mapper.SnapshotExpiryProcessMapper;
 import io.olake.fusion.server.persistence.mapper.TableMetaMapper;
 import io.olake.fusion.server.persistence.mapper.TableProcessMapper;
 import io.olake.fusion.server.persistence.mapper.TableRuntimeMapper;
@@ -71,6 +72,7 @@ public class SqlSessionFactoryProvider {
     configuration.addMapper(PlatformPropertyMapper.class);
     configuration.addMapper(ResourceMapper.class);
     configuration.addMapper(TableProcessMapper.class);
+    configuration.addMapper(SnapshotExpiryProcessMapper.class);
     configuration.addMapper(TableRuntimeMapper.class);
 
     PageInterceptor interceptor = new PageInterceptor();

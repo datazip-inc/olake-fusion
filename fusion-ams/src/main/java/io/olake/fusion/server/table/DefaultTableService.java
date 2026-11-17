@@ -40,6 +40,8 @@ import io.olake.fusion.server.persistence.TableRuntimeMeta;
 import io.olake.fusion.server.persistence.TableRuntimeState;
 import io.olake.fusion.server.persistence.mapper.TableMetaMapper;
 import io.olake.fusion.server.persistence.mapper.TableRuntimeMapper;
+import io.olake.fusion.server.utils.Command;
+import io.olake.fusion.server.utils.Telemetry;
 import io.olake.fusion.table.TableSummary;
 import io.olake.fusion.utils.TablePropertyUtil;
 import org.apache.amoro.shade.guava32.com.google.common.annotations.VisibleForTesting;
@@ -246,6 +248,11 @@ public class DefaultTableService extends PersistentBase implements TableService 
   }
 
   @Override
+  public String errorSource(ServerTableIdentifier identifier) {
+    return Telemetry.errorSource(catalogManager, identifier);
+  }
+
+  @Override
   public void dispose() {
     tableExplorerScheduler.shutdown();
     if (tableExplorerExecutors != null) {
@@ -275,6 +282,8 @@ public class DefaultTableService extends PersistentBase implements TableService 
             "TableExplorer error when explore table runtimes for catalog:{}",
             serverCatalog.name(),
             e);
+        Telemetry.getInstance()
+            .trackFailure(Command.EXPLORE_CATALOG, serverCatalog.getMetadata().getCatalogType(), e);
       }
     }
 
@@ -320,6 +329,11 @@ public class DefaultTableService extends PersistentBase implements TableService 
                                   "TableExplorer list tables in database {} error, skipping it in this sync cycle",
                                   database,
                                   ex);
+                              Telemetry.getInstance()
+                                  .trackFailure(
+                                      Command.LIST_TABLES,
+                                      externalCatalog.getMetadata().getCatalogType(),
+                                      ex);
                               failedDatabases.add(database);
                               return Sets.newHashSet();
                             }));
@@ -364,6 +378,11 @@ public class DefaultTableService extends PersistentBase implements TableService 
                           } catch (Exception e) {
                             LOG.error(
                                 "TableExplorer sync table {} error", tableIdentity.toString(), e);
+                            Telemetry.getInstance()
+                                .trackFailure(
+                                    Command.REGISTER_TABLE,
+                                    externalCatalog.getMetadata().getCatalogType(),
+                                    e);
                           }
                         },
                         tableExplorerExecutors));
@@ -387,6 +406,11 @@ public class DefaultTableService extends PersistentBase implements TableService 
                                 "TableExplorer dispose table {} error",
                                 tableIdentity.toString(),
                                 e);
+                            Telemetry.getInstance()
+                                .trackFailure(
+                                    Command.DISPOSE_TABLE,
+                                    externalCatalog.getMetadata().getCatalogType(),
+                                    e);
                           }
                         },
                         tableExplorerExecutors));

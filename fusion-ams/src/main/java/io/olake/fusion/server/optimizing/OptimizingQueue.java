@@ -49,7 +49,9 @@ import io.olake.fusion.server.resource.OptimizerInstance;
 import io.olake.fusion.server.resource.OptimizerThread;
 import io.olake.fusion.server.resource.QuotaProvider;
 import io.olake.fusion.server.table.DefaultTableRuntime;
+import io.olake.fusion.server.utils.Command;
 import io.olake.fusion.server.utils.IcebergTableUtil;
+import io.olake.fusion.server.utils.OptimizerTaskException;
 import io.olake.fusion.server.utils.Telemetry;
 import io.olake.fusion.utils.CompatiblePropertyUtil;
 import io.olake.fusion.utils.ExceptionUtil;
@@ -341,8 +343,13 @@ public class OptimizingQueue extends PersistentBase {
         return null;
       }
     } catch (Throwable throwable) {
-      tableRuntime.planFailed(ExceptionUtil.getErrorMessage(throwable, 4000), throwable);
       LOG.error("Planning table {} failed", tableRuntime.getTableIdentifier(), throwable);
+      Telemetry.getInstance()
+          .trackFailure(
+              Command.PLAN_OPTIMIZING,
+              Telemetry.errorSource(catalogManager, tableRuntime.getTableIdentifier()),
+              throwable);
+      tableRuntime.planFailed(ExceptionUtil.getErrorMessage(throwable, 4000), throwable);
       throw throwable;
     }
   }
@@ -555,6 +562,7 @@ public class OptimizingQueue extends PersistentBase {
           this.endTime = System.currentTimeMillis();
           persistAndSetCompleted(false);
           trackCompleted();
+          appendFailureEntry();
         }
       } finally {
         lock.unlock();
@@ -632,6 +640,11 @@ public class OptimizingQueue extends PersistentBase {
                 taskRuntime.getFailReason());
             retryTask(taskRuntime);
           } else {
+            Telemetry.getInstance()
+                .trackFailure(
+                    Command.EXECUTE_OPTIMIZING,
+                    Telemetry.errorSource(catalogManager, tableRuntime.getTableIdentifier()),
+                    new OptimizerTaskException(taskRuntime.getFailReason()));
             if (tableRuntime.isAllowPartialCommit()
                 && tableRuntime.getOptimizingStatus().isProcessing()
                 && tableRuntime.getOptimizingStatus() != OptimizingStatus.COMMITTING) {
@@ -651,6 +664,7 @@ public class OptimizingQueue extends PersistentBase {
               this.endTime = taskRuntime.getEndTime();
               persistAndSetCompleted(false);
               trackCompleted();
+              appendFailureEntry();
             }
           }
         }
@@ -756,10 +770,15 @@ public class OptimizingQueue extends PersistentBase {
       try {
         if (hasCommitted) {
           LOG.warn("{} has already committed, give up", tableRuntime.getTableIdentifier());
+          boolean completed = false;
           try {
             persistAndSetCompleted(status == ProcessStatus.SUCCESS);
             trackCompleted();
+            completed = true;
           } catch (Exception ignored) {
+          }
+          if (completed) {
+            appendFailureEntry();
           }
           throw new IllegalStateException("repeat commit, and last error " + failedReason);
         }
@@ -782,14 +801,22 @@ public class OptimizingQueue extends PersistentBase {
               "{} failed to persist process completed, will retry next commit",
               tableRuntime.getTableIdentifier(),
               e);
+          return;
         } catch (Throwable t) {
           LOG.error("{} Commit optimizing failed ", tableRuntime.getTableIdentifier(), t);
+          Telemetry.getInstance()
+              .trackFailure(
+                  Command.COMMIT_OPTIMIZING,
+                  Telemetry.errorSource(catalogManager, tableRuntime.getTableIdentifier()),
+                  t);
           status = ProcessStatus.FAILED;
           failedReason = ExceptionUtil.getErrorMessage(t, 4000);
           endTime = System.currentTimeMillis();
           persistAndSetCompleted(false);
           trackCompleted();
         }
+        // Outside the try: a failed write must not be taken for a failed commit.
+        appendFailureEntry();
       } finally {
         lock.unlock();
       }
@@ -939,7 +966,12 @@ public class OptimizingQueue extends PersistentBase {
                           getSummary().summaryAsMap(false))),
           () -> tableRuntime.completeProcess(success),
           () -> clearProcess(this));
-      if (!success && failedReason != null) {
+    }
+
+    // Called once the process is persisted as completed. Best effort: may run inside an outer
+    // transaction (completeTask), so it must not throw. The reason is also in failedReason.
+    private void appendFailureEntry() {
+      if (status != ProcessStatus.SUCCESS && failedReason != null) {
         tableRuntime.appendDriverLogEntry(processId, "ERROR", failedReason, null);
       }
     }

@@ -32,7 +32,7 @@ The server builds a context per call. `DefaultTableMaintainerContext.getOptimizi
 `tableRuntime.getOptimizingStatus().isProcessing()` and the target snapshot from
 `tableRuntime.getOptimizingProcess().getTargetSnapshotId()` (`Long.MAX_VALUE` when not processing). The maintainer reads all switches
 and durations from `TableConfiguration` (parsed in `TableConfigurations` from table properties such
-as `clean-orphan-file.enabled`, `table-expire.enabled`, `snapshot.keep.duration`); see the Iceberg
+as `clean-orphan-file.enabled`, `snapshot-expire.trigger.cron`, `snapshot.keep.duration`); see the Iceberg
 maintainer README for the full list and defaults.
 
 ## State, threads and concurrency

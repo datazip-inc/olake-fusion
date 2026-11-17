@@ -58,7 +58,9 @@ this path.
 | --- | --- | --- |
 | `SparkOptimizer` | `main`: parses `OptimizerConfig`, creates the `SparkSession` (app name `amoro-spark-optimizer-<resourceId>`), computes `memorySize`, adds Spark register properties, then calls `startOptimizing()`. Extends `Optimizer` and supplies `SparkOptimizerExecutor`s. | `Optimizer`, `OptimizerToucher`, `JavaSparkContext` |
 | `SparkOptimizerExecutor` | Runs on the driver. Extends `OptimizerExecutor` and overrides `executeTask(OptimizingTask)` to run the task as a Spark job. | `JavaSparkContext`, `SparkOptimizingTaskFunction` |
-| `SparkOptimizingTaskFunction` | Runs on a Spark executor. A Spark `Function<OptimizingTask, OptimizingTaskResult>` that sets the logging context and calls the static `OptimizerExecutor.executeTask`. | `OptimizerExecutor`, `OptimizingTaskLogContext`, SLF4J `MDC` |
+| `SparkOptimizingTaskFunction` | Runs on a Spark executor. A Spark `Function<OptimizingTask, OptimizingTaskResult>` that sets the logging context and calls the static `OptimizerExecutor.executeTask`. | `OptimizerExecutor`, `OptimizingTaskLogContext`, `SparkOptimizingLogSupport` |
+| `SparkOptimizingLogSupport` | Ships the log lines of compaction threads to AMS: a Log4j appender buffers them, executors send them to the driver over Spark RPC, and the driver sends them to AMS with `OptimizingService.appendLogs`. | `OptimizingLogSender`, `OptimizingTaskLogContext`, `OptimizingClientPools` |
+| `OptimizingLogSender` | Bounded buffer plus one background send thread, with at-least-once batch delivery; lines that do not fit are dropped and counted per task. | `SparkOptimizingLogSupport` |
 
 ## How it works
 
@@ -66,14 +68,17 @@ this path.
 
 1. `new OptimizerConfig(args)`; `SparkSession.builder().appName(...).getOrCreate()`; wraps it in a
    `JavaSparkContext`.
-2. Logs a warning if `spark.dynamicAllocation.enabled` is false.
+2. `SparkOptimizingLogSupport.registerOnDriver(config)` starts log shipping (the driver's RPC
+   endpoint and its AMS sender); then logs a warning if `spark.dynamicAllocation.enabled` is false.
 3. Sets `memorySize` (MB) = `spark.driver.memory` + `ceil(executionParallel / spark.executor.cores)` ×
    `spark.executor.memory` (defaults `1g`, `1g`, `1`), using `org.apache.spark.util.Utils.memoryStringToMb`.
    This is what the server shows as the optimizer's memory; it is not a limit.
 4. Builds the optimizer (`executionParallel` `SparkOptimizerExecutor`s) and adds register properties:
    `job-id` = the Spark application id, and `spark.driver.memory`, `spark.executor.memory`,
-   `spark.executor.cores` as set in the Spark conf, or empty when not set. The server copies these into
-   its telemetry (`FusionServiceContainer.updateSparkConfig`).
+   `spark.executor.cores` as set in the Spark conf, or empty when not set, and `optimizer-version` =
+   the image's `FUSION_VERSION` (empty outside a release image). The server copies these into its
+   telemetry (`FusionServiceContainer.updateSparkConfig`, `Telemetry.updateOptimizerVersion`). A
+   token-change listener hands each new token to the log sender.
 5. `optimizer.startOptimizing()`: executor threads start, and the toucher loop runs on the main
    thread.
 
@@ -82,8 +87,9 @@ this path.
 Steps 1, 2 and 4 are the common loop (`OptimizerExecutor.start`): `pollTask`, `ackTask`,
 `completeTask`, all on the driver. Step 3 is overridden:
 
-1. `SparkOptimizerExecutor.executeTask` puts `processId` and `logFilePath=<processId>/driver` in the
-   MDC, so driver logs for this task go to `<LOG_DIR>/<processId>/driver.log`.
+1. `SparkOptimizerExecutor.executeTask` calls `SparkOptimizingLogSupport.beforeDriverTask` and
+   `OptimizingTaskLogContext.setDriverContext(processId)`, so this thread's lines are shipped and AMS
+   writes them to `<LOG_DIR>/<processId>/driver.log`.
 2. It sets the job description to `Amoro rewrite files task, table name:<table>, task id:<id>`. To
    get the table name it deserializes the task input on the driver; any input that is not a
    `RewriteFilesInput` fails the task with `IllegalArgumentException`.
@@ -91,23 +97,27 @@ Steps 1, 2 and 4 are the common loop (`OptimizerExecutor.start`): `pollTask`, `a
    and takes the single result. The task and `OptimizerConfig` are Java-serialized to the executor;
    the `OptimizingTaskResult`, which carries the serialized `RewriteFilesOutput`, comes back through
    `collect()`.
-4. On the executor, `SparkOptimizingTaskFunction.call` calls
-   `OptimizingTaskLogContext.setContext(processId, taskId)`, puts `processId`, `taskId` and
-   `logFilePath=<processId>/<taskId>` in the MDC, and calls
+4. On the executor, `SparkOptimizingTaskFunction.call` calls `SparkOptimizingLogSupport.beforeTask`
+   and `OptimizingTaskLogContext.setExecutorContext(processId, taskId)`, and calls
    `OptimizerExecutor.executeTask(config, threadId, task, LOG)`. That runs the factory named in the
    task, `io.olake.fusion.optimizing.IcebergRewriteExecutorFactory` →
    `IcebergRewriteExecutor.execute()` from `fusion-core`, which reads the input files and writes the
-   new data and delete files to the table's storage. The context is cleared in `finally`.
+   new data and delete files to the table's storage. In `finally` the context is cleared and
+   `afterExecutorTask` queues the task's end marker behind its lines, without waiting.
 5. Any `Throwable` in steps 1 to 3 on the driver (a failed job, a lost driver connection) becomes an
    `OptimizingTaskResult` with `errorMessage` set.
+6. Before the result goes to the server, `afterDriverTask` waits up to 10 s for the task's lines to
+   reach AMS, and reports lines that were dropped. The result is never changed by log shipping.
 
 ### Logging
 
-`docker/optimizer-spark/log4j2.xml` routes events from `io.olake.fusion*` loggers by the
-`logFilePath` context key to `${LOG_DIR}/<logFilePath>.log` (JSON lines; `LOG_DIR` defaults to
-`/mnt/amoro-logs/compaction`), and to the console otherwise. The Deployment mounts `/mnt/amoro-logs`
-from the host on the driver and the executors; the comments in `local-test/config.yaml` state that
-the server's `LogController` reads from that path.
+`docker/optimizer-spark/log4j2.xml` sends `io.olake.fusion*` loggers to the console.
+`SparkOptimizingLogSupport` attaches its own appender to those loggers in code and ships the lines
+of threads that have a `processId` in their log context (JSON lines, one per event) to the server.
+The server's `LogWriter` is the only writer of `<LOG_DIR>/<processId>/driver.log` and
+`<LOG_DIR>/<processId>/<taskId>.log`, which `LogController` reads; no volume is shared with the
+optimizer pods. Shipping never blocks or fails a task; buffers are bounded (32 MB per executor,
+64 MB on the driver), and an AMS without `appendLogs` turns shipping off.
 
 ## State, threads and concurrency
 
@@ -117,8 +127,10 @@ the server's `LogController` reads from that path.
 - **Executors:** run `SparkOptimizingTaskFunction` only. They never talk to the Fusion server; all
   Thrift calls are made on the driver. They need table storage access (the Deployment passes
   `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` from the `fusion-s3-credentials` secret).
-- Spark's executor task threads are reused, which is why `SparkOptimizingTaskFunction` clears the
-  MDC and `OptimizingTaskLogContext` in `finally`.
+- Spark's executor task threads are reused, which is why `SparkOptimizingTaskFunction` clears
+  `OptimizingTaskLogContext` in `finally`.
+- Log shipping runs one daemon send thread per JVM (`amoro-optimizing-log-sender`); executors also
+  talk to the driver's `amoro-optimizing-log` RPC endpoint.
 - For full use of executors, the warning in `main` recommends `spark.dynamicAllocation.maxExecutors`
   = `executionParallel` (with one core per executor).
 
@@ -163,9 +175,8 @@ the server's `LogController` reads from that path.
   server reschedules the old tasks after its timeouts.
 - The task result travels to the driver through `collect()`. Very large outputs count against
   `spark.driver.maxResultSize` and driver memory.
-- The comment in `SparkOptimizingTaskFunction` says that `AbstractRewriteFilesExecutor.execute()`
-  checks `OptimizingTaskLogContext.isContextSet()`. Nothing in the current tree calls
-  `isContextSet()`. The MDC values set here are what the log routing uses.
+- Log lines are delivered at least once: a batch whose confirmation is lost is sent again, so a
+  log file can contain a repeated line.
 - `docker/optimizer-spark/log4j2.xml` must stay in the image. The Dockerfile deletes Spark's default
   `log4j2.properties` so that this file is used.
 - The job description and app name still say "Amoro". Nothing parses them.

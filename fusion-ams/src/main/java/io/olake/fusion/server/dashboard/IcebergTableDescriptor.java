@@ -97,6 +97,7 @@ import javax.annotation.Nullable;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -559,12 +560,23 @@ public class IcebergTableDescriptor extends PersistentBase implements FormatTabl
     int total = 0;
     // page helper is 1-based
     int pageNumber = (offset / limit) + 1;
+    // type may be a comma-separated list, e.g. MINOR,MAJOR,FULL
+    List<String> types =
+        type == null
+            ? null
+            : Arrays.stream(type.split(","))
+                .map(String::trim)
+                .filter(t -> !t.isEmpty())
+                .collect(Collectors.toList());
+    List<String> processTypes = types == null || types.isEmpty() ? null : types;
     List<TableProcessMeta> processMetaList = Collections.emptyList();
     try (Page<?> ignored = PageHelper.startPage(pageNumber, limit, true)) {
       processMetaList =
           getAs(
               TableProcessMapper.class,
-              mapper -> mapper.listProcessMeta(identifier.getId(), type, status));
+              mapper ->
+                  mapper.listProcessMetaWithSnapshotExpiry(
+                      identifier.getId(), processTypes, status));
       PageInfo<TableProcessMeta> pageInfo = new PageInfo<>(processMetaList);
       total = (int) pageInfo.getTotal();
       LOG.info(
@@ -849,7 +861,10 @@ public class IcebergTableDescriptor extends PersistentBase implements FormatTabl
       result.setSuccessTasks(successTasks);
       result.setRunningTasks(runningTasks);
     }
-    MetricsSummary summary = MetricsSummary.fromMap(meta.getSummary());
+    // A snapshot expiry run has no summary until it succeeds.
+    MetricsSummary summary =
+        MetricsSummary.fromMap(
+            meta.getSummary() == null ? Collections.emptyMap() : meta.getSummary());
     result.setInputFiles(summary.getInputFilesStatistics());
     result.setOutputFiles(summary.getOutputFilesStatistics());
     result.setTableId(meta.getTableId());

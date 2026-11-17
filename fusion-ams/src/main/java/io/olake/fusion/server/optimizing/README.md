@@ -298,8 +298,11 @@ In Postgres: table status and process id (`table_runtime`, `table_runtime_state`
   `optimizer_group_idle_tables`, `optimizer_group_committing_tables`,
   `optimizer_group_optimizer_instances`, `optimizer_group_memory_bytes_allocated`,
   `optimizer_group_threads`.
-- **Driver log**: `DefaultTableRuntime.appendDriverLogEntry` writes JSON lines to
-  `$LOG_DIR/<processId>/driver.log` (default `/mnt/amoro-logs/compaction`).
+- **Optimizing logs**: `LogWriter` is the only writer of `$LOG_DIR/<processId>/driver.log` and
+  `$LOG_DIR/<processId>/<taskId>.log` (default `/mnt/amoro-logs/compaction`). It appends the lines
+  the Spark optimizer ships with `OptimizingService.appendLogs`, and AMS's own entries
+  (`DefaultTableRuntime.appendDriverLogEntry`, best effort). `DefaultOptimizingService` creates
+  `LOG_DIR` at startup and fails startup if it cannot.
 
 ## Extending or changing it
 

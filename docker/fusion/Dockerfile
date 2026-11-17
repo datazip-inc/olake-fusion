@@ -40,6 +40,10 @@ RUN FUSION_VERSION=`cat pom.xml | grep 'fusion-parent' -C 3 | grep -Eo '<version
 
 FROM eclipse-temurin:17-jdk-jammy
 
+# The release tag this image is built for, reported by telemetry; empty for local builds.
+ARG FUSION_VERSION=
+
+ENV FUSION_VERSION=${FUSION_VERSION}
 ENV FUSION_HOME /usr/local/fusion
 # No FUSION_CONF_DIR default: an AMORO_CONF_DIR set by OLake-Helm must keep working, and the conf
 # dir falls back to ${FUSION_HOME}/conf. OLake-Helm and OLake-UI's compose mount under

@@ -14,6 +14,7 @@
         "AMORO_HOME": "${workspaceFolder}/dist/src/main/fusion-bin",
         "AMORO_CONF_DIR": "${workspaceFolder}/local-test",
         "CONSOLE_LOG_LEVEL": "info",
+        "LOG_DIR": "${workspaceFolder}/dist/src/main/fusion-bin/logs/compaction",
         "AMS_SERVER__EXPOSE__HOST": "127.0.0.1",
         "AMS_DATABASE_URL": "jdbc:postgresql://localhost:5432/fusion_dev",
         "OPTIMIZER_LOG_CONF_FILE": "${workspaceFolder}/dist/src/main/fusion-bin/conf/optimize/log4j2.xml",

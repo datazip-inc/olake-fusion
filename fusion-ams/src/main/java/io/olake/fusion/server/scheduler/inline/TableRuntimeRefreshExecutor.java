@@ -31,6 +31,8 @@ import io.olake.fusion.server.optimizing.OptimizingStatus;
 import io.olake.fusion.server.scheduler.PeriodicTableScheduler;
 import io.olake.fusion.server.table.DefaultTableRuntime;
 import io.olake.fusion.server.table.TableService;
+import io.olake.fusion.server.utils.Command;
+import io.olake.fusion.server.utils.Telemetry;
 import io.olake.fusion.utils.CronUtils;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
 
@@ -107,6 +109,8 @@ public class TableRuntimeRefreshExecutor extends PeriodicTableScheduler {
       evaluateCronTriggers(defaultTableRuntime);
     } catch (Throwable throwable) {
       logger.error("Refreshing table {} failed.", tableRuntime.getTableIdentifier(), throwable);
+      Telemetry.getInstance()
+          .trackFailure(Command.REFRESH_TABLE, errorSource(tableRuntime), throwable);
     }
   }
 

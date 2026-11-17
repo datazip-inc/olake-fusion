@@ -23,6 +23,7 @@ package io.olake.fusion.server.scheduler.inline;
 import io.olake.fusion.TableRuntime;
 import io.olake.fusion.server.persistence.PersistentBase;
 import io.olake.fusion.server.persistence.mapper.OptimizingProcessMapper;
+import io.olake.fusion.server.persistence.mapper.SnapshotExpiryProcessMapper;
 import io.olake.fusion.server.persistence.mapper.TableProcessMapper;
 import io.olake.fusion.server.scheduler.PeriodicTableScheduler;
 import io.olake.fusion.server.table.TableService;
@@ -90,6 +91,11 @@ public class OptimizingExpiringExecutor extends PeriodicTableScheduler {
                   mapper ->
                       mapper.deleteTaskRuntimesBefore(
                           tableRuntime.getTableIdentifier().getId(), minProcessId)),
+          () ->
+              doAs(
+                  SnapshotExpiryProcessMapper.class,
+                  mapper ->
+                      mapper.deleteBefore(tableRuntime.getTableIdentifier().getId(), minProcessId)),
           () ->
               doAs(
                   OptimizingProcessMapper.class,

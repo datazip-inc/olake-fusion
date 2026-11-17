@@ -22,6 +22,7 @@ package io.olake.fusion;
 
 import io.olake.fusion.api.AmoroException;
 import io.olake.fusion.api.OptimizerRegisterInfo;
+import io.olake.fusion.api.OptimizingLogLine;
 import io.olake.fusion.api.OptimizingService;
 import io.olake.fusion.api.OptimizingTask;
 import io.olake.fusion.api.OptimizingTaskId;
@@ -242,6 +243,11 @@ public class MockAmoroManagementServer implements Runnable {
     @Override
     public boolean cancelProcess(long processId) throws TException {
       return false;
+    }
+
+    @Override
+    public void appendLogs(String authToken, List<OptimizingLogLine> lines) throws TException {
+      checkToken(authToken);
     }
 
     public Map<String, OptimizerRegisterInfo> getRegisteredOptimizers() {

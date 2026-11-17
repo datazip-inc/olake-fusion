@@ -316,6 +316,11 @@ public abstract class PeriodicTableScheduler extends RuntimeHandlerChain {
     return tableService.loadTable(tableRuntime.getTableIdentifier());
   }
 
+  /** The catalog type of the table, used as the error source of its failure reports. */
+  protected String errorSource(TableRuntime tableRuntime) {
+    return tableService.errorSource(tableRuntime.getTableIdentifier());
+  }
+
   public Action getAction() {
     return action;
   }

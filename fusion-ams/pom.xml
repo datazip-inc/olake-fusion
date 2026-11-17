@@ -307,12 +307,8 @@
             <version>${project.version}</version>
             <scope>runtime</scope>
         </dependency>
-        <dependency>
-            <groupId>org.apache.hive</groupId>
-            <artifactId>hive-exec</artifactId>
-            <classifier>core</classifier>
-            <scope>runtime</scope>
-        </dependency>
+
+        <!-- test dependencies -->
         <dependency>
             <groupId>io.olake.fusion</groupId>
             <artifactId>fusion-core</artifactId>
@@ -352,12 +348,6 @@
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
             <version>${guava-hive.version}</version>
-        </dependency>
-        <!-- Embedded metastore database of the mock Hive metastore (HMSMockServer) -->
-        <dependency>
-            <groupId>org.apache.derby</groupId>
-            <artifactId>derby</artifactId>
-            <scope>test</scope>
         </dependency>
     </dependencies>
 

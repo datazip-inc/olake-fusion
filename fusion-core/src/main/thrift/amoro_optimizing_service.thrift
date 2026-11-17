@@ -50,6 +50,11 @@ struct OptimizerRegisterInfo {
     6: optional map<string, string> properties;
 }
 
+struct OptimizingLogLine {
+    1: OptimizingTaskId taskId;
+    2: string ndjson;
+}
+
 service OptimizingService {
 
     void ping()
@@ -69,4 +74,7 @@ service OptimizingService {
             throws (1: amoro_commons.AmoroException e1)
 
     bool cancelProcess(1:i64 processId)
+
+    void appendLogs(1: string authToken, 2: list<OptimizingLogLine> lines)
+            throws (1: amoro_commons.AmoroException e1)
 }

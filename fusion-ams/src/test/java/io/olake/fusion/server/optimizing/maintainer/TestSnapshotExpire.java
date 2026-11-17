@@ -172,9 +172,10 @@ public class TestSnapshotExpire extends ExecutorTestBase {
         .expireSnapshots(System.currentTimeMillis(), 1);
     Assert.assertEquals(1, Iterables.size(table.snapshots()));
 
+    // Snapshot expiry deletes no file.
     dataFiles.forEach(
         file ->
-            Assert.assertFalse(
+            Assert.assertTrue(
                 table.io().newInputFile(String.valueOf(file.path().toString())).exists()));
     newDataFiles.forEach(
         file ->
@@ -235,7 +236,8 @@ public class TestSnapshotExpire extends ExecutorTestBase {
         .expireSnapshots(expireTime, 1);
 
     Assert.assertEquals(1, Iterables.size(baseTable.snapshots()));
-    Assert.assertFalse(baseTable.io().newInputFile(String.valueOf(file1.path())).exists());
+    // Snapshot expiry deletes no file.
+    Assert.assertTrue(baseTable.io().newInputFile(String.valueOf(file1.path())).exists());
     // file2 should not be removed, since it is used by s3
     Assert.assertTrue(baseTable.io().newInputFile(String.valueOf(file2.path())).exists());
     Assert.assertTrue(baseTable.io().newInputFile(String.valueOf(file3.path())).exists());
@@ -315,10 +317,11 @@ public class TestSnapshotExpire extends ExecutorTestBase {
     Assert.assertEquals(
         3L, TableConfigurations.parseTableConfig(table.properties()).getSnapshotTTLMinutes());
 
-    // using default time unit: minutes
-    table.updateProperties().set(TableProperties.SNAPSHOT_KEEP_DURATION, "720").commit();
+    // using default time unit: days
+    table.updateProperties().set(TableProperties.SNAPSHOT_KEEP_DURATION, "2").commit();
     Assert.assertEquals(
-        720L, TableConfigurations.parseTableConfig(table.properties()).getSnapshotTTLMinutes());
+        2 * 24 * 60L,
+        TableConfigurations.parseTableConfig(table.properties()).getSnapshotTTLMinutes());
 
     table.updateProperties().set(TableProperties.SNAPSHOT_MIN_COUNT, "10").commit();
     Assert.assertEquals(

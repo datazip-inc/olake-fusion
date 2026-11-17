@@ -134,4 +134,11 @@ public class TestAmoroManagementConfValidator {
     configurations.setInteger(FusionManagementConf.CLEAN_ORPHAN_FILES_THREAD_COUNT, 10);
     FusionManagementConfValidator.validateConfig(configurations);
   }
+
+  @Test
+  public void snapshotExpiryExecutorIsOnWithoutTheKey() {
+    // Tables still need an expiry cron; Helm's config.yaml does not set this key.
+    Assert.assertTrue(
+        new Configurations().getBoolean(FusionManagementConf.EXPIRE_SNAPSHOTS_ENABLED));
+  }
 }

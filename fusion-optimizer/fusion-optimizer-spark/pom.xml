@@ -32,11 +32,35 @@
     <name>Fusion Spark Optimizer</name>
     <url>https://amoro.apache.org</url>
 
+    <dependencyManagement>
+        <dependencies>
+            <!-- The Spark image has no protobuf-java of its own (only tink, which needs it), so the
+                 copy bundled in this jar is the one that runs. Pinned above the 3.19.x that tink
+                 brings, for security fixes. -->
+            <dependency>
+                <groupId>com.google.protobuf</groupId>
+                <artifactId>protobuf-java</artifactId>
+                <version>3.25.9</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
     <dependencies>
         <dependency>
             <groupId>io.olake.fusion</groupId>
             <artifactId>fusion-optimizer-common</artifactId>
             <version>${project.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-api</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-core</artifactId>
+            <scope>provided</scope>
         </dependency>
 
         <!-- spark dependencies begin -->

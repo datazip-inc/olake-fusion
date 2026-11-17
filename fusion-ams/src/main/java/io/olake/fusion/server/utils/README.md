@@ -25,6 +25,8 @@ background thread) and are called from:
 | `ThriftServiceProxy<S>` | `createProxy(iface, service, exceptionTransfer)` returns a JDK dynamic proxy that unwraps `InvocationTargetException`, logs `Thrift service:<class>.<method> execute failed`, and rethrows `exceptionTransfer.apply(cause)`. | `FusionServiceContainer#initThriftService`, `FusionRuntimeException::normalize` / `::normalizeCompatibly` |
 | `EnvConfig` | `fromEnv(env)`: config keys from `AMS_*` (legacy) and `FUSION_*` variables, `FUSION_*` winning; script variables such as `FUSION_HOME`, `FUSION_CONF_DIR`, `FUSION_LOG_DIR` are excluded. Key conversion is `ConfigHelpers.convertConfigurationKeys`: drop `<PREFIX>_`, lower-case, `__` -> `-`, `_` -> `.`. | `FusionServiceContainer.ConfigurationHelper#initEnvConfig` |
 | `Telemetry` | Fire-and-forget usage events to `https://analytics.olake.io/mp/track`. Singleton; never throws or blocks callers. | `PlatformPropertyStore`, `FusionServiceContainer#getSparkConfig`, `TelemetryController`, `OptimizingQueue`, `DefaultCatalogManager`, `DefaultOptimizingService` |
+| `Command` / `FailureCategory` | The operation a `Failure - Fusion` event reports, and the classification of its exception (by simple class name, so exceptions of clients not on the classpath classify too). Sent lower-cased. | `Telemetry.trackFailure` |
+| `OptimizerTaskException` | Carries the stack trace an optimizer reported for a failed task (the exception itself never reaches AMS), so the failure is classified and reported like any other. | `OptimizingQueue` |
 | `SnowflakeIdGenerator` | 54-bit ids: timestamp in 10 ms units shifted left 13, 5-bit machine id, 8-bit sequence. `generateId` (synchronized), `getMinSnowflakeId(timestamp)`, `extractTimestamp(id)` (seconds). | `DefaultTableRuntime`, `ActionCoordinator`, `OptimizingExpiringExecutor`, `DefaultTableManager` |
 | `IcebergTableUtil` | Snapshot lookups; `createOptimizingEvaluator` / `createOptimizingPlanner` build `IcebergOptimizerEvaluator` / `IcebergOptimizingPlanner` for `TableFormat.ICEBERG` tables and throw `IllegalStateException` for any other format. Also file-set helpers (see pitfalls). | `DefaultTableRuntime`, `OptimizingQueue`, `TableHealthScoreExecutor` |
 | `InternalTableUtil` | Helpers for internal catalogs: `newIcebergFileIo(CatalogMeta)` (S3FileIO for `s3`, OSS for `oss`, else Hadoop, unless `io-impl` is set), `genNewMetadataFileLocation(base, current)` (next `<version>-<uuid>` metadata file), `genMetadataFileLocation` (honours `write.metadata.path`). | `IcebergInternalTableOperations`, `InternalIcebergCreator`, `InternalIcebergHandler` |
@@ -68,9 +70,14 @@ compaction commits.
    (`TelemetryController`), which stores it and calls `useInstallId`.
 
 Events: `Optimization Started - Fusion`, `Optimization Completed - Fusion` (from
-`OptimizingQueue`), `Catalog Created - Fusion`, `Catalog Updated - Fusion`, `Failure - Fusion`
-(command `create_catalog`, category `dns_resolution_failed` or `unclassified` plus `error_type`;
-from `DefaultCatalogManager`), `Installed Fusion` (from `DefaultOptimizingService`, once per
+`OptimizingQueue`), `Catalog Created - Fusion`, `Catalog Updated - Fusion`, `Snapshot Expiry
+Completed - Fusion` (from `SnapshotsExpiringExecutor`, once per run), `Failure - Fusion` (a
+`Command` such as `create_catalog`, `register_optimizer`, `commit_optimizing` or
+`expire_snapshots`; a `FailureCategory` found on the exception chain, root first, or `unclassified`
+plus `error_type`; `error_source` = the catalog type or `ams`/`optimizer`; `fusion_version` and
+`optimizer_version`; sent from catalogs, table sync, optimizer registration and keeping, planning,
+execution, commit, maintenance executors and `LogWriter`), `Installed Fusion` (from
+`DefaultOptimizingService`, once per
 process, with `optimizer_parallelism` and `deployment_mode` `HELM` if `KUBERNETES_SERVICE_HOST` is
 set, else `DOCKER`). Optimization events report `optimization_type` as `LITE` for Minor, `MEDIUM`
 for Major, otherwise the enum name (`FULL`), plus `table_size (GB)` and the Spark settings
@@ -102,7 +109,9 @@ for Major, otherwise the enum name (`FULL`), plus `table_size (GB)` and the Spar
 
 - New telemetry event: add a public `track*` method that calls `sendEvent(name, supplier)`; build
   all properties inside the supplier so failures stay contained. Never call `httpClient` directly.
-- New failure category: add to `FAILURE_CATEGORIES` (more specific types first) and `Category`.
+- New failure: add a constant to `Command` and call `Telemetry.getInstance().trackFailure(command,
+  errorSource, t)`. New category: add it to `FailureCategory` with the exception simple class names
+  it covers.
 - Planner/evaluator changes belong in `fusion-core`'s `IcebergOptimizingPlanner` /
   `IcebergOptimizerEvaluator`; keep this class as the factory.
 

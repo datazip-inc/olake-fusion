@@ -92,7 +92,6 @@ up() {
   set -e
   config
   mkdir -p "$TEST_LOG_DIR/compaction"
-  chmod -R 777 "$TEST_LOG_DIR"
 
   # spark-connect is the only image compose builds itself (Spark with the Iceberg runtime OLake
   # writes with). `up` builds an image only when it is missing, so an edited Dockerfile or

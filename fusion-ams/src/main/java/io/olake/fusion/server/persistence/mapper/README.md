@@ -24,6 +24,7 @@ The MyBatis mapper interfaces: every SQL statement Fusion's server runs against 
 | `ApiTokensMapper` | `api_tokens` | `APITokenManager`, `ApiTokenController` |
 | `PlatformFileMapper` | `platform_file` | `PlatformFileManager` (used by `PlatformFileInfoController`, `CatalogController`) |
 | `PlatformPropertyMapper` | `platform_property` (created by migration `V1__platform_property.sql`) | `persistence.PlatformPropertyStore` |
+| `SnapshotExpiryProcessMapper` | `snapshot_expiry_process` (created by migration `V2__snapshot_expiry_process.sql`) | `scheduler.inline.SnapshotsExpiringExecutor`, `OptimizingExpiringExecutor` (history cleanup) |
 
 ## How it works
 
@@ -44,7 +45,7 @@ The MyBatis mapper interfaces: every SQL statement Fusion's server runs against 
 
 ### Processes (`TableProcessMapper`)
 
-`insertProcess` and `updateProcess` take explicit parameters (status as `ProcessStatus`, stored by enum name); `updateProcessType`; `getProcessMeta` (`@Results(id = "tableProcessMap")`); `listProcessMeta(tableId, processType, status)` ordered by `process_id desc`; `selectTableMaxProcessIds` (IN list, `GROUP BY table_id`); `selectAllActiveProcesses` (`status in ('SUBMITTED', 'RUNNING')`); `deleteBefore`.
+`insertProcess` and `updateProcess` take explicit parameters (status as `ProcessStatus`, stored by enum name); `updateProcessType`; `getProcessMeta` (`@Results(id = "tableProcessMap")`); `listProcessMetaWithSnapshotExpiry(tableId, processTypes, status)`: `table_process` rows `UNION ALL` `snapshot_expiry_process` rows (type `EXPIRY`), optional `IN` filter on types, ordered by `process_id desc`; `selectTableMaxProcessIds` (IN list, `GROUP BY table_id`); `selectAllActiveProcesses` (`status in ('SUBMITTED', 'RUNNING')`); `deleteBefore`.
 
 ### Optimizing (`OptimizingProcessMapper`)
 

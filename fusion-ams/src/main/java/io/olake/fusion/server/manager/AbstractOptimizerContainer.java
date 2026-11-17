@@ -24,6 +24,8 @@ import io.olake.fusion.OptimizerProperties;
 import io.olake.fusion.resource.InternalResourceContainer;
 import io.olake.fusion.resource.Resource;
 import io.olake.fusion.resource.ResourceStatus;
+import io.olake.fusion.server.utils.Command;
+import io.olake.fusion.server.utils.Telemetry;
 import io.olake.fusion.utils.PropertyUtil;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
 import org.apache.commons.lang3.StringUtils;
@@ -31,6 +33,7 @@ import org.apache.commons.lang3.StringUtils;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 public abstract class AbstractOptimizerContainer implements InternalResourceContainer {
@@ -61,8 +64,20 @@ public abstract class AbstractOptimizerContainer implements InternalResourceCont
 
   @Override
   public void requestResource(Resource resource) {
-    Map<String, String> startupStats = doScaleOut(resource);
+    Map<String, String> startupStats;
+    try {
+      startupStats = doScaleOut(resource);
+    } catch (Throwable t) {
+      Telemetry.getInstance().trackFailure(Command.START_OPTIMIZER, containerType(), t);
+      throw t;
+    }
     resource.getProperties().putAll(startupStats);
+  }
+
+  /** The container implementation, never its configured name: SparkOptimizerContainer -> spark. */
+  private String containerType() {
+    return StringUtils.removeEnd(getClass().getSimpleName(), "OptimizerContainer")
+        .toLowerCase(Locale.ROOT);
   }
 
   protected abstract Map<String, String> doScaleOut(Resource resource);

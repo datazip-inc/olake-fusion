@@ -218,6 +218,9 @@ Prerequisites: Docker is running, and the repo has been fully built at least onc
      - `AWS_ACCESS_KEY_ID=admin`, `AWS_SECRET_ACCESS_KEY=password`, `AWS_REGION=us-east-1`: the
        MinIO credentials that Iceberg's S3FileIO reads. Without them, registering a catalog fails.
      - `CONSOLE_LOG_LEVEL=info`
+     - `LOG_DIR=$PWD/dist/src/main/fusion-bin/logs/compaction`: where AMS writes optimizing
+       logs. The default, `/mnt/amoro-logs/compaction`, cannot be created on macOS, and AMS
+       refuses to start without it.
 
 - The server is ready when `curl -sf http://localhost:1630/` succeeds, usually within 10 seconds.
 - To drive it, log in with `POST /api/ams/v1/login` (headers `X-Request-Source: Web` and

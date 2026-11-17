@@ -33,6 +33,7 @@ import io.olake.fusion.exception.ObjectNotExistsException;
 import io.olake.fusion.server.FusionManagementConf;
 import io.olake.fusion.server.persistence.PersistentBase;
 import io.olake.fusion.server.persistence.mapper.CatalogMetaMapper;
+import io.olake.fusion.server.utils.Command;
 import io.olake.fusion.server.utils.Telemetry;
 import io.olake.fusion.table.TableIdentifier;
 import org.apache.amoro.shade.guava32.com.google.common.annotations.VisibleForTesting;
@@ -94,6 +95,7 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
                     c.getCatalogName(),
                     c.getCatalogType(),
                     e);
+                Telemetry.getInstance().trackFailure(Command.LOAD_CATALOG, c.getCatalogType(), e);
               }
             });
     LOG.info("DefaultCatalogManager initialized, total catalogs: {}", serverCatalogMap.size());
@@ -191,8 +193,7 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
           "Create catalog {}, type:{}", catalogMeta.getCatalogName(), catalogMeta.getCatalogType());
       created = true;
     } catch (Throwable t) {
-      Telemetry.getInstance()
-          .trackFailure(Telemetry.Command.CREATE_CATALOG, catalogMeta.getCatalogType(), t);
+      Telemetry.getInstance().trackFailure(Command.CREATE_CATALOG, catalogMeta.getCatalogType(), t);
       throw t;
     } finally {
       Telemetry.getInstance()
@@ -217,14 +218,21 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
 
   @Override
   public void dropCatalog(String catalogName) {
-    doAs(
-        CatalogMetaMapper.class,
-        mapper -> {
-          mapper.deleteCatalog(catalogName);
-          metaCache.invalidate(catalogName);
-        });
+    ServerCatalog existing = serverCatalogMap.get(catalogName);
+    try {
+      doAs(
+          CatalogMetaMapper.class,
+          mapper -> {
+            mapper.deleteCatalog(catalogName);
+            metaCache.invalidate(catalogName);
+          });
 
-    disposeCatalog(catalogName);
+      disposeCatalog(catalogName);
+    } catch (Throwable t) {
+      String catalogType = existing == null ? null : existing.getMetadata().getCatalogType();
+      Telemetry.getInstance().trackFailure(Command.DROP_CATALOG, catalogType, t);
+      throw t;
+    }
   }
 
   @Override
@@ -242,6 +250,9 @@ public class DefaultCatalogManager extends PersistentBase implements CatalogMana
       metaCache.invalidate(catalogMeta.getCatalogName());
       LOG.info("Update catalog metadata: {}", catalogMeta.getCatalogName());
       updated = true;
+    } catch (Throwable t) {
+      Telemetry.getInstance().trackFailure(Command.UPDATE_CATALOG, catalogMeta.getCatalogType(), t);
+      throw t;
     } finally {
       Telemetry.getInstance()
           .trackCatalogUpdated(catalogMeta.getCatalogType(), isOlakeCreated(catalogMeta), updated);

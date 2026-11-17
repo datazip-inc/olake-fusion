@@ -26,6 +26,8 @@ import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.annotation.JsonIgno
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class TableConfiguration {
   private boolean expireSnapshotEnabled;
+  private String snapshotExpireTriggerCron;
+  private String snapshotExpireConfigError;
   private long snapshotTTLMinutes;
   private int snapshotMinCount;
   private long flinkCheckpointRetention;
@@ -39,6 +41,29 @@ public class TableConfiguration {
 
   public boolean isExpireSnapshotEnabled() {
     return expireSnapshotEnabled;
+  }
+
+  /** The snapshot expiry cron ({@code snapshot-expire.trigger.cron}), or null when not set. */
+  public String getSnapshotExpireTriggerCron() {
+    return snapshotExpireTriggerCron;
+  }
+
+  public TableConfiguration setSnapshotExpireTriggerCron(String snapshotExpireTriggerCron) {
+    this.snapshotExpireTriggerCron = snapshotExpireTriggerCron;
+    return this;
+  }
+
+  /**
+   * Why the snapshot expiry settings cannot be used, for example {@code invalid
+   * snapshot.keep.duration 'abc'}, or null when they are valid.
+   */
+  public String getSnapshotExpireConfigError() {
+    return snapshotExpireConfigError;
+  }
+
+  public TableConfiguration setSnapshotExpireConfigError(String snapshotExpireConfigError) {
+    this.snapshotExpireConfigError = snapshotExpireConfigError;
+    return this;
   }
 
   public long getSnapshotTTLMinutes() {
@@ -129,6 +154,8 @@ public class TableConfiguration {
     }
     TableConfiguration that = (TableConfiguration) o;
     return expireSnapshotEnabled == that.expireSnapshotEnabled
+        && Objects.equal(snapshotExpireTriggerCron, that.snapshotExpireTriggerCron)
+        && Objects.equal(snapshotExpireConfigError, that.snapshotExpireConfigError)
         && snapshotTTLMinutes == that.snapshotTTLMinutes
         && snapshotMinCount == that.snapshotMinCount
         && flinkCheckpointRetention == that.flinkCheckpointRetention
@@ -143,6 +170,8 @@ public class TableConfiguration {
   public int hashCode() {
     return Objects.hashCode(
         expireSnapshotEnabled,
+        snapshotExpireTriggerCron,
+        snapshotExpireConfigError,
         snapshotTTLMinutes,
         snapshotMinCount,
         flinkCheckpointRetention,

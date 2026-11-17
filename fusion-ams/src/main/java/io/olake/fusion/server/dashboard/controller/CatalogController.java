@@ -40,6 +40,7 @@ import static io.olake.fusion.properties.CatalogMetaProperties.TABLE_FORMATS;
 import io.javalin.http.Context;
 import io.olake.fusion.TableFormat;
 import io.olake.fusion.api.CatalogMeta;
+import io.olake.fusion.exception.AlreadyExistsException;
 import io.olake.fusion.properties.CatalogMetaProperties;
 import io.olake.fusion.server.catalog.CatalogManager;
 import io.olake.fusion.server.dashboard.model.CatalogRegisterInfo;
@@ -47,6 +48,8 @@ import io.olake.fusion.server.dashboard.model.CatalogSettingInfo;
 import io.olake.fusion.server.dashboard.response.OkResponse;
 import io.olake.fusion.server.dashboard.utils.DesensitizationUtil;
 import io.olake.fusion.server.dashboard.utils.PropertiesUtil;
+import io.olake.fusion.server.utils.Command;
+import io.olake.fusion.server.utils.Telemetry;
 import io.olake.fusion.table.TableProperties;
 import io.olake.fusion.utils.CatalogUtil;
 import org.apache.amoro.shade.guava32.com.google.common.base.Objects;
@@ -337,7 +340,13 @@ public class CatalogController {
     CatalogRegisterInfo info = ctx.bodyAsClass(CatalogRegisterInfo.class);
     validateCatalogRegisterInfo(info);
     if (catalogService.catalogExist(info.getName())) {
-      throw new RuntimeException("Duplicate catalog name!");
+      // Rejected before the catalog manager, which reports every other creation failure. The cause
+      // classifies it as the manager's own duplicate check does.
+      RuntimeException duplicate =
+          new RuntimeException(
+              "Duplicate catalog name!", new AlreadyExistsException("Catalog " + info.getName()));
+      Telemetry.getInstance().trackFailure(Command.CREATE_CATALOG, info.getType(), duplicate);
+      throw duplicate;
     }
     CatalogMeta catalogMeta = constructCatalogMeta(info);
     catalogService.createCatalog(catalogMeta);

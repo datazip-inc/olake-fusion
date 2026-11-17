@@ -26,7 +26,6 @@ import io.olake.fusion.FusionTable;
 import io.olake.fusion.api.CommitMetaProducer;
 import io.olake.fusion.config.TableConfiguration;
 import io.olake.fusion.formats.iceberg.utils.IcebergTableUtil;
-import io.olake.fusion.formats.iceberg.utils.RollingFileCleaner;
 import io.olake.fusion.io.AuthenticatedFileIO;
 import io.olake.fusion.maintainer.MaintainerMetrics;
 import io.olake.fusion.maintainer.OptimizingInfo;
@@ -37,6 +36,7 @@ import io.olake.fusion.utils.TableFileUtil;
 import org.apache.amoro.shade.guava32.com.google.common.annotations.VisibleForTesting;
 import org.apache.amoro.shade.guava32.com.google.common.base.Strings;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Iterables;
+import org.apache.amoro.shade.guava32.com.google.common.collect.Lists;
 import org.apache.amoro.shade.guava32.com.google.common.collect.Sets;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.ReachableFileUtil;
@@ -54,10 +54,13 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.time.Instant;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /** Table maintainer for Iceberg tables. */
@@ -166,41 +169,37 @@ public class IcebergTableMaintainer implements TableMaintainer {
 
   @VisibleForTesting
   public void expireSnapshots(long mustOlderThan, int minCount) {
-    expireSnapshots(mustOlderThan, minCount, expireSnapshotNeedToExcludeFiles());
+    expireSnapshotsWithSummary(mustOlderThan, minCount);
   }
 
-  private void expireSnapshots(long olderThan, int minCount, Set<String> exclude) {
-    LOG.debug(
-        "Starting snapshots expiration for table {}, expiring snapshots older than {} and retain last {} snapshots, excluding {}",
-        table.name(),
-        olderThan,
-        minCount,
-        exclude);
-    RollingFileCleaner expiredFileCleaner = new RollingFileCleaner(fileIO(), exclude);
+  /**
+   * Expires snapshots older than {@code olderThan}, keeping at least {@code max(minCount, 1)} of
+   * the newest, without deleting any file, and reports what was expired.
+   */
+  public SnapshotExpirySummary expireSnapshotsWithSummary(long olderThan, int minCount) {
+    table.refresh();
+    List<Snapshot> before = Lists.newArrayList(table.snapshots());
     table
         .expireSnapshots()
         .retainLast(Math.max(minCount, 1))
         .expireOlderThan(olderThan)
-        .deleteWith(expiredFileCleaner::addFile)
-        .cleanExpiredFiles(
-            true) /* enable clean only for collecting the expired files, will delete them later */
+        .cleanExpiredFiles(false)
         .commit();
-
-    int collectedFiles = expiredFileCleaner.fileCount();
-    expiredFileCleaner.clear();
-    if (collectedFiles > 0) {
-      LOG.info(
-          "Expired {}/{} files for table {} order than {}",
-          collectedFiles,
-          expiredFileCleaner.cleanedFileCount(),
-          table.name(),
-          DateTimeUtil.formatTimestampMillis(olderThan));
-    } else {
-      LOG.debug(
-          "No expired files found for table {} order than {}",
-          table.name(),
-          DateTimeUtil.formatTimestampMillis(olderThan));
-    }
+    table.refresh();
+    Set<Long> remaining = new HashSet<>();
+    table.snapshots().forEach(snapshot -> remaining.add(snapshot.snapshotId()));
+    List<Snapshot> expired =
+        before.stream()
+            .filter(snapshot -> !remaining.contains(snapshot.snapshotId()))
+            .sorted(Comparator.comparingLong(Snapshot::timestampMillis))
+            .collect(Collectors.toList());
+    LOG.info(
+        "Expired {} of {} snapshots of table {} older than {}, no file deleted",
+        expired.size(),
+        before.size(),
+        table.name(),
+        DateTimeUtil.formatTimestampMillis(olderThan));
+    return new SnapshotExpirySummary(before.size(), remaining.size(), expired);
   }
 
   public void cleanContentFiles(long lastTime, MaintainerMetrics metrics) {
@@ -259,10 +258,6 @@ public class IcebergTableMaintainer implements TableMaintainer {
 
   public long snapshotsKeepTime() {
     return context.getTableConfiguration().getSnapshotTTLMinutes() * 60 * 1000;
-  }
-
-  protected Set<String> expireSnapshotNeedToExcludeFiles() {
-    return Collections.emptySet();
   }
 
   public Set<String> orphanFileCleanNeedToExcludeFiles() {

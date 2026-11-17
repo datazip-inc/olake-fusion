@@ -25,6 +25,7 @@ import io.olake.fusion.optimizing.MetricsSummary;
 import io.olake.fusion.optimizing.OptimizingType;
 import io.olake.fusion.process.ProcessStatus;
 import io.olake.fusion.server.persistence.PersistentBase;
+import io.olake.fusion.server.persistence.mapper.SnapshotExpiryProcessMapper;
 import io.olake.fusion.server.persistence.mapper.TableMetaMapper;
 import io.olake.fusion.server.persistence.mapper.TableProcessMapper;
 import io.olake.fusion.server.process.TableProcessMeta;
@@ -123,10 +124,7 @@ public class BaseOptimizingChecker extends PersistentBase {
       success =
           waitUntilFinish(
               () -> {
-                List<TableProcessMeta> tableOptimizingProcesses =
-                    getAs(
-                        TableProcessMapper.class,
-                        mapper -> mapper.listProcessMeta(identifier.getId(), null, null));
+                List<TableProcessMeta> tableOptimizingProcesses = compactionRuns(identifier);
                 if (tableOptimizingProcesses == null || tableOptimizingProcesses.isEmpty()) {
                   LOG.info("optimize history is empty");
                   return Status.RUNNING;
@@ -157,10 +155,7 @@ public class BaseOptimizingChecker extends PersistentBase {
 
     if (success) {
       List<TableProcessMeta> result =
-          getAs(
-                  TableProcessMapper.class,
-                  mapper -> mapper.listProcessMeta(identifier.getId(), null, null))
-              .stream()
+          compactionRuns(identifier).stream()
               .filter(p -> p.getProcessId() > lastProcessId)
               .filter(p -> p.getStatus().equals(ProcessStatus.SUCCESS))
               .collect(Collectors.toList());
@@ -190,13 +185,20 @@ public class BaseOptimizingChecker extends PersistentBase {
                     tableIdentifier.getDatabase(),
                     tableIdentifier.getTableName()));
     List<TableProcessMeta> tableOptimizingProcesses =
-        getAs(
-                TableProcessMapper.class,
-                mapper -> mapper.listProcessMeta(identifier.getId(), null, null))
-            .stream()
+        compactionRuns(identifier).stream()
             .filter(p -> p.getProcessId() > lastProcessId)
             .collect(Collectors.toList());
     Assert.assertTrue("optimize is not stopped", tableOptimizingProcesses.isEmpty());
+  }
+
+  /** The table's runs without snapshot expiry runs, newest first. */
+  private List<TableProcessMeta> compactionRuns(ServerTableIdentifier identifier) {
+    return getAs(
+            TableProcessMapper.class,
+            mapper -> mapper.listProcessMetaWithSnapshotExpiry(identifier.getId(), null, null))
+        .stream()
+        .filter(p -> !SnapshotExpiryProcessMapper.PROCESS_TYPE.equals(p.getProcessType()))
+        .collect(Collectors.toList());
   }
 
   protected boolean waitUntilFinish(Supplier<Status> statusSupplier, final long timeout)

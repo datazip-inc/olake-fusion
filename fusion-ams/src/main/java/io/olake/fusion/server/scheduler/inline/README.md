@@ -37,7 +37,7 @@ expiring, blocker expiring, table refresh, tags, health score. Each one is added
 | `OptimizingExpiringExecutor` | Deletes run history older than `runtime-data-keep-days`. | `TableProcessMapper`, `OptimizingProcessMapper` |
 | `BlockerExpiringExecutor` | Deletes expired table blockers. | `TableBlockerMapper` |
 | `TableHealthScoreExecutor` | Computes the health score when the snapshot changed; stores it in the table summary. | `IcebergTableUtil.createOptimizingEvaluator`, `DefaultTableRuntime.setTableSummary` |
-| `SnapshotsExpiringExecutor` | `TableMaintainer.expireSnapshots()`. | `TableMaintainers` (`../../optimizing/maintainer`) |
+| `SnapshotsExpiringExecutor` | Every minute, per table: when `snapshot-expire.trigger.cron` fired, expires snapshots (no file deleted), retrying up to 3 attempts, and records the run in `snapshot_expiry_process`; Iceberg format v1/v2 only. | `IcebergTableMaintainer.expireSnapshotsWithSummary`, `SnapshotExpiryProcessMapper`, `Telemetry` |
 | `OrphanFilesCleaningExecutor` | `TableMaintainer.cleanOrphanFiles()`. | same |
 | `DanglingDeleteFilesCleaningExecutor` | `TableMaintainer.cleanDanglingDeleteFiles()`. | same |
 | `DataExpiringExecutor` | `TableMaintainer.expireData()`. | same |
@@ -120,7 +120,7 @@ method, and catch and log every `Throwable`. They re-arm on `handleConfigChanged
 
 | Executor | `enabled` (table config) | `CleanupOperation` / restart guard |
 | --- | --- | --- |
-| `SnapshotsExpiringExecutor` | `isExpireSnapshotEnabled()` | `SNAPSHOTS_EXPIRING`, `now - last >= interval` |
+| `SnapshotsExpiringExecutor` | `isExpireSnapshotEnabled()` | none: cron-driven (see above), a run left `RUNNING` by a restart is marked `FAILED` at startup |
 | `OrphanFilesCleaningExecutor` | `isCleanOrphanEnabled()` | `ORPHAN_FILES_CLEANING`, same |
 | `DanglingDeleteFilesCleaningExecutor` | `DefaultTableRuntime` and `isDeleteDanglingDeleteFilesEnabled()` | `DANGLING_DELETE_FILES_CLEANING`, same |
 | `DataExpiringExecutor` | `getExpiringDataConfig().isEnabled()` | `DATA_EXPIRING`, same |
@@ -151,7 +151,7 @@ Config keys (`FusionManagementConf`, under `ams:` in `config.yaml`); defaults in
 | `refresh-tables.thread-count` / `refresh-tables.interval` | 10 / 1 min | `TableRuntimeRefreshExecutor`, `TableHealthScoreExecutor` |
 | `self-optimizing.commit-thread-count` | 10 | `OptimizingCommitExecutor` |
 | `self-optimizing.runtime-data-keep-days` / `self-optimizing.runtime-data-expire-interval-hours` | 30 / 1 | `OptimizingExpiringExecutor` |
-| `expire-snapshots.enabled` / `.thread-count` / `.interval` | false / 10 / 1 h | `SnapshotsExpiringExecutor` |
+| `expire-snapshots.enabled` / `.thread-count` | true / 10 (a table still needs its expiry cron) | `SnapshotsExpiringExecutor` |
 | `clean-orphan-files.enabled` / `.thread-count` / `.interval` | false / 10 / 1 d | `OrphanFilesCleaningExecutor` |
 | `clean-dangling-delete-files.enabled` / `.thread-count` / `.interval` | false / 10 / 1 d | `DanglingDeleteFilesCleaningExecutor` |
 | `data-expiration.enabled` / `.thread-count` / `.interval` | true / 10 / 1 d | `DataExpiringExecutor` |
