@@ -168,8 +168,6 @@ services:
     container_name: fusion-test-kind-setup
     networks:
       fusion-test-net:
-    environment:
-      TEST_LOG_DIR: ${TEST_LOG_DIR:-/tmp/fusion-test-logs}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - kind-kubeconfig:/output
@@ -180,7 +178,6 @@ services:
       - -c
       - |
         set -e
-        sed "s|AMORO_LOG_PLACEHOLDER|$$TEST_LOG_DIR|g" /kind-config.yaml > /tmp/kind-config.yaml
 
         case "$$(uname -m)" in
           x86_64) ARCH=amd64 ;;
@@ -194,7 +191,7 @@ services:
         if kind get clusters 2>/dev/null | grep -q '^fusion-test-cluster$$'; then
           echo "Kind cluster fusion-test-cluster exists, reusing it."
         else
-          kind create cluster --config /tmp/kind-config.yaml --wait 180s
+          kind create cluster --config /kind-config.yaml --wait 180s
         fi
 
         for n in $$(docker ps --filter "label=io.x-k8s.kind.cluster=fusion-test-cluster" --format "{{.Names}}"); do

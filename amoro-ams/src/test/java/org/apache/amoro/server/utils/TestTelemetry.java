@@ -20,11 +20,20 @@
 
 package org.apache.amoro.server.utils;
 
+import org.apache.amoro.exception.AlreadyExistsException;
+import org.apache.iceberg.exceptions.BadRequestException;
+import org.apache.iceberg.exceptions.ForbiddenException;
+import org.apache.iceberg.exceptions.NoSuchNamespaceException;
+import org.apache.iceberg.exceptions.NotAuthorizedException;
 import org.apache.iceberg.exceptions.RESTException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import javax.net.ssl.SSLHandshakeException;
+
 import java.io.IOException;
+import java.net.ConnectException;
+import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 import java.util.Map;
 
@@ -33,7 +42,7 @@ public class TestTelemetry {
   private static final String HOST = "secret-host.internal";
 
   private static Map<String, Object> failureProps(Throwable error) {
-    return Telemetry.failureProps(Telemetry.Command.CREATE_CATALOG, "rest", error);
+    return Telemetry.failureProps(Command.CREATE_CATALOG, "rest", error);
   }
 
   /** The chain a Generic REST catalog with an unknown host produces in createCatalog. */
@@ -52,7 +61,9 @@ public class TestTelemetry {
         Map.of(
             "command", "create_catalog",
             "error_source", "rest",
-            "category", "dns_resolution_failed"),
+            "category", "dns_resolution_failed",
+            "fusion_version", "NA",
+            "optimizer_version", "NA"),
         props);
   }
 
@@ -79,14 +90,80 @@ public class TestTelemetry {
 
   @Test
   public void unmappedFailureIsReportedAsUnclassified() {
-    Map<String, Object> props = failureProps(new IllegalStateException(HOST));
+    Map<String, Object> props = failureProps(new Exception(HOST));
 
     Assertions.assertEquals(
         Map.of(
             "command", "create_catalog",
             "error_source", "rest",
             "category", "unclassified",
-            "error_type", "java.lang.IllegalStateException"),
+            "fusion_version", "NA",
+            "optimizer_version", "NA",
+            "error_type", "java.lang.Exception"),
         props);
+  }
+
+  private static Object categoryOf(Throwable error) {
+    return failureProps(error).get("category");
+  }
+
+  @Test
+  public void reachabilityFailuresAreClassified() {
+    Assertions.assertEquals(
+        "network_unreachable", categoryOf(new RuntimeException(new ConnectException(HOST))));
+    Assertions.assertEquals("timeout", categoryOf(new SocketTimeoutException(HOST)));
+    Assertions.assertEquals("tls_failed", categoryOf(new SSLHandshakeException(HOST)));
+  }
+
+  @Test
+  public void authFailuresAreClassified() {
+    Assertions.assertEquals("auth_failed", categoryOf(new NotAuthorizedException(HOST)));
+    Assertions.assertEquals("permission_denied", categoryOf(new ForbiddenException(HOST)));
+  }
+
+  @Test
+  public void notFoundFailuresAreClassified() {
+    Assertions.assertEquals("object_not_found", categoryOf(new NoSuchNamespaceException(HOST)));
+  }
+
+  @Test
+  public void optimizerFailuresAreClassified() {
+    // An optimizer registering for a group that does not exist.
+    Assertions.assertEquals(
+        "object_not_found",
+        categoryOf(new org.apache.amoro.exception.ObjectNotExistsException("Optimizer group g")));
+    // An optimizer registering with a heartbeat interval too long for AMS. It keeps the forbidden
+    // error code, so that the optimizer still exits instead of retrying.
+    org.apache.amoro.exception.OptimizerConfigException rejection =
+        new org.apache.amoro.exception.OptimizerConfigException(HOST);
+    Assertions.assertEquals("config_invalid", categoryOf(rejection));
+    Assertions.assertEquals(
+        org.apache.amoro.ErrorCodes.FORBIDDEN_ERROR_CODE,
+        org.apache.amoro.exception.AmoroRuntimeException.normalize(rejection).getErrorCode());
+    Assertions.assertEquals(
+        "internal_error",
+        categoryOf(
+            new org.apache.amoro.exception.IllegalTaskStateException(null, "ACKED", "PLANNED")));
+  }
+
+  @Test
+  public void catalogFailuresAreClassified() {
+    // A duplicate catalog name, thrown by createCatalog itself.
+    Assertions.assertEquals("catalog_error", categoryOf(new AlreadyExistsException(HOST)));
+    Assertions.assertEquals("config_invalid", categoryOf(new BadRequestException(HOST)));
+    // Iceberg rejects bad catalog settings with IllegalArgumentException.
+    Assertions.assertEquals("config_invalid", categoryOf(new IllegalArgumentException(HOST)));
+  }
+
+  @Test
+  public void runtimeFailuresAreClassified() {
+    Assertions.assertEquals("unsupported_feature", categoryOf(new UnsupportedOperationException()));
+    Assertions.assertEquals("internal_error", categoryOf(new IllegalStateException(HOST)));
+  }
+
+  @Test
+  public void subclassOfAMappedExceptionIsClassified() {
+    // NumberFormatException is not listed; its superclass IllegalArgumentException is.
+    Assertions.assertEquals("config_invalid", categoryOf(new NumberFormatException(HOST)));
   }
 }

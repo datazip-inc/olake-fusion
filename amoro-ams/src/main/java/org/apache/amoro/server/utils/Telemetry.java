@@ -20,6 +20,7 @@
 
 package org.apache.amoro.server.utils;
 
+import org.apache.amoro.OptimizerProperties;
 import org.apache.amoro.optimizing.OptimizingType;
 import org.apache.amoro.server.AmoroServiceContainer;
 import org.apache.amoro.server.persistence.PlatformPropertyStore;
@@ -30,14 +31,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.URI;
-import java.net.UnknownHostException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -72,6 +71,14 @@ public class Telemetry {
   private static final String NOT_FOUND_PLACEHOLDER = "NA";
 
   private static final String TELEMETRY_DISABLED_ENV = "TELEMETRY_DISABLED";
+  /** Set in the Fusion and Spark optimizer images to the release tag they were built for. */
+  private static final String FUSION_VERSION_ENV = "FUSION_VERSION";
+
+  /** The release this AMS was built for, NA outside a release image. */
+  private static final String FUSION_VERSION = orPlaceholder(System.getenv(FUSION_VERSION_ENV));
+
+  /** The release the optimizer reported when it registered, NA until one has. */
+  private static volatile String optimizerVersion = NOT_FOUND_PLACEHOLDER;
 
   private static final long TIMEOUT_SECONDS = 10L;
   /** Bounded so that a slow or unreachable collector can never accumulate work. */
@@ -84,32 +91,6 @@ public class Telemetry {
    * the connector sends "Failure - CLI".
    */
   static final String FAILURE_EVENT = "Failure - Fusion";
-
-  /**
-   * An operation whose failures are reported. Failure telemetry follows the OLake connector's
-   * TrackFailure (olake utils/telemetry) and its categories (olake utils/errs). Enum names are sent
-   * lower-cased: CREATE_CATALOG -> create_catalog.
-   */
-  public enum Command {
-    CREATE_CATALOG
-  }
-
-  enum Category {
-    DNS_RESOLUTION_FAILED,
-    /** Fallback for failures not yet in FAILURE_CATEGORIES, as olake errs.Unclassified. */
-    UNCLASSIFIED
-  }
-
-  /**
-   * Exception type to category, as olake destination/iceberg/errors.go. Checked in insertion order,
-   * so a more specific type must be put before a broader one it extends.
-   */
-  private static final Map<Class<? extends Throwable>, Category> FAILURE_CATEGORIES =
-      new LinkedHashMap<>();
-
-  static {
-    FAILURE_CATEGORIES.put(UnknownHostException.class, Category.DNS_RESOLUTION_FAILED);
-  }
 
   /** Set from the AMS configuration; {@code null} means "not configured, fall back to the env". */
   private static volatile Boolean configuredDisabled;
@@ -462,6 +443,14 @@ public class Telemetry {
     return props;
   }
 
+  /** Keeps the version a registering optimizer reports, for the failures reported after it. */
+  public static void updateOptimizerVersion(Map<String, String> optimizerProperties) {
+    if (optimizerProperties != null) {
+      optimizerVersion =
+          orPlaceholder(optimizerProperties.get(OptimizerProperties.OPTIMIZER_VERSION));
+    }
+  }
+
   /**
    * Reports why an operation failed as a classification, never a message, like the connector's
    * TrackFailure. Unmapped failures are sent with the UNCLASSIFIED category.
@@ -484,30 +473,23 @@ public class Telemetry {
     // Root first, so the most specific mapped cause wins over a broader wrapper above it.
     List<Throwable> chain = ExceptionUtils.getThrowableList(error);
     Collections.reverse(chain);
-    Category category =
+    FailureCategory category =
         chain.stream()
-            .map(Telemetry::categoryOf)
+            .map(FailureCategory::of)
             .filter(Objects::nonNull)
             .findFirst()
-            .orElse(Category.UNCLASSIFIED);
+            .orElse(FailureCategory.UNCLASSIFIED);
 
     Map<String, Object> props = new HashMap<>();
     props.put("command", wire(command));
     props.put("error_source", errorSource);
     props.put("category", wire(category));
-    if (category == Category.UNCLASSIFIED) {
+    props.put("fusion_version", FUSION_VERSION);
+    props.put("optimizer_version", optimizerVersion);
+    if (category == FailureCategory.UNCLASSIFIED) {
       props.put("error_type", chain.get(0).getClass().getName());
     }
     return props;
-  }
-
-  private static Category categoryOf(Throwable t) {
-    for (Map.Entry<Class<? extends Throwable>, Category> e : FAILURE_CATEGORIES.entrySet()) {
-      if (e.getKey().isInstance(t)) {
-        return e.getValue();
-      }
-    }
-    return null;
   }
 
   private static String wire(Enum<?> value) {
