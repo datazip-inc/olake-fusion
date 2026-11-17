@@ -30,8 +30,8 @@ public final class Env {
   public static final String DOCKER_NETWORK = "fusion-test-net";
 
   /**
-   * Host directory the Fusion container's /mnt/amoro-logs is mounted from. The optimizer writes one
-   * directory of logs per optimizing process under its {@code compaction} subdirectory.
+   * Host directory the Fusion container's /mnt/amoro-logs is mounted from. AMS writes one directory
+   * of logs per optimizing process under its {@code compaction} subdirectory.
    */
   public static final String LOG_DIR = get("TEST_LOG_DIR", "/tmp/fusion-test-logs");
 

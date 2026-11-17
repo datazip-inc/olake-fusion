@@ -48,5 +48,9 @@ public enum Command {
   // An optimizer that stopped heart-beating, e.g. after a crash or an OOM kill.
   OPTIMIZER_EXPIRED,
   // No optimizer registered within a few minutes of AMS starting, e.g. a pod that never started.
-  OPTIMIZER_NOT_REGISTERED
+  OPTIMIZER_NOT_REGISTERED,
+  // AMS writing optimizing logs to its disk.
+  WRITE_LOGS,
+  // The optimizer shipping optimizing logs to AMS.
+  SHIP_LOGS
 }
