@@ -579,6 +579,7 @@ public class OptimizingQueue extends PersistentBase {
           persistAndSetCompleted(false);
           trackCompleted();
           appendFailureEntry();
+          LogWriter.get().uploadAsync(processId);
         }
       } finally {
         lock.unlock();
@@ -681,6 +682,7 @@ public class OptimizingQueue extends PersistentBase {
               persistAndSetCompleted(false);
               trackCompleted();
               appendFailureEntry();
+              LogWriter.get().uploadAsync(processId);
             }
           }
         }
@@ -795,6 +797,7 @@ public class OptimizingQueue extends PersistentBase {
           }
           if (completed) {
             appendFailureEntry();
+            LogWriter.get().uploadAsync(processId);
           }
           throw new IllegalStateException("repeat commit, and last error " + failedReason);
         }
@@ -833,6 +836,7 @@ public class OptimizingQueue extends PersistentBase {
         }
         // Outside the try: a failed write must not be taken for a failed commit.
         appendFailureEntry();
+        LogWriter.get().uploadAsync(processId);
       } finally {
         lock.unlock();
       }

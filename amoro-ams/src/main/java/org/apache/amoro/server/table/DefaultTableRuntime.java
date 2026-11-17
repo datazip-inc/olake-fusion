@@ -420,6 +420,7 @@ public class DefaultTableRuntime extends AbstractTableRuntime
     // Best effort, and written once the table is IDLE again.
     if (failed) {
       appendDriverLogEntry(processId, "ERROR", describeThrowable(throwable, reason), throwable);
+      LogWriter.get().uploadAsync(processId);
     }
   }
 
