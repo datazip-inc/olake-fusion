@@ -371,7 +371,7 @@ public class OptimizingQueue extends PersistentBase {
               Command.PLAN_OPTIMIZING,
               Telemetry.errorSource(catalogManager, tableRuntime.getTableIdentifier()),
               throwable);
-        tableRuntime.planFailed(ExceptionUtil.getErrorMessage(throwable, 4000), throwable);
+      tableRuntime.planFailed(ExceptionUtil.getErrorMessage(throwable, 4000), throwable);
       throw throwable;
     }
   }
