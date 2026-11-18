@@ -37,6 +37,7 @@ public class InlineTableExecutors {
   private OptimizingCommitExecutor optimizingCommitExecutor;
   private OptimizingExpiringExecutor optimizingExpiringExecutor;
   private TableHealthScoreExecutor tableHealthScoreExecutor;
+  private DataExpiringExecutor dataExpiringExecutor;
 
   public static InlineTableExecutors getInstance() {
     return instance;
@@ -83,6 +84,13 @@ public class InlineTableExecutors {
             tableService,
             conf.getInteger(FusionManagementConf.REFRESH_TABLES_THREAD_COUNT),
             conf.get(FusionManagementConf.REFRESH_TABLES_INTERVAL).toMillis());
+    if (conf.getBoolean(FusionManagementConf.DATA_EXPIRATION_ENABLED)) {
+      this.dataExpiringExecutor =
+          new DataExpiringExecutor(
+              tableService,
+              conf.getInteger(FusionManagementConf.DATA_EXPIRATION_THREAD_COUNT),
+              conf.get(FusionManagementConf.DATA_EXPIRATION_INTERVAL));
+    }
   }
 
   public SnapshotsExpiringExecutor getSnapshotsExpiringExecutor() {
@@ -111,5 +119,9 @@ public class InlineTableExecutors {
 
   public TableHealthScoreExecutor getTableHealthScoreExecutor() {
     return tableHealthScoreExecutor;
+  }
+
+  public DataExpiringExecutor getDataExpiringExecutor() {
+    return dataExpiringExecutor;
   }
 }

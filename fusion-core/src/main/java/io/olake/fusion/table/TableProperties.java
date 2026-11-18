@@ -204,6 +204,29 @@ public class TableProperties {
       "clean-dangling-delete-files.enabled";
   public static final boolean ENABLE_DANGLING_DELETE_FILES_CLEAN_DEFAULT = true;
 
+  /** table data expiration related properties */
+  public static final String ENABLE_DATA_EXPIRATION = "data-expire.enabled";
+
+  public static final boolean ENABLE_DATA_EXPIRATION_DEFAULT = false;
+
+  public static final String DATA_EXPIRATION_LEVEL = "data-expire.level";
+  public static final String DATA_EXPIRATION_LEVEL_DEFAULT = "partition";
+
+  public static final String DATA_EXPIRATION_FIELD = "data-expire.field";
+
+  public static final String DATA_EXPIRATION_DATE_STRING_PATTERN =
+      "data-expire.datetime-string-pattern";
+  public static final String DATA_EXPIRATION_DATE_STRING_PATTERN_DEFAULT = "yyyy-MM-dd";
+
+  public static final String DATA_EXPIRATION_DATE_NUMBER_FORMAT =
+      "data-expire.datetime-number-format";
+  public static final String DATA_EXPIRATION_DATE_NUMBER_FORMAT_DEFAULT = "TIMESTAMP_MS";
+
+  public static final String DATA_EXPIRATION_RETENTION_TIME = "data-expire.retention-time";
+
+  public static final String DATA_EXPIRATION_BASE_ON_RULE = "data-expire.base-on-rule";
+  public static final String DATA_EXPIRATION_BASE_ON_RULE_DEFAULT = "LAST_COMMIT_TIME";
+
   public static final String ENABLE_TABLE_TRASH = "table-trash.enabled";
   public static final boolean ENABLE_TABLE_TRASH_DEFAULT = false;
 

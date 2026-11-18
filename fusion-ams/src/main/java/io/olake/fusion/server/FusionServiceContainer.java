@@ -225,6 +225,7 @@ public class FusionServiceContainer {
     addHandlerChain(InlineTableExecutors.getInstance().getOptimizingExpiringExecutor());
     addHandlerChain(InlineTableExecutors.getInstance().getTableRefreshingExecutor());
     addHandlerChain(InlineTableExecutors.getInstance().getTableHealthScoreExecutor());
+    addHandlerChain(InlineTableExecutors.getInstance().getDataExpiringExecutor());
     tableService.initialize();
     LOG.info("AMS table service have been initialized");
 

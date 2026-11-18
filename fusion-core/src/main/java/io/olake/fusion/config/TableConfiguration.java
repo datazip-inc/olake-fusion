@@ -23,6 +23,8 @@ package io.olake.fusion.config;
 import org.apache.amoro.shade.guava32.com.google.common.base.Objects;
 import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
+import java.util.Optional;
+
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class TableConfiguration {
   private boolean expireSnapshotEnabled;
@@ -36,6 +38,7 @@ public class TableConfiguration {
   private long orphanExistingMinutes;
   private boolean deleteDanglingDeleteFilesEnabled;
   private OptimizingConfig optimizingConfig;
+  private DataExpirationConfig expiringDataConfig;
 
   public TableConfiguration() {}
 
@@ -92,6 +95,15 @@ public class TableConfiguration {
 
   public TableConfiguration setOptimizingConfig(OptimizingConfig optimizingConfig) {
     this.optimizingConfig = optimizingConfig;
+    return this;
+  }
+
+  public DataExpirationConfig getExpiringDataConfig() {
+    return Optional.ofNullable(expiringDataConfig).orElse(new DataExpirationConfig());
+  }
+
+  public TableConfiguration setExpiringDataConfig(DataExpirationConfig expiringDataConfig) {
+    this.expiringDataConfig = expiringDataConfig;
     return this;
   }
 
@@ -163,7 +175,8 @@ public class TableConfiguration {
         && cleanOrphanEnabled == that.cleanOrphanEnabled
         && orphanExistingMinutes == that.orphanExistingMinutes
         && deleteDanglingDeleteFilesEnabled == that.deleteDanglingDeleteFilesEnabled
-        && Objects.equal(optimizingConfig, that.optimizingConfig);
+        && Objects.equal(optimizingConfig, that.optimizingConfig)
+        && Objects.equal(expiringDataConfig, that.expiringDataConfig);
   }
 
   @Override
@@ -179,6 +192,7 @@ public class TableConfiguration {
         cleanOrphanEnabled,
         orphanExistingMinutes,
         deleteDanglingDeleteFilesEnabled,
-        optimizingConfig);
+        optimizingConfig,
+        expiringDataConfig);
   }
 }

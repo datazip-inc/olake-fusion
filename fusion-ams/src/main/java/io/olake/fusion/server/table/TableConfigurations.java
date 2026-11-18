@@ -21,15 +21,19 @@
 package io.olake.fusion.server.table;
 
 import io.olake.fusion.config.ConfigHelpers;
+import io.olake.fusion.config.DataExpirationConfig;
 import io.olake.fusion.config.OptimizingConfig;
 import io.olake.fusion.config.TableConfiguration;
 import io.olake.fusion.table.TableProperties;
 import io.olake.fusion.utils.CompatiblePropertyUtil;
 import io.olake.fusion.utils.PropertyUtil;
 import org.apache.amoro.shade.guava32.com.google.common.annotations.VisibleForTesting;
+import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
 import org.apache.amoro.shade.guava32.com.google.common.primitives.Ints;
+import org.apache.commons.lang3.StringUtils;
 
 import java.time.temporal.ChronoUnit;
+import java.util.Locale;
 import java.util.Map;
 
 /** Util class to help create table configuration for Iceberg tables. */
@@ -113,7 +117,73 @@ public class TableConfigurations {
                     properties,
                     TableProperties.ENABLE_DANGLING_DELETE_FILES_CLEAN,
                     TableProperties.ENABLE_DANGLING_DELETE_FILES_CLEAN_DEFAULT))
-        .setOptimizingConfig(parseOptimizingConfig(properties));
+        .setOptimizingConfig(parseOptimizingConfig(properties))
+        .setExpiringDataConfig(parseDataExpirationConfig(properties));
+  }
+
+  /**
+   * Parse table data expiration config from table properties
+   *
+   * @param properties table properties
+   * @return table expiration config
+   */
+  @VisibleForTesting
+  public static DataExpirationConfig parseDataExpirationConfig(Map<String, String> properties) {
+    boolean gcEnabled =
+        CompatiblePropertyUtil.propertyAsBoolean(
+            properties, org.apache.iceberg.TableProperties.GC_ENABLED, true);
+    DataExpirationConfig config =
+        new DataExpirationConfig()
+            .setEnabled(
+                gcEnabled
+                    && CompatiblePropertyUtil.propertyAsBoolean(
+                        properties,
+                        TableProperties.ENABLE_DATA_EXPIRATION,
+                        TableProperties.ENABLE_DATA_EXPIRATION_DEFAULT))
+            .setExpirationLevel(
+                DataExpirationConfig.ExpireLevel.fromString(
+                    CompatiblePropertyUtil.propertyAsString(
+                        properties,
+                        TableProperties.DATA_EXPIRATION_LEVEL,
+                        TableProperties.DATA_EXPIRATION_LEVEL_DEFAULT)))
+            .setExpirationField(
+                CompatiblePropertyUtil.propertyAsString(
+                    properties, TableProperties.DATA_EXPIRATION_FIELD, null))
+            .setDateTimePattern(
+                CompatiblePropertyUtil.propertyAsString(
+                    properties,
+                    TableProperties.DATA_EXPIRATION_DATE_STRING_PATTERN,
+                    TableProperties.DATA_EXPIRATION_DATE_STRING_PATTERN_DEFAULT))
+            .setNumberDateFormat(
+                CompatiblePropertyUtil.propertyAsString(
+                    properties,
+                    TableProperties.DATA_EXPIRATION_DATE_NUMBER_FORMAT,
+                    TableProperties.DATA_EXPIRATION_DATE_NUMBER_FORMAT_DEFAULT))
+            .setBaseOnRule(
+                parseDataExpirationBaseOnRule(
+                    CompatiblePropertyUtil.propertyAsString(
+                        properties,
+                        TableProperties.DATA_EXPIRATION_BASE_ON_RULE,
+                        TableProperties.DATA_EXPIRATION_BASE_ON_RULE_DEFAULT)));
+    String retention =
+        CompatiblePropertyUtil.propertyAsString(
+            properties, TableProperties.DATA_EXPIRATION_RETENTION_TIME, null);
+    if (StringUtils.isNotBlank(retention)) {
+      config.setRetentionTime(ConfigHelpers.TimeUtils.parseDuration(retention).toMillis());
+    }
+
+    return config;
+  }
+
+  private static DataExpirationConfig.BaseOnRule parseDataExpirationBaseOnRule(String since) {
+    Preconditions.checkArgument(
+        null != since, TableProperties.DATA_EXPIRATION_BASE_ON_RULE + " is invalid: null");
+    try {
+      return DataExpirationConfig.BaseOnRule.valueOf(since.toUpperCase(Locale.ENGLISH));
+    } catch (IllegalArgumentException e) {
+      throw new IllegalArgumentException(
+          String.format("Unable to expire data since: %s", since), e);
+    }
   }
 
   /** Minutes of {@code snapshot.keep.duration} (no unit means days), or null when unparsable. */

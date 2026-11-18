@@ -56,6 +56,7 @@ public enum Command {
   COMMIT_OPTIMIZING,
   // Table maintenance, run on a schedule per table.
   EXPIRE_SNAPSHOTS,
+  EXPIRE_DATA,
   REFRESH_TABLE,
   EVALUATE_TABLE_HEALTH,
   // AMS writing optimizing logs to its disk.

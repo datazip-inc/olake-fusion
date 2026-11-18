@@ -122,6 +122,25 @@ public class FusionManagementConf {
           .defaultValue(10)
           .withDescription("The number of threads used for snapshots expiring.");
 
+  /** configs of data expiration */
+  public static final ConfigOption<Boolean> DATA_EXPIRATION_ENABLED =
+      ConfigOptions.key("data-expiration.enabled")
+          .booleanType()
+          .defaultValue(true)
+          .withDescription("Enable data expiration");
+
+  public static final ConfigOption<Integer> DATA_EXPIRATION_THREAD_COUNT =
+      ConfigOptions.key("data-expiration.thread-count")
+          .intType()
+          .defaultValue(10)
+          .withDescription("The number of threads used for data expiring");
+
+  public static final ConfigOption<Duration> DATA_EXPIRATION_INTERVAL =
+      ConfigOptions.key("data-expiration.interval")
+          .durationType()
+          .defaultValue(Duration.ofDays(1))
+          .withDescription("Execute interval for data expiration");
+
   public static final ConfigOption<Boolean> CLEAN_ORPHAN_FILES_ENABLED =
       ConfigOptions.key("clean-orphan-files.enabled")
           .booleanType()
