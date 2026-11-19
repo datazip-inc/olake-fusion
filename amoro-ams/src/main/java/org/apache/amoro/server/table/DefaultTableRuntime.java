@@ -40,6 +40,7 @@ import org.apache.amoro.server.AmoroServiceConstants;
 import org.apache.amoro.server.optimizing.LogWriter;
 import org.apache.amoro.server.optimizing.OptimizingProcess;
 import org.apache.amoro.server.optimizing.OptimizingStatus;
+import org.apache.amoro.server.optimizing.S3LogStore.LogType;
 import org.apache.amoro.server.optimizing.TaskRuntime;
 import org.apache.amoro.server.persistence.mapper.OptimizerMapper;
 import org.apache.amoro.server.persistence.mapper.OptimizingProcessMapper;
@@ -421,7 +422,7 @@ public class DefaultTableRuntime extends AbstractTableRuntime
     // Best effort, and written once the table is IDLE again.
     if (failed) {
       appendDriverLogEntry(processId, "ERROR", describeThrowable(throwable, reason), throwable);
-      LogWriter.get().uploadAsync(processId);
+      LogWriter.get().uploadAsync(LogType.OPTIMIZATION, processId);
     }
   }
 

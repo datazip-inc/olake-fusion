@@ -39,6 +39,7 @@ import org.apache.amoro.resource.ResourceGroup;
 import org.apache.amoro.server.AmoroServiceConstants;
 import org.apache.amoro.server.catalog.CatalogManager;
 import org.apache.amoro.server.manager.MetricManager;
+import org.apache.amoro.server.optimizing.S3LogStore.LogType;
 import org.apache.amoro.server.optimizing.TaskRuntime.Status;
 import org.apache.amoro.server.persistence.OptimizingProcessState;
 import org.apache.amoro.server.persistence.PersistentBase;
@@ -579,7 +580,7 @@ public class OptimizingQueue extends PersistentBase {
           persistAndSetCompleted(false);
           trackCompleted();
           appendFailureEntry();
-          LogWriter.get().uploadAsync(processId);
+          LogWriter.get().uploadAsync(LogType.OPTIMIZATION, processId);
         }
       } finally {
         lock.unlock();
@@ -682,7 +683,7 @@ public class OptimizingQueue extends PersistentBase {
               persistAndSetCompleted(false);
               trackCompleted();
               appendFailureEntry();
-              LogWriter.get().uploadAsync(processId);
+              LogWriter.get().uploadAsync(LogType.OPTIMIZATION, processId);
             }
           }
         }
@@ -797,7 +798,7 @@ public class OptimizingQueue extends PersistentBase {
           }
           if (completed) {
             appendFailureEntry();
-            LogWriter.get().uploadAsync(processId);
+            LogWriter.get().uploadAsync(LogType.OPTIMIZATION, processId);
           }
           throw new IllegalStateException("repeat commit, and last error " + failedReason);
         }
@@ -836,7 +837,7 @@ public class OptimizingQueue extends PersistentBase {
         }
         // Outside the try: a failed write must not be taken for a failed commit.
         appendFailureEntry();
-        LogWriter.get().uploadAsync(processId);
+        LogWriter.get().uploadAsync(LogType.OPTIMIZATION, processId);
       } finally {
         lock.unlock();
       }

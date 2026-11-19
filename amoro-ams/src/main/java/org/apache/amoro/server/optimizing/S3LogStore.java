@@ -42,7 +42,8 @@ import java.net.URI;
  * way: static keys when both are set, else the AWS default chain; path-style access when a custom
  * endpoint (MinIO) is set.
  *
- * <p>One object per process: {@code <OLAKE_S3_PREFIX>/fusion/logs/<processId>.log}. The {@code
+ * <p>One object per process: {@code <OLAKE_S3_PREFIX>/fusion/logs/<type>/<processId>.log}, where
+ * {@code <type>} is {@code optimization} or {@code cleanup} (see {@link LogType}). The {@code
  * fusion/} folder keeps them apart from OLake's job folders under the same prefix.
  */
 public class S3LogStore {
@@ -57,6 +58,20 @@ public class S3LogStore {
   static final String ENV_S3_SESSION_TOKEN = "OLAKE_S3_SESSION_TOKEN";
 
   private static final String LOG_FOLDER = "fusion/logs";
+
+  /** Kind of process a log belongs to; it names the log's folder. */
+  public enum LogType {
+    // Compaction, including its planning failures.
+    OPTIMIZATION("optimization"),
+    // Snapshot expiry.
+    CLEANUP("cleanup");
+
+    private final String folder;
+
+    LogType(String folder) {
+      this.folder = folder;
+    }
+  }
 
   private final S3Client client;
   private final String bucket;
@@ -109,25 +124,26 @@ public class S3LogStore {
             : AwsSessionCredentials.create(accessKey, secretKey, sessionToken));
   }
 
-  void put(long processId, byte[] content) {
+  void put(LogType type, long processId, byte[] content) {
     client.putObject(
-        PutObjectRequest.builder().bucket(bucket).key(key(processId)).build(),
+        PutObjectRequest.builder().bucket(bucket).key(key(type, processId)).build(),
         RequestBody.fromBytes(content));
   }
 
   /** Reads the log of a process, or returns null if it was not uploaded. */
-  byte[] get(long processId) {
+  byte[] get(LogType type, long processId) {
     try {
       return client
-          .getObjectAsBytes(GetObjectRequest.builder().bucket(bucket).key(key(processId)).build())
+          .getObjectAsBytes(
+              GetObjectRequest.builder().bucket(bucket).key(key(type, processId)).build())
           .asByteArray();
     } catch (NoSuchKeyException e) {
       return null;
     }
   }
 
-  private String key(long processId) {
-    return rootKey + "/" + processId + ".log";
+  private String key(LogType type, long processId) {
+    return rootKey + "/" + type.folder + "/" + processId + ".log";
   }
 
   private static String required(String key) {

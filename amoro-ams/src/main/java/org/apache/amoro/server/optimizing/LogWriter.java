@@ -23,6 +23,9 @@ package org.apache.amoro.server.optimizing;
 import org.apache.amoro.api.OptimizingLogLine;
 import org.apache.amoro.api.OptimizingTaskId;
 import org.apache.amoro.log.OptimizingTaskLogContext;
+import org.apache.amoro.server.optimizing.S3LogStore.LogType;
+import org.apache.amoro.server.persistence.PersistentBase;
+import org.apache.amoro.server.persistence.mapper.TableProcessMapper;
 import org.apache.amoro.server.utils.Command;
 import org.apache.amoro.server.utils.Telemetry;
 import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.core.JsonProcessingException;
@@ -67,9 +70,9 @@ import java.util.concurrent.TimeUnit;
  *
  * <p>When {@code OLAKE_LOGS_STORAGE_S3} is false, AMS does not delete these logs; retention is
  * handled by olake-worker. When it is true, each process's files are merged into one object in S3
- * once the process is completed (see {@link #uploadAsync(long)}), and then deleted.
+ * once the process is completed (see {@link #uploadAsync(LogType, long)}), and then deleted.
  */
-public class LogWriter {
+public class LogWriter extends PersistentBase {
 
   private static final Logger LOG = LoggerFactory.getLogger(LogWriter.class);
   private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
@@ -136,15 +139,16 @@ public class LogWriter {
    * Call it after the process's final status is in the database and its last AMS line is appended.
    * Only the files on disk at that point are uploaded. Does nothing when logs stay local.
    */
-  public void uploadAsync(long processId) {
+  public void uploadAsync(LogType type, long processId) {
     if (logStore != null) {
-      uploadExecutor.execute(() -> upload(processId));
+      uploadExecutor.execute(() -> upload(type, processId));
     }
   }
 
   /**
    * Reads a process's uploaded log from S3, split back into its files: {@code driver.log} and
-   * {@code <taskId>.log}, by the taskId of each line.
+   * {@code <taskId>.log}, by the taskId of each line. A process in {@code table_process} is a
+   * compaction, read from the optimization folder; any other is read from the cleanup folder.
    *
    * @return file name -> content, or null if logs stay local, the process was not uploaded, or S3
    *     cannot be read
@@ -154,7 +158,12 @@ public class LogWriter {
       return null;
     }
     try {
-      byte[] content = logStore.get(Long.parseLong(processId));
+      long id = Long.parseLong(processId);
+      LogType type =
+          getAs(TableProcessMapper.class, mapper -> mapper.getProcessMeta(id)) == null
+              ? LogType.CLEANUP
+              : LogType.OPTIMIZATION;
+      byte[] content = logStore.get(type, id);
       return content == null ? null : split(new String(content, StandardCharsets.UTF_8));
     } catch (RuntimeException e) {
       LOG.warn("Failed to read optimizing logs of process {} from S3", processId, e);
@@ -163,7 +172,7 @@ public class LogWriter {
   }
 
   /** Merges driver.log, then the task logs by task id, into one object. On failure keeps them. */
-  private void upload(long processId) {
+  private void upload(LogType type, long processId) {
     Path processDir = Paths.get(logBaseDir, String.valueOf(processId));
     try {
       List<Path> files = new ArrayList<>();
@@ -180,7 +189,7 @@ public class LogWriter {
           merged.write(Files.readAllBytes(file));
         }
       }
-      logStore.put(processId, merged.toByteArray());
+      logStore.put(type, processId, merged.toByteArray());
       synchronized (lock) {
         for (Path file : files) {
           Files.deleteIfExists(file);
