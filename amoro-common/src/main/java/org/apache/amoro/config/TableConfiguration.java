@@ -35,6 +35,8 @@ public class TableConfiguration {
   private long flinkCheckpointRetention;
   private long changeDataTTLMinutes;
   private boolean cleanOrphanEnabled;
+  private String cleanOrphanTriggerCron;
+  private String cleanOrphanConfigError;
   private long orphanExistingMinutes;
   private boolean deleteDanglingDeleteFilesEnabled;
   private OptimizingConfig optimizingConfig;
@@ -84,6 +86,28 @@ public class TableConfiguration {
 
   public boolean isCleanOrphanEnabled() {
     return cleanOrphanEnabled;
+  }
+
+  /** The orphan file cleaning cron ({@code clean-orphan-files.trigger.cron}), or null when not set. */
+  public String getCleanOrphanTriggerCron() {
+    return cleanOrphanTriggerCron;
+  }
+
+  public TableConfiguration setCleanOrphanTriggerCron(String cleanOrphanTriggerCron) {
+    this.cleanOrphanTriggerCron = cleanOrphanTriggerCron;
+    return this;
+  }
+
+  /**
+   * The validation error that prevents orphan files cleaning from running, or null when valid.
+   */
+  public String getCleanOrphanConfigError() {
+    return cleanOrphanConfigError;
+  }
+
+  public TableConfiguration setCleanOrphanConfigError(String cleanOrphanConfigError) {
+    this.cleanOrphanConfigError = cleanOrphanConfigError;
+    return this;
   }
 
   public long getOrphanExistingMinutes() {
@@ -183,6 +207,8 @@ public class TableConfiguration {
         && flinkCheckpointRetention == that.flinkCheckpointRetention
         && changeDataTTLMinutes == that.changeDataTTLMinutes
         && cleanOrphanEnabled == that.cleanOrphanEnabled
+        && Objects.equal(cleanOrphanTriggerCron, that.cleanOrphanTriggerCron)
+        && Objects.equal(cleanOrphanConfigError, that.cleanOrphanConfigError)
         && orphanExistingMinutes == that.orphanExistingMinutes
         && deleteDanglingDeleteFilesEnabled == that.deleteDanglingDeleteFilesEnabled
         && Objects.equal(optimizingConfig, that.optimizingConfig)
@@ -201,6 +227,8 @@ public class TableConfiguration {
         flinkCheckpointRetention,
         changeDataTTLMinutes,
         cleanOrphanEnabled,
+        cleanOrphanTriggerCron,
+        cleanOrphanConfigError,
         orphanExistingMinutes,
         deleteDanglingDeleteFilesEnabled,
         optimizingConfig,

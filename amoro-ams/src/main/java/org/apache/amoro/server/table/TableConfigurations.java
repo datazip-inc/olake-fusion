@@ -82,6 +82,30 @@ public class TableConfigurations {
     // Setting a cron turns expiry on unless snapshot-expire.enabled says otherwise.
     boolean snapshotExpireCronSet =
         snapshotExpireCron != null && !snapshotExpireCron.trim().isEmpty();
+    String orphanCleanCron =
+        CompatiblePropertyUtil.propertyAsString(
+            properties, TableProperties.CLEAN_ORPHAN_FILES_TRIGGER_CRON, null);
+    if (orphanCleanCron == null) {
+      orphanCleanCron =
+          CompatiblePropertyUtil.propertyAsString(
+              properties, TableProperties.CLEAN_ORPHAN_FILE_TRIGGER_CRON, null);
+    }
+    boolean orphanCleanCronSet = orphanCleanCron != null && !orphanCleanCron.trim().isEmpty();
+    boolean cleanOrphanEnabled =
+        gcEnabled
+            && (CompatiblePropertyUtil.propertyAsBoolean(
+                properties,
+                TableProperties.CLEAN_ORPHAN_FILES_ENABLED,
+                CompatiblePropertyUtil.propertyAsBoolean(
+                    properties,
+                    TableProperties.ENABLE_ORPHAN_CLEAN,
+                    orphanCleanCronSet)));
+    long orphanExistingMinutes =
+        CompatiblePropertyUtil.propertyAsLong(
+            properties,
+            TableProperties.MIN_ORPHAN_FILE_EXISTING_TIME,
+            TableProperties.MIN_ORPHAN_FILE_EXISTING_TIME_DEFAULT);
+
     return new TableConfiguration()
         .setExpireSnapshotEnabled(
             gcEnabled
@@ -110,17 +134,10 @@ public class TableConfigurations {
                 properties,
                 TableProperties.CHANGE_DATA_TTL,
                 TableProperties.CHANGE_DATA_TTL_DEFAULT))
-        .setCleanOrphanEnabled(
-            gcEnabled
-                && CompatiblePropertyUtil.propertyAsBoolean(
-                    properties,
-                    TableProperties.ENABLE_ORPHAN_CLEAN,
-                    TableProperties.ENABLE_ORPHAN_CLEAN_DEFAULT))
-        .setOrphanExistingMinutes(
-            CompatiblePropertyUtil.propertyAsLong(
-                properties,
-                TableProperties.MIN_ORPHAN_FILE_EXISTING_TIME,
-                TableProperties.MIN_ORPHAN_FILE_EXISTING_TIME_DEFAULT))
+        .setCleanOrphanEnabled(cleanOrphanEnabled)
+        .setCleanOrphanTriggerCron(orphanCleanCron)
+        .setCleanOrphanConfigError(orphanCleanConfigError(orphanExistingMinutes))
+        .setOrphanExistingMinutes(orphanExistingMinutes)
         .setDeleteDanglingDeleteFilesEnabled(
             gcEnabled
                 && CompatiblePropertyUtil.propertyAsBoolean(
@@ -152,6 +169,14 @@ public class TableConfigurations {
     }
     if (snapshotMinCount == null || snapshotMinCount < SNAPSHOT_MIN_COUNT_LOWEST) {
       return invalidSetting(TableProperties.SNAPSHOT_MIN_COUNT, minCount);
+    }
+    return null;
+  }
+
+  private static String orphanCleanConfigError(long orphanExistingMinutes) {
+    if (orphanExistingMinutes < 1) {
+      return invalidSetting(
+          TableProperties.MIN_ORPHAN_FILE_EXISTING_TIME, String.valueOf(orphanExistingMinutes));
     }
     return null;
   }

@@ -86,7 +86,7 @@ public class SchemaMigrator {
 
   /** Migration scripts in the order they must be applied. */
   private static final String[] MIGRATIONS = {
-    "V1__platform_property.sql", "V2__snapshot_expiry_process.sql"
+    "V1__platform_property.sql", "V2__snapshot_expiry_process.sql", "V3__orphan_files_cleaning_process.sql"
   };
 
   private SchemaMigrator() {}
