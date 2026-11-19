@@ -46,6 +46,8 @@ import org.apache.amoro.server.ha.HighAvailabilityContainer;
 import org.apache.amoro.server.ha.HighAvailabilityContainerFactory;
 import org.apache.amoro.server.manager.EventsManager;
 import org.apache.amoro.server.manager.MetricManager;
+import org.apache.amoro.server.optimizing.LogWriter;
+import org.apache.amoro.server.optimizing.S3LogStore;
 import org.apache.amoro.server.persistence.DataSourceFactory;
 import org.apache.amoro.server.persistence.HttpSessionHandlerFactory;
 import org.apache.amoro.server.persistence.SqlSessionFactoryProvider;
@@ -215,6 +217,7 @@ public class AmoroServiceContainer {
     tableManager = new DefaultTableManager(serviceConfig, catalogManager);
     optimizerManager = new DefaultOptimizerManager(serviceConfig, catalogManager);
     terminalManager = new TerminalManager(serviceConfig, catalogManager);
+    LogWriter.get().setLogStore(S3LogStore.fromEnv());
 
     initHttpService();
     startHttpService();

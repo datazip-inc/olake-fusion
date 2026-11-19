@@ -28,6 +28,8 @@ import org.apache.amoro.config.TableConfiguration;
 import org.apache.amoro.formats.iceberg.maintainer.IcebergTableMaintainer;
 import org.apache.amoro.formats.iceberg.maintainer.SnapshotExpirySummary;
 import org.apache.amoro.process.ProcessStatus;
+import org.apache.amoro.server.optimizing.LogWriter;
+import org.apache.amoro.server.optimizing.S3LogStore.LogType;
 import org.apache.amoro.server.optimizing.maintainer.DefaultTableMaintainerContext;
 import org.apache.amoro.server.persistence.PersistentBase;
 import org.apache.amoro.server.persistence.mapper.SnapshotExpiryProcessMapper;
@@ -207,6 +209,7 @@ public class SnapshotsExpiringExecutor extends PeriodicTableScheduler {
           configError);
       LOG.warn("Snapshot expiry of table {} failed: {}", identifier, configError);
       runLog(tableRuntime, processId, "ERROR", "Snapshot expiry failed: " + configError, null);
+      LogWriter.get().upload(LogType.CLEANUP, processId);
       trackCompleted(ProcessStatus.FAILED, startTime, 0, null, configuration, 0);
       return;
     }
@@ -246,6 +249,7 @@ public class SnapshotsExpiringExecutor extends PeriodicTableScheduler {
       String expired = expiredMessage(summary);
       LOG.info("Snapshot expiry of table {} {}", identifier, expired);
       runLog(tableRuntime, processId, "INFO", "Snapshot expiry " + expired, null);
+      LogWriter.get().upload(LogType.CLEANUP, processId);
       trackCompleted(ProcessStatus.SUCCESS, startTime, attempts, summary, configuration, tableSize);
     } else {
       persistency.finish(
@@ -263,6 +267,7 @@ public class SnapshotsExpiringExecutor extends PeriodicTableScheduler {
           "ERROR",
           String.format("Snapshot expiry failed after %d attempts: %s", attempts, lastError),
           lastError);
+      LogWriter.get().upload(LogType.CLEANUP, processId);
       trackCompleted(ProcessStatus.FAILED, startTime, attempts, null, configuration, tableSize);
     }
   }
