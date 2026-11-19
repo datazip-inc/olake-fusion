@@ -567,6 +567,7 @@ public class OptimizingQueue extends PersistentBase {
 
     @Override
     public void close(boolean needCommit) {
+      boolean completed = false;
       lock.lock();
       try {
         if (this.status != ProcessStatus.RUNNING) {
@@ -580,10 +581,13 @@ public class OptimizingQueue extends PersistentBase {
           persistAndSetCompleted(false);
           trackCompleted();
           appendFailureEntry();
-          LogWriter.get().uploadAsync(LogType.OPTIMIZATION, processId);
+          completed = true;
         }
       } finally {
         lock.unlock();
+      }
+      if (completed) {
+        LogWriter.get().upload(LogType.OPTIMIZATION, processId);
       }
     }
 
@@ -616,6 +620,7 @@ public class OptimizingQueue extends PersistentBase {
     }
 
     private void acceptResult(TaskRuntime<?> taskRuntime) {
+      boolean completed = false;
       lock.lock();
       try {
         optimizingTasksMap.computeIfPresent(
@@ -683,12 +688,15 @@ public class OptimizingQueue extends PersistentBase {
               persistAndSetCompleted(false);
               trackCompleted();
               appendFailureEntry();
-              LogWriter.get().uploadAsync(LogType.OPTIMIZATION, processId);
+              completed = true;
             }
           }
         }
       } finally {
         lock.unlock();
+      }
+      if (completed) {
+        LogWriter.get().upload(LogType.OPTIMIZATION, processId);
       }
     }
 
@@ -785,6 +793,7 @@ public class OptimizingQueue extends PersistentBase {
               .distinct()
               .count());
 
+      boolean processCompleted = false;
       lock.lock();
       try {
         if (hasCommitted) {
@@ -798,7 +807,7 @@ public class OptimizingQueue extends PersistentBase {
           }
           if (completed) {
             appendFailureEntry();
-            LogWriter.get().uploadAsync(LogType.OPTIMIZATION, processId);
+            processCompleted = true;
           }
           throw new IllegalStateException("repeat commit, and last error " + failedReason);
         }
@@ -837,9 +846,14 @@ public class OptimizingQueue extends PersistentBase {
         }
         // Outside the try: a failed write must not be taken for a failed commit.
         appendFailureEntry();
-        LogWriter.get().uploadAsync(LogType.OPTIMIZATION, processId);
+        processCompleted = true;
       } finally {
         lock.unlock();
+        // After the unlock, so the upload never holds the process lock. In the finally, so it also
+        // runs when a repeat commit throws.
+        if (processCompleted) {
+          LogWriter.get().upload(LogType.OPTIMIZATION, processId);
+        }
       }
     }
 

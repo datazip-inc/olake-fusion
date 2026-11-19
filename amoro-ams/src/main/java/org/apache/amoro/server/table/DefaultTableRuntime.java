@@ -422,7 +422,7 @@ public class DefaultTableRuntime extends AbstractTableRuntime
     // Best effort, and written once the table is IDLE again.
     if (failed) {
       appendDriverLogEntry(processId, "ERROR", describeThrowable(throwable, reason), throwable);
-      LogWriter.get().uploadAsync(LogType.OPTIMIZATION, processId);
+      LogWriter.get().upload(LogType.OPTIMIZATION, processId);
     }
   }
 
@@ -763,7 +763,7 @@ public class DefaultTableRuntime extends AbstractTableRuntime
     LOG.warn("[cron-fail] table={} type={} failed: {}", getTableIdentifier(), processType, reason);
     appendDriverLogEntry(processId, "ERROR", describeThrowable(throwable, reason), throwable);
     LogWriter.get()
-        .uploadAsync(
+        .upload(
             SnapshotExpiryProcessMapper.PROCESS_TYPE.equals(processType)
                 ? LogType.CLEANUP
                 : LogType.OPTIMIZATION,

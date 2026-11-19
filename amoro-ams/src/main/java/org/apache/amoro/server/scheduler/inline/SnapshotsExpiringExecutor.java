@@ -209,7 +209,7 @@ public class SnapshotsExpiringExecutor extends PeriodicTableScheduler {
           configError);
       LOG.warn("Snapshot expiry of table {} failed: {}", identifier, configError);
       runLog(tableRuntime, processId, "ERROR", "Snapshot expiry failed: " + configError, null);
-      LogWriter.get().uploadAsync(LogType.CLEANUP, processId);
+      LogWriter.get().upload(LogType.CLEANUP, processId);
       trackCompleted(ProcessStatus.FAILED, startTime, 0, null, configuration, 0);
       return;
     }
@@ -249,7 +249,7 @@ public class SnapshotsExpiringExecutor extends PeriodicTableScheduler {
       String expired = expiredMessage(summary);
       LOG.info("Snapshot expiry of table {} {}", identifier, expired);
       runLog(tableRuntime, processId, "INFO", "Snapshot expiry " + expired, null);
-      LogWriter.get().uploadAsync(LogType.CLEANUP, processId);
+      LogWriter.get().upload(LogType.CLEANUP, processId);
       trackCompleted(ProcessStatus.SUCCESS, startTime, attempts, summary, configuration, tableSize);
     } else {
       persistency.finish(
@@ -267,7 +267,7 @@ public class SnapshotsExpiringExecutor extends PeriodicTableScheduler {
           "ERROR",
           String.format("Snapshot expiry failed after %d attempts: %s", attempts, lastError),
           lastError);
-      LogWriter.get().uploadAsync(LogType.CLEANUP, processId);
+      LogWriter.get().upload(LogType.CLEANUP, processId);
       trackCompleted(ProcessStatus.FAILED, startTime, attempts, null, configuration, tableSize);
     }
   }

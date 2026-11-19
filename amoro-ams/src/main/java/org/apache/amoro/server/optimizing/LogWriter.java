@@ -50,8 +50,6 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -70,7 +68,7 @@ import java.util.concurrent.TimeUnit;
  *
  * <p>When {@code OLAKE_STORAGE_MODE} is not {@code s3}, AMS does not delete these logs; retention
  * is handled by olake-worker. When it is {@code s3}, each process's files are merged into one
- * object in S3 once the process is completed (see {@link #uploadAsync(LogType, long)}), and then
+ * object in S3 once the process is completed (see {@link #upload(LogType, long)}), and then
  * deleted.
  */
 public class LogWriter extends PersistentBase {
@@ -96,13 +94,6 @@ public class LogWriter extends PersistentBase {
   private volatile long lastWriteFailureReport;
   // Null when OLAKE_STORAGE_MODE is not s3.
   private volatile S3LogStore logStore;
-  private final ExecutorService uploadExecutor =
-      Executors.newSingleThreadExecutor(
-          runnable -> {
-            Thread thread = new Thread(runnable, "optimizing-log-uploader");
-            thread.setDaemon(true);
-            return thread;
-          });
 
   private LogWriter(String logBaseDir) {
     this.logBaseDir = logBaseDir;
@@ -136,17 +127,6 @@ public class LogWriter extends PersistentBase {
   }
 
   /**
-   * Uploads a completed process's logs to S3 on a background thread, then deletes the local files.
-   * Call it after the process's final status is in the database and its last AMS line is appended.
-   * Only the files on disk at that point are uploaded. Does nothing when logs stay local.
-   */
-  public void uploadAsync(LogType type, long processId) {
-    if (logStore != null) {
-      uploadExecutor.execute(() -> upload(type, processId));
-    }
-  }
-
-  /**
    * Reads a process's uploaded log from S3, split back into its files: {@code driver.log} and
    * {@code <taskId>.log}, by the taskId of each line. A process in {@code table_process} is a
    * compaction, read from the optimization folder; any other is read from the cleanup folder.
@@ -172,31 +152,35 @@ public class LogWriter extends PersistentBase {
     }
   }
 
-  /** Merges driver.log, then the task logs by task id, into one object. On failure keeps them. */
-  private void upload(LogType type, long processId) {
+  /**
+   * Uploads a completed process's logs to S3 as one object (driver.log, then the task logs by task
+   * id), then deletes the local files. Call it after the process's final status is in the database
+   * and its last AMS line is appended, outside any process lock. Only the files on disk at that
+   * point are uploaded. On failure the local files are kept. Does nothing when logs stay local.
+   */
+  public void upload(LogType type, long processId) {
+    if (logStore == null) {
+      return;
+    }
     Path processDir = Paths.get(logBaseDir, String.valueOf(processId));
     try {
+      if (!Files.isDirectory(processDir)) {
+        return;
+      }
       List<Path> files = new ArrayList<>();
+      try (DirectoryStream<Path> stream = Files.newDirectoryStream(processDir, "*.log")) {
+        stream.forEach(files::add);
+      }
+      files.sort(Comparator.comparingLong(LogWriter::fileOrder));
       ByteArrayOutputStream merged = new ByteArrayOutputStream();
-      synchronized (lock) {
-        if (!Files.isDirectory(processDir)) {
-          return;
-        }
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(processDir, "*.log")) {
-          stream.forEach(files::add);
-        }
-        files.sort(Comparator.comparingLong(LogWriter::fileOrder));
-        for (Path file : files) {
-          merged.write(Files.readAllBytes(file));
-        }
+      for (Path file : files) {
+        merged.write(Files.readAllBytes(file));
       }
       logStore.put(type, processId, merged.toByteArray());
-      synchronized (lock) {
-        for (Path file : files) {
-          Files.deleteIfExists(file);
-        }
-        Files.deleteIfExists(processDir);
+      for (Path file : files) {
+        Files.deleteIfExists(file);
       }
+      Files.deleteIfExists(processDir);
     } catch (IOException | RuntimeException e) {
       LOG.warn("Failed to upload optimizing logs of process {} to S3", processId, e);
     }
