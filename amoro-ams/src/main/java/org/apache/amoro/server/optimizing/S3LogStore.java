@@ -33,14 +33,15 @@ import software.amazon.awssdk.services.s3.S3ClientBuilder;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 
 import java.net.URI;
 
 /**
- * Object store for optimizing logs when {@code OLAKE_LOGS_STORAGE_S3} is true. It reads the same
- * {@code OLAKE_S3_*} variables as OLake, OLake-UI and olake-worker and builds its client the same
- * way: static keys when both are set, else the AWS default chain; path-style access when a custom
- * endpoint (MinIO) is set.
+ * Object store for optimizing logs when {@code OLAKE_STORAGE_MODE} is {@code s3}. It reads the same
+ * {@code OLAKE_STORAGE_MODE} and {@code OLAKE_S3_*} variables as OLake, OLake-UI and olake-worker
+ * and builds its client the same way: static keys when both are set, else the AWS default chain;
+ * path-style access when a custom endpoint (MinIO) is set.
  *
  * <p>One object per process: {@code <OLAKE_S3_PREFIX>/fusion/logs/<type>/<processId>.log}, where
  * {@code <type>} is {@code optimization} or {@code cleanup} (see {@link LogType}). The {@code
@@ -48,7 +49,8 @@ import java.net.URI;
  */
 public class S3LogStore {
 
-  static final String ENV_LOGS_STORAGE_S3 = "OLAKE_LOGS_STORAGE_S3";
+  static final String ENV_STORAGE_MODE = "OLAKE_STORAGE_MODE";
+  static final String STORAGE_MODE_S3 = "s3";
   static final String ENV_S3_BUCKET = "OLAKE_S3_BUCKET";
   static final String ENV_S3_REGION = "OLAKE_S3_REGION";
   static final String ENV_S3_PREFIX = "OLAKE_S3_PREFIX";
@@ -87,11 +89,11 @@ public class S3LogStore {
   /**
    * Builds the store from the environment.
    *
-   * @return the store, or null when {@code OLAKE_LOGS_STORAGE_S3} is not true
+   * @return the store, or null when {@code OLAKE_STORAGE_MODE} is not {@code s3}
    * @throws IllegalStateException if a required variable is missing
    */
   public static S3LogStore fromEnv() {
-    if (!Boolean.parseBoolean(value(ENV_LOGS_STORAGE_S3))) {
+    if (!STORAGE_MODE_S3.equalsIgnoreCase(value(ENV_STORAGE_MODE))) {
       return null;
     }
     String bucket = required(ENV_S3_BUCKET);
@@ -130,7 +132,11 @@ public class S3LogStore {
         RequestBody.fromBytes(content));
   }
 
-  /** Reads the log of a process, or returns null if it was not uploaded. */
+  /**
+   * Reads the log of a process, or returns null if it was not uploaded. Without {@code
+   * s3:ListBucket}, S3 answers a missing key with 403 instead of 404, so 403 also counts as not
+   * uploaded; a real permission problem shows up when the log is uploaded.
+   */
   byte[] get(LogType type, long processId) {
     try {
       return client
@@ -139,6 +145,11 @@ public class S3LogStore {
           .asByteArray();
     } catch (NoSuchKeyException e) {
       return null;
+    } catch (S3Exception e) {
+      if (e.statusCode() == 403) {
+        return null;
+      }
+      throw e;
     }
   }
 
@@ -150,7 +161,7 @@ public class S3LogStore {
     String value = value(key);
     if (value.isEmpty()) {
       throw new IllegalStateException(
-          key + " is required when " + ENV_LOGS_STORAGE_S3 + " is true");
+          key + " is required when " + ENV_STORAGE_MODE + " is " + STORAGE_MODE_S3);
     }
     return value;
   }

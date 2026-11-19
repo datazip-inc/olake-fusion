@@ -68,9 +68,10 @@ import java.util.concurrent.TimeUnit;
  * dashboard only sees the logs the serving node received, unless {@code LOG_DIR} is shared or logs
  * move to a central store.
  *
- * <p>When {@code OLAKE_LOGS_STORAGE_S3} is false, AMS does not delete these logs; retention is
- * handled by olake-worker. When it is true, each process's files are merged into one object in S3
- * once the process is completed (see {@link #uploadAsync(LogType, long)}), and then deleted.
+ * <p>When {@code OLAKE_STORAGE_MODE} is not {@code s3}, AMS does not delete these logs; retention
+ * is handled by olake-worker. When it is {@code s3}, each process's files are merged into one
+ * object in S3 once the process is completed (see {@link #uploadAsync(LogType, long)}), and then
+ * deleted.
  */
 public class LogWriter extends PersistentBase {
 
@@ -93,7 +94,7 @@ public class LogWriter extends PersistentBase {
   private final Object lock = new Object();
   // Last time a write failure was reported in telemetry.
   private volatile long lastWriteFailureReport;
-  // Null when OLAKE_LOGS_STORAGE_S3 is false.
+  // Null when OLAKE_STORAGE_MODE is not s3.
   private volatile S3LogStore logStore;
   private final ExecutorService uploadExecutor =
       Executors.newSingleThreadExecutor(

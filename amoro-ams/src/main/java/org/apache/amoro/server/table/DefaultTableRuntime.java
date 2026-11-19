@@ -762,6 +762,12 @@ public class DefaultTableRuntime extends AbstractTableRuntime
     }
     LOG.warn("[cron-fail] table={} type={} failed: {}", getTableIdentifier(), processType, reason);
     appendDriverLogEntry(processId, "ERROR", describeThrowable(throwable, reason), throwable);
+    LogWriter.get()
+        .uploadAsync(
+            SnapshotExpiryProcessMapper.PROCESS_TYPE.equals(processType)
+                ? LogType.CLEANUP
+                : LogType.OPTIMIZATION,
+            processId);
   }
 
   public void beginCommitting() {
