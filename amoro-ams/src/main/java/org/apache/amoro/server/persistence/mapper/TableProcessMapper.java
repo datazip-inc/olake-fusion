@@ -128,9 +128,12 @@ public interface TableProcessMapper {
   TableProcessMeta getProcessMeta(@Param("processId") long processId);
 
   /**
-   * The table's compaction runs together with its snapshot expiry runs, newest first. Expiry runs
-   * come from {@code snapshot_expiry_process} with process type {@value
-   * SnapshotExpiryProcessMapper#PROCESS_TYPE}; a {@code processType} filter selects one of the two.
+   * The table's compaction runs together with its snapshot expiry and orphan files cleaning runs,
+   * newest first. Expiry runs come from {@code snapshot_expiry_process} with process type {@value
+   * SnapshotExpiryProcessMapper#PROCESS_TYPE}; orphan cleaning runs come from {@code
+   * orphan_files_cleaning_process} with process type {@value
+   * OrphanFilesCleaningProcessMapper#PROCESS_TYPE}; a {@code processTypes} filter selects the
+   * requested subsets.
    */
   @Select(
       "<script>"
@@ -143,6 +146,11 @@ public interface TableProcessMapper {
           + SnapshotExpiryProcessMapper.PROCESS_TYPE
           + "' AS process_type, create_time, finish_time, fail_message, summary"
           + " FROM snapshot_expiry_process"
+          + " UNION ALL "
+          + "SELECT process_id, table_id, status, '"
+          + OrphanFilesCleaningProcessMapper.PROCESS_TYPE
+          + "' AS process_type, create_time, finish_time, fail_message, summary"
+          + " FROM orphan_files_cleaning_process"
           + ") processes WHERE table_id = #{tableId}"
           + "<if test='processTypes != null'> AND process_type IN"
           + "<foreach collection='processTypes' item='type' open='(' separator=',' close=')'>"

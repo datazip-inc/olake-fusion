@@ -23,6 +23,7 @@ package org.apache.amoro.server.scheduler.inline;
 import org.apache.amoro.TableRuntime;
 import org.apache.amoro.server.persistence.PersistentBase;
 import org.apache.amoro.server.persistence.mapper.OptimizingProcessMapper;
+import org.apache.amoro.server.persistence.mapper.OrphanFilesCleaningProcessMapper;
 import org.apache.amoro.server.persistence.mapper.SnapshotExpiryProcessMapper;
 import org.apache.amoro.server.persistence.mapper.TableProcessMapper;
 import org.apache.amoro.server.scheduler.PeriodicTableScheduler;
@@ -94,6 +95,11 @@ public class OptimizingExpiringExecutor extends PeriodicTableScheduler {
           () ->
               doAs(
                   SnapshotExpiryProcessMapper.class,
+                  mapper ->
+                      mapper.deleteBefore(tableRuntime.getTableIdentifier().getId(), minProcessId)),
+          () ->
+              doAs(
+                  OrphanFilesCleaningProcessMapper.class,
                   mapper ->
                       mapper.deleteBefore(tableRuntime.getTableIdentifier().getId(), minProcessId)),
           () ->

@@ -25,6 +25,7 @@ import org.apache.amoro.optimizing.MetricsSummary;
 import org.apache.amoro.optimizing.OptimizingType;
 import org.apache.amoro.process.ProcessStatus;
 import org.apache.amoro.server.persistence.PersistentBase;
+import org.apache.amoro.server.persistence.mapper.OrphanFilesCleaningProcessMapper;
 import org.apache.amoro.server.persistence.mapper.SnapshotExpiryProcessMapper;
 import org.apache.amoro.server.persistence.mapper.TableMetaMapper;
 import org.apache.amoro.server.persistence.mapper.TableProcessMapper;
@@ -191,13 +192,14 @@ public class BaseOptimizingChecker extends PersistentBase {
     Assert.assertTrue("optimize is not stopped", tableOptimizingProcesses.isEmpty());
   }
 
-  /** The table's runs without snapshot expiry runs, newest first. */
+  /** The table's runs without snapshot expiry or orphan cleaning runs, newest first. */
   private List<TableProcessMeta> compactionRuns(ServerTableIdentifier identifier) {
     return getAs(
             TableProcessMapper.class,
             mapper -> mapper.listProcessMetaWithSnapshotExpiry(identifier.getId(), null, null))
         .stream()
         .filter(p -> !SnapshotExpiryProcessMapper.PROCESS_TYPE.equals(p.getProcessType()))
+        .filter(p -> !OrphanFilesCleaningProcessMapper.PROCESS_TYPE.equals(p.getProcessType()))
         .collect(Collectors.toList());
   }
 

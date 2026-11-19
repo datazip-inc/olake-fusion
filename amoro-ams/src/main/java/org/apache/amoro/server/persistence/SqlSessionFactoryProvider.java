@@ -31,6 +31,7 @@ import org.apache.amoro.server.persistence.mapper.CatalogMetaMapper;
 import org.apache.amoro.server.persistence.mapper.HaLeaseMapper;
 import org.apache.amoro.server.persistence.mapper.OptimizerMapper;
 import org.apache.amoro.server.persistence.mapper.OptimizingProcessMapper;
+import org.apache.amoro.server.persistence.mapper.OrphanFilesCleaningProcessMapper;
 import org.apache.amoro.server.persistence.mapper.PlatformFileMapper;
 import org.apache.amoro.server.persistence.mapper.PlatformPropertyMapper;
 import org.apache.amoro.server.persistence.mapper.ResourceMapper;
@@ -80,6 +81,7 @@ public class SqlSessionFactoryProvider {
     configuration.addMapper(TableBlockerMapper.class);
     configuration.addMapper(TableProcessMapper.class);
     configuration.addMapper(SnapshotExpiryProcessMapper.class);
+    configuration.addMapper(OrphanFilesCleaningProcessMapper.class);
     configuration.addMapper(TableRuntimeMapper.class);
     configuration.addMapper(HaLeaseMapper.class);
 

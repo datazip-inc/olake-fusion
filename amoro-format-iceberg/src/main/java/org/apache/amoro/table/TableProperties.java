@@ -195,7 +195,11 @@ public class TableProperties {
   public static final String SNAPSHOT_FLINK_CHECKPOINT_RETENTION_DEFAULT = "7d"; // 7 Days
 
   public static final String ENABLE_ORPHAN_CLEAN = "clean-orphan-file.enabled";
+  public static final String CLEAN_ORPHAN_FILES_ENABLED = "clean-orphan-files.enabled";
   public static final boolean ENABLE_ORPHAN_CLEAN_DEFAULT = false;
+
+  public static final String CLEAN_ORPHAN_FILES_TRIGGER_CRON = "clean-orphan-files.trigger.cron";
+  public static final String CLEAN_ORPHAN_FILE_TRIGGER_CRON = "clean-orphan-file.trigger.cron";
 
   public static final String MIN_ORPHAN_FILE_EXISTING_TIME =
       "clean-orphan-file.min-existing-time-minutes";

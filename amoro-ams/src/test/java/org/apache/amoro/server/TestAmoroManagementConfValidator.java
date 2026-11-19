@@ -160,4 +160,10 @@ public class TestAmoroManagementConfValidator {
     Assert.assertTrue(
         new Configurations().getBoolean(AmoroManagementConf.EXPIRE_SNAPSHOTS_ENABLED));
   }
+
+  @Test
+  public void orphanFilesCleaningExecutorIsOnWithoutTheKey() {
+    Assert.assertTrue(
+        new Configurations().getBoolean(AmoroManagementConf.CLEAN_ORPHAN_FILES_ENABLED));
+  }
 }
