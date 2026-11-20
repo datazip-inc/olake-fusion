@@ -91,6 +91,7 @@ Set `JAVA_HOME` to JDK 17 before calling `./mvnw` directly.
 | `make start-fusion-docker` / `make clean-fusion-docker` | Full stack on a Kind cluster |
 | `make sync-frontend` | Copy built web assets into the build output (fixes a blank UI) |
 | `make spotless-fix` | Fix formatting |
+| `make install-hooks` | Optional: run Spotless on staged files before each commit |
 
 Web UI: <http://localhost:1630>, MinIO console: <http://localhost:9001>, both `admin` / `password`.
 
@@ -187,6 +188,9 @@ breakpoint means the Java extension's project is stale: clean its workspace and 
   IntelliJ, install the
   [google-java-format plugin 1.7.0.6](https://plugins.jetbrains.com/plugin/8527-google-java-format/versions/stable/115957)
   (newer versions format differently) and enable it with "Default Google Java style".
+  Optionally, run `make install-hooks` once per clone: a pre-commit hook then formats the staged
+  Java and `pom.xml` files and stages them again (skip it once with `git commit --no-verify`,
+  remove it with `git config --unset core.hooksPath`). CI checks formatting either way.
 * **Configuration docs:** after changing a `ConfigOption`, regenerate them with
   `UPDATE=1 ./mvnw test -pl fusion-ams -am -Dtest=ConfigurationsTest`.
 * **License header:** every source and configuration file starts with the Apache License 2.0

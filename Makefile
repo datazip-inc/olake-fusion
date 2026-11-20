@@ -43,7 +43,7 @@ MVN := JAVA_HOME="$(JAVA_HOME_17)" PATH="$(JAVA_HOME_17)/bin:$(PATH)" ./mvnw
 .PHONY: help build debug debug-deps debug-compile debug-server debug-optimizer debug-catalog \
         debug-data debug-stop debug-reset debug-clean vscode setup-debug-mode clean-debug-mode \
         start-deps stop-deps start-fusion-docker clean-fusion-docker \
-        sync-frontend spotless-fix integration-test integration-test-build \
+        sync-frontend spotless-fix install-hooks integration-test integration-test-build \
         integration-test-images integration-test-down
 
 help:
@@ -65,6 +65,7 @@ help:
 	@echo "  make debug-reset           Drop and recreate the $(DEBUG_DB) database"
 	@echo "  make debug-clean           Stop Postgres + MinIO"
 	@echo "  make spotless-fix          Auto-fix Spotless (Google Java Format) violations"
+	@echo "  make install-hooks         Run Spotless on staged files before each git commit"
 	@echo ""
 	@echo "Docker:"
 	@echo "  make start-deps            Start Postgres and Minio for IDE debugging"
@@ -267,6 +268,10 @@ clean-fusion-docker:
 
 spotless-fix:
 	@$(MVN) spotless:apply -B -ntp
+
+install-hooks:
+	@git config core.hooksPath dev/git-hooks
+	@echo "Git hooks installed from dev/git-hooks (pre-commit runs Spotless on staged files)."
 
 sync-frontend:
 	@SRC=fusion-web/src/main/resources/static; \
