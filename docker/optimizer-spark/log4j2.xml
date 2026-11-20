@@ -35,17 +35,17 @@
             <AppenderRef ref="Console"/>
         </Root>
 
-        <!-- Amoro code. The optimizer also ships the lines of compaction threads to AMS, the only
+        <!-- Fusion code. The optimizer also ships the lines of compaction threads to AMS, the only
              place they are stored, through an appender it attaches to these loggers in code. -->
-        <Logger name="org.apache.amoro" level="info" additivity="false">
+        <Logger name="io.olake.fusion" level="info" additivity="false">
             <AppenderRef ref="Console"/>
         </Logger>
 
-        <Logger name="org.apache.amoro.optimizing" level="debug" additivity="false">
+        <Logger name="io.olake.fusion.optimizing" level="debug" additivity="false">
             <AppenderRef ref="Console"/>
         </Logger>
 
-        <Logger name="org.apache.amoro.optimizer" level="info" additivity="false">
+        <Logger name="io.olake.fusion.optimizer" level="info" additivity="false">
             <AppenderRef ref="Console"/>
         </Logger>
 

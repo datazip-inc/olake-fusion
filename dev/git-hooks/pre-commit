@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Modified by Datazip Inc. in 2026
+
+# Runs Spotless on the staged Java and pom.xml files before each commit and stages them again.
+# Install once per clone with `make install-hooks`. Skip once with `git commit --no-verify`.
+set -euo pipefail
+
+root=$(git rev-parse --show-toplevel)
+cd "$root"
+
+staged=()
+while IFS= read -r f; do
+  [ -f "$f" ] && staged+=("$f")
+done < <(git diff --cached --name-only --diff-filter=ACMR | grep -E '(\.java|(^|/)pom\.xml)$' || true)
+
+[ ${#staged[@]} -eq 0 ] && exit 0
+
+# Files that also have unstaged changes: re-staging them would commit those changes too.
+partial=$(git diff --name-only -- "${staged[@]}")
+
+before=()
+patterns=()
+for f in "${staged[@]}"; do
+  before+=("$(git hash-object "$f")")
+  # spotlessFiles takes regexes matched against absolute paths
+  patterns+=(".*/$(printf '%s' "$f" | sed 's/[.[\*^$()+?{|]/\\&/g')")
+done
+files_regex=$(IFS=,; echo "${patterns[*]}")
+
+log=$(git rev-parse --git-dir)/spotless-pre-commit.log
+echo "pre-commit: spotless:apply on ${#staged[@]} staged file(s)"
+mvn_args=(-q spotless:apply -DspotlessFiles="$files_regex" -Pskip-dashboard-build)
+if ! ./mvnw -o "${mvn_args[@]}" >"$log" 2>&1; then
+  # Offline fails when the plugin is not in the local Maven repository yet
+  if ! ./mvnw "${mvn_args[@]}" >"$log" 2>&1; then
+    echo "pre-commit: spotless:apply failed, see $log (skip with git commit --no-verify)" >&2
+    exit 1
+  fi
+fi
+
+blocked=()
+for i in "${!staged[@]}"; do
+  f=${staged[$i]}
+  [ "$(git hash-object "$f")" = "${before[$i]}" ] && continue
+  if printf '%s\n' "$partial" | grep -qxF "$f"; then
+    blocked+=("$f")
+  else
+    git add -- "$f"
+    echo "pre-commit: formatted $f"
+  fi
+done
+
+if [ ${#blocked[@]} -gt 0 ]; then
+  echo "pre-commit: Spotless reformatted files that also have unstaged changes:" >&2
+  printf '  %s\n' "${blocked[@]}" >&2
+  echo "Review the changes, stage them (git add -p), and commit again." >&2
+  exit 1
+fi
