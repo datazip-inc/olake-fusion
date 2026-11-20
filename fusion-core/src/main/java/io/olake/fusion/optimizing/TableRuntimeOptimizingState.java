@@ -24,9 +24,7 @@ import io.olake.fusion.iceberg.Constants;
 
 public class TableRuntimeOptimizingState {
   private long currentSnapshotId = Constants.INVALID_SNAPSHOT_ID;
-  private long currentChangeSnapshotId = Constants.INVALID_SNAPSHOT_ID;
   private long lastOptimizedSnapshotId = Constants.INVALID_SNAPSHOT_ID;
-  private long lastOptimizedChangeSnapshotId = Constants.INVALID_SNAPSHOT_ID;
   private long lastMajorOptimizingTime;
   private long lastFullOptimizingTime;
   private long lastMinorOptimizingTime;
@@ -45,28 +43,12 @@ public class TableRuntimeOptimizingState {
     this.currentSnapshotId = currentSnapshotId;
   }
 
-  public long getCurrentChangeSnapshotId() {
-    return currentChangeSnapshotId;
-  }
-
-  public void setCurrentChangeSnapshotId(long currentChangeSnapshotId) {
-    this.currentChangeSnapshotId = currentChangeSnapshotId;
-  }
-
   public long getLastOptimizedSnapshotId() {
     return lastOptimizedSnapshotId;
   }
 
   public void setLastOptimizedSnapshotId(long lastOptimizedSnapshotId) {
     this.lastOptimizedSnapshotId = lastOptimizedSnapshotId;
-  }
-
-  public long getLastOptimizedChangeSnapshotId() {
-    return lastOptimizedChangeSnapshotId;
-  }
-
-  public void setLastOptimizedChangeSnapshotId(long lastOptimizedChangeSnapshotId) {
-    this.lastOptimizedChangeSnapshotId = lastOptimizedChangeSnapshotId;
   }
 
   public long getLastMajorOptimizingTime() {

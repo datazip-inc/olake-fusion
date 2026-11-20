@@ -24,14 +24,12 @@ import java.util.Map;
 
 /**
  * process_id BIGINT NOT NULL PRIMARY KEY, table_id BIGINT NOT NULL, target_snapshot_id BIGINT NOT
- * NULL, target_change_snapshot_id BIGINT NOT NULL, rewrite_input BLOB(64m), from_sequence
- * CLOB(64m), to_sequence CLOB(64m)
+ * NULL, rewrite_input BLOB(64m), from_sequence CLOB(64m), to_sequence CLOB(64m)
  */
 public class OptimizingProcessState {
   private long processId;
   private long tableId;
   private long targetSnapshotId;
-  private long targetChangeSnapshotId;
   private Map<String, Long> fromSequence;
   private Map<String, Long> toSequence;
 
@@ -57,14 +55,6 @@ public class OptimizingProcessState {
 
   public void setTargetSnapshotId(long targetSnapshotId) {
     this.targetSnapshotId = targetSnapshotId;
-  }
-
-  public long getTargetChangeSnapshotId() {
-    return targetChangeSnapshotId;
-  }
-
-  public void setTargetChangeSnapshotId(long targetChangeSnapshotId) {
-    this.targetChangeSnapshotId = targetChangeSnapshotId;
   }
 
   public Map<String, Long> getFromSequence() {

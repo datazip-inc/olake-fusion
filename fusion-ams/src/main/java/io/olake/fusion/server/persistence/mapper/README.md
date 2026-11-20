@@ -99,7 +99,7 @@ OLake-UI depends indirectly on `table_process` (run history via `/api/ams/v1/...
 - `CatalogMetaMapper.deleteCatalog` deletes only when both counts are 0 and the caller does not check the result.
 - `catalog_metadata.storage_configs` and `auth_configs` hold credentials in plain JSON; never log query results from these columns.
 - Mixed-format and Hadoop-only columns in `table_metadata` (`change_location`, `primary_key`, `meta_store_site`, `hdfs_site`, `core_site`, Kerberos columns) are out of scope.
-- `OptimizingProcessMapper` keeps `target_change_snapshot_id` and sequence columns from mixed-format support; Iceberg tables still write them.
+- `OptimizingProcessMapper` keeps the sequence columns from mixed-format support; Iceberg tables still write them. Fusion no longer writes or reads `target_change_snapshot_id`: a fresh database does not have the column, and on an older database migration V4 gives it `DEFAULT -1` so the insert still satisfies its NOT NULL.
 
 ## Tests
 

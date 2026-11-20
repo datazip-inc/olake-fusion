@@ -51,16 +51,14 @@ import java.util.Map;
 public interface OptimizingProcessMapper {
   @Insert(
       "INSERT INTO optimizing_process_state "
-          + "(process_id, table_id, target_snapshot_id, target_change_snapshot_id, "
-          + "from_sequence, to_sequence) "
-          + "VALUES (#{processId}, #{tableId}, #{targetSnapshotId}, #{targetChangeSnapshotId}, "
+          + "(process_id, table_id, target_snapshot_id, from_sequence, to_sequence) "
+          + "VALUES (#{processId}, #{tableId}, #{targetSnapshotId}, "
           + " #{fromSequence, typeHandler=io.olake.fusion.server.persistence.converter.MapLong2StringConverter},"
           + " #{toSequence, typeHandler=io.olake.fusion.server.persistence.converter.MapLong2StringConverter})")
   void insertInternalProcessState(
       @Param("tableId") long tableId,
       @Param("processId") long processId,
       @Param("targetSnapshotId") long targetSnapshotId,
-      @Param("targetChangeSnapshotId") long targetChangeSnapshotId,
       @Param("fromSequence") Map<String, Long> fromSequence,
       @Param("toSequence") Map<String, Long> toSequence);
 
@@ -80,11 +78,10 @@ public interface OptimizingProcessMapper {
       @Param("processId") long processId, @Param("input") Map<Integer, RewriteFilesInput> input);
 
   @Select(
-      "SELECT target_snapshot_id, target_change_snapshot_id, from_sequence, to_sequence "
+      "SELECT target_snapshot_id, from_sequence, to_sequence "
           + "FROM optimizing_process_state WHERE process_id = #{processId}")
   @Results({
     @Result(property = "targetSnapshotId", column = "target_snapshot_id"),
-    @Result(property = "targetChangeSnapshotId", column = "target_change_snapshot_id"),
     @Result(
         property = "fromSequence",
         column = "from_sequence",

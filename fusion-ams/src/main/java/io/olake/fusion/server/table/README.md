@@ -97,10 +97,10 @@ Statuses are `OptimizingStatus` codes (`IDLE` 700, `PENDING` 600, `PLANNING` 500
 | `recordSkippedOptimization(type, reason)` | `TableRuntimeRefreshExecutor` | Inserts and updates a `SKIPPED` `table_process` row in one `doAs` (one transaction) with `skipReason`. |
 | `beginPlanning()` | `OptimizingQueue` | Updates the process row to `PLANNING`; status → PLANNING. |
 | `planFailed(reason, t)` | `OptimizingQueue` | Process row → `FAILED` (and a JSON line in `driver.log`); status → IDLE, `process_id` → 0. |
-| `completeEmptyProcess(targetSnapshotId, targetChangeSnapshotId)` | `OptimizingQueue` when the planner finds nothing | Process row → `SKIPPED`; status → IDLE; `lastOptimizedSnapshotId` → the planner's target snapshot and `lastOptimizingType` → the type that fired (so an empty MINOR still lets MAJOR and FULL plan on that snapshot); resets `pending_input` and `process_id`. |
+| `completeEmptyProcess(targetSnapshotId)` | `OptimizingQueue` when the planner finds nothing | Process row → `SKIPPED`; status → IDLE; `lastOptimizedSnapshotId` → the planner's target snapshot and `lastOptimizingType` → the type that fired (so an empty MINOR still lets MAJOR and FULL plan on that snapshot); resets `pending_input` and `process_id`. |
 | `beginProcess(process)` | `OptimizingQueue` (inside `invokeConsistency`) | `process_id` = process id; status → `OptimizingStatus.ofOptimizingType(...)`; resets `pending_input`. |
 | `beginCommitting()` | `OptimizingQueue` | status → COMMITTING. |
-| `completeProcess(success)` | `OptimizingQueue` and `recover` | On success only, advances `lastOptimizedSnapshotId`, `lastOptimizedChangeSnapshotId`, `lastOptimizingType`; always sets the per-type last time to the plan time; status → IDLE. |
+| `completeProcess(success)` | `OptimizingQueue` and `recover` | On success only, advances `lastOptimizedSnapshotId`, `lastOptimizingType`; always sets the per-type last time to the plan time; status → IDLE. |
 | `recover(process)` | `OptimizingQueue` at startup | Re-attaches a running process; requires a processing status and the same `process_id`. |
 | `refresh(table)` | `TableRuntimeRefreshExecutor`, `OptimizingQueue` | Replaces `table_config` with current table properties, updates the group (closing the running process if the group changed), and refreshes current snapshot ids when `self-optimizing.enabled` is true. |
 | `setTableSummary(summary, snapshotId)` | `TableHealthScoreExecutor` | Writes health scores and file counts to `table_summary` only, and refreshes `TableSummaryMetrics`. |

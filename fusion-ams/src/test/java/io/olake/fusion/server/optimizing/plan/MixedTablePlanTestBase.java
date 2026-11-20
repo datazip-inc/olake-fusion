@@ -25,7 +25,6 @@ import io.olake.fusion.TableTestHelper;
 import io.olake.fusion.catalog.CatalogTestHelper;
 import io.olake.fusion.catalog.TableTestBase;
 import io.olake.fusion.config.OptimizingConfig;
-import io.olake.fusion.iceberg.Constants;
 import io.olake.fusion.io.DataTestHelpers;
 import io.olake.fusion.optimizing.RewriteStageTask;
 import io.olake.fusion.optimizing.plan.AbstractPartitionPlan;
@@ -77,16 +76,10 @@ public abstract class MixedTablePlanTestBase extends TableTestBase {
     Mockito.when(tableRuntime.getTableIdentifier()).thenReturn(id);
     Mockito.when(tableRuntime.getOptimizingConfig()).thenAnswer(f -> getConfig());
     Mockito.when(tableRuntime.getCurrentSnapshotId()).thenAnswer(f -> getCurrentSnapshotId());
-    Mockito.when(tableRuntime.getCurrentChangeSnapshotId())
-        .thenAnswer(f -> getCurrentChangeSnapshotId());
   }
 
   private long getCurrentSnapshotId() {
     return IcebergTableUtil.getSnapshotId(getTable(), false);
-  }
-
-  private long getCurrentChangeSnapshotId() {
-    return Constants.INVALID_SNAPSHOT_ID;
   }
 
   public void testFragmentFilesBase() {

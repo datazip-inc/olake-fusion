@@ -252,7 +252,6 @@ CREATE TABLE optimizing_process_state (
     process_id                bigint PRIMARY KEY,
     table_id                  bigint NOT NULL,
     target_snapshot_id        bigint NOT NULL,
-    target_change_snapshot_id bigint NOT NULL,
     rewrite_input             bytea,
     from_sequence             text,
     to_sequence               text
@@ -264,7 +263,6 @@ COMMENT ON TABLE  optimizing_process_state IS 'History of optimizing after each 
 COMMENT ON COLUMN optimizing_process_state.process_id                IS 'optimizing_procedure UUID';
 COMMENT ON COLUMN optimizing_process_state.table_id                  IS 'table id';
 COMMENT ON COLUMN optimizing_process_state.target_snapshot_id        IS 'target snapshot id';
-COMMENT ON COLUMN optimizing_process_state.target_change_snapshot_id IS 'target change snapshot id';
 COMMENT ON COLUMN optimizing_process_state.rewrite_input             IS 'rewrite files input';
 COMMENT ON COLUMN optimizing_process_state.from_sequence             IS 'from or min sequence of each partition';
 COMMENT ON COLUMN optimizing_process_state.to_sequence               IS 'to or max sequence of each partition';

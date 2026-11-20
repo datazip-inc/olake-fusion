@@ -133,10 +133,6 @@ public class DefaultTableRuntime extends AbstractTableRuntime implements TableRu
     return store().getState(OPTIMIZING_STATE_KEY).getCurrentSnapshotId();
   }
 
-  public long getCurrentChangeSnapshotId() {
-    return store().getState(OPTIMIZING_STATE_KEY).getCurrentChangeSnapshotId();
-  }
-
   public long getLastPlanTime() {
     return lastPlanTime;
   }
@@ -175,10 +171,6 @@ public class DefaultTableRuntime extends AbstractTableRuntime implements TableRu
     } catch (IllegalArgumentException e) {
       return null;
     }
-  }
-
-  public long getLastOptimizedChangeSnapshotId() {
-    return store().getState(OPTIMIZING_STATE_KEY).getLastOptimizedChangeSnapshotId();
   }
 
   public long getLastOptimizedSnapshotId() {
@@ -449,8 +441,6 @@ public class DefaultTableRuntime extends AbstractTableRuntime implements TableRu
                 // values on failure ensures the next cron tick sees a snapshot change and
                 // re-schedules the optimization instead of treating the table as already optimized.
                 state.setLastOptimizedSnapshotId(optimizingProcess.getTargetSnapshotId());
-                state.setLastOptimizedChangeSnapshotId(
-                    optimizingProcess.getTargetChangeSnapshotId());
                 state.setLastOptimizingType(processType.name());
               }
 
@@ -471,7 +461,7 @@ public class DefaultTableRuntime extends AbstractTableRuntime implements TableRu
     this.pendingCronType = null;
   }
 
-  public void completeEmptyProcess(long targetSnapshotId, long targetChangeSnapshotId) {
+  public void completeEmptyProcess(long targetSnapshotId) {
     OptimizingStatus originalStatus = getOptimizingStatus();
     boolean needUpdate =
         originalStatus == OptimizingStatus.PLANNING || originalStatus == OptimizingStatus.PENDING;
@@ -496,7 +486,6 @@ public class DefaultTableRuntime extends AbstractTableRuntime implements TableRu
             OPTIMIZING_STATE_KEY,
             state -> {
               state.setLastOptimizedSnapshotId(targetSnapshotId);
-              state.setLastOptimizedChangeSnapshotId(targetChangeSnapshotId);
               // Only the type that fired is known to have nothing to do in this snapshot; a higher
               // type may still have work (an empty MINOR says nothing about MAJOR's files). Record
               // it, so the cron check still plans the higher types on this snapshot.
@@ -580,7 +569,6 @@ public class DefaultTableRuntime extends AbstractTableRuntime implements TableRu
               OPTIMIZING_STATE_KEY,
               state -> {
                 state.setLastOptimizedSnapshotId(state.getCurrentSnapshotId());
-                state.setLastOptimizedChangeSnapshotId(state.getCurrentChangeSnapshotId());
                 return state;
               })
           .commit();
@@ -593,8 +581,8 @@ public class DefaultTableRuntime extends AbstractTableRuntime implements TableRu
    * actual file analysis is deferred to the planner inside {@code OptimizingQueue.planInternal}.
    *
    * @param cronType the optimization type whose cron triggered this transition — stored so that
-   *     {@link #completeEmptyProcess(long, long)} can update the correct per-type timestamp when
-   *     the planner determines no work is needed.
+   *     {@link #completeEmptyProcess(long)} can update the correct per-type timestamp when the
+   *     planner determines no work is needed.
    */
   public void markAsPending(OptimizingType cronType) {
     this.pendingCronType = cronType;

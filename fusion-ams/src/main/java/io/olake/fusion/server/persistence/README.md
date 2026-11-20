@@ -61,7 +61,7 @@ So a sequence of `doAs` calls inside `doAsTransaction` is one database transacti
    - For each declared version not yet recorded, `apply` inserts the history row and executes the whole script as one statement, then commits. If it fails and `isAlreadyApplied` finds the row, another instance applied it and startup continues; otherwise it throws `IllegalStateException` and the server does not start.
    - For recorded versions, `verifyUnchanged` fails startup if the script name differs or the checksum (SHA-256 of the script with `\r\n` → `\n`) changed.
 
-Current migrations: `V1__platform_property.sql` (creates `platform_property`), `V2__snapshot_expiry_process.sql` (creates `snapshot_expiry_process`; released in v0.2.1, so its number and name must never change) and `V3__drop_unused_tables.sql` (drops tables of removed features). The init script does not create `platform_property` or `ams_schema_migration`; those come only from the migration path.
+Current migrations: `V1__platform_property.sql` (creates `platform_property`), `V2__snapshot_expiry_process.sql` (creates `snapshot_expiry_process`; released in v0.2.1, so its number and name must never change) `V3__drop_unused_tables.sql` (drops tables of removed features) and `V4__default_target_change_snapshot_id.sql` (gives the deprecated `optimizing_process_state.target_change_snapshot_id` a `DEFAULT -1` on databases that still have it, so Fusion's insert can omit it; the column is kept so an earlier image keeps working). The init script does not create `platform_property` or `ams_schema_migration`; those come only from the migration path.
 
 The files `postgres/upgrade*.sql` are upstream Amoro upgrade notes; no code runs them.
 

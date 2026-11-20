@@ -338,8 +338,7 @@ public class OptimizingQueue extends PersistentBase {
       if (planner.isNecessary()) {
         return new TableOptimizingProcess(planner, tableRuntime);
       } else {
-        tableRuntime.completeEmptyProcess(
-            planner.getTargetSnapshotId(), planner.getTargetChangeSnapshotId());
+        tableRuntime.completeEmptyProcess(planner.getTargetSnapshotId());
         return null;
       }
     } catch (Throwable throwable) {
@@ -435,7 +434,6 @@ public class OptimizingQueue extends PersistentBase {
     private final DefaultTableRuntime tableRuntime;
     private final long planTime;
     private final long targetSnapshotId;
-    private final long targetChangeSnapshotId;
     private final Map<OptimizingTaskId, TaskRuntime<RewriteStageTask>> taskMap = Maps.newHashMap();
     private final Queue<TaskRuntime<RewriteStageTask>> taskQueue = new LinkedList<>();
     private volatile ProcessStatus status = ProcessStatus.RUNNING;
@@ -488,7 +486,6 @@ public class OptimizingQueue extends PersistentBase {
       optimizingType = planner.getOptimizingType();
       planTime = planner.getPlanTime();
       targetSnapshotId = planner.getTargetSnapshotId();
-      targetChangeSnapshotId = planner.getTargetChangeSnapshotId();
       loadTaskRuntimes(planner.planTasks());
       fromSequence = planner.getFromSequence();
       toSequence = planner.getToSequence();
@@ -503,7 +500,6 @@ public class OptimizingQueue extends PersistentBase {
       processId = tableRuntime.getProcessId();
       optimizingType = OptimizingType.valueOf(processMeta.getProcessType());
       targetSnapshotId = processState.getTargetSnapshotId();
-      targetChangeSnapshotId = processState.getTargetChangeSnapshotId();
       planTime = processMeta.getCreateTime();
       if (processState.getFromSequence() != null) {
         fromSequence = processState.getFromSequence();
@@ -707,11 +703,6 @@ public class OptimizingQueue extends PersistentBase {
       return targetSnapshotId;
     }
 
-    @Override
-    public long getTargetChangeSnapshotId() {
-      return targetChangeSnapshotId;
-    }
-
     public String getFailedReason() {
       return failedReason;
     }
@@ -897,7 +888,6 @@ public class OptimizingQueue extends PersistentBase {
                           tableRuntime.getTableIdentifier().getId(),
                           processId,
                           targetSnapshotId,
-                          targetChangeSnapshotId,
                           fromSequence,
                           toSequence)),
           () ->

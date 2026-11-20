@@ -11,8 +11,7 @@ that the server runs:
 - `fusion-ams`: `server.utils.IcebergTableUtil`, `server.table.DefaultTableRuntime`,
   `server.optimizing.UnKeyedTableCommit`, `server.scheduler.inline.TableHealthScoreExecutor`.
 - `fusion-core`: `optimizing.TableRuntimeOptimizingState` (initial `currentSnapshotId` and
-  `currentChangeSnapshotId`), `optimizing.plan.AbstractOptimizingPlanner`,
-  `formats.iceberg.utils.IcebergTableUtil`, `formats.iceberg.maintainer.IcebergTableMaintainer`.
+  `lastOptimizedSnapshotId`), `formats.iceberg.utils.IcebergTableUtil`, `formats.iceberg.maintainer.IcebergTableMaintainer`.
 
 The optimizer does not reference it directly.
 

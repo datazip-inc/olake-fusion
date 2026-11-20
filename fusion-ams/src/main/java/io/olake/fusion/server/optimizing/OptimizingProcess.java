@@ -36,8 +36,6 @@ public interface OptimizingProcess {
 
   long getTargetSnapshotId();
 
-  long getTargetChangeSnapshotId();
-
   long getPlanTime();
 
   long getDuration();

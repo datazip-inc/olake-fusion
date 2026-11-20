@@ -23,7 +23,6 @@ package io.olake.fusion.optimizing.plan;
 import io.olake.fusion.FusionTable;
 import io.olake.fusion.ServerTableIdentifier;
 import io.olake.fusion.config.OptimizingConfig;
-import io.olake.fusion.iceberg.Constants;
 import io.olake.fusion.optimizing.OptimizingType;
 import io.olake.fusion.optimizing.RewriteStageTask;
 import io.olake.fusion.table.TableSnapshot;
@@ -120,12 +119,6 @@ public abstract class AbstractOptimizingPlanner extends AbstractOptimizingEvalua
 
   public long getTargetSnapshotId() {
     return currentSnapshot.snapshotId();
-  }
-
-  public long getTargetChangeSnapshotId() {
-    // Only kept because the value is persisted (target_change_snapshot_id); Iceberg tables have no
-    // change store.
-    return Constants.INVALID_SNAPSHOT_ID;
   }
 
   @Override

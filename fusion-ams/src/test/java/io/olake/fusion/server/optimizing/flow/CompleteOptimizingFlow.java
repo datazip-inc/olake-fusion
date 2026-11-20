@@ -30,7 +30,6 @@ import io.olake.fusion.OptimizerProperties;
 import io.olake.fusion.ServerTableIdentifier;
 import io.olake.fusion.config.OptimizingConfig;
 import io.olake.fusion.config.TableConfiguration;
-import io.olake.fusion.iceberg.Constants;
 import io.olake.fusion.optimizing.IcebergRewriteExecutor;
 import io.olake.fusion.optimizing.OptimizingExecutor;
 import io.olake.fusion.optimizing.RewriteFilesOutput;
@@ -187,8 +186,6 @@ public class CompleteOptimizingFlow {
     DefaultTableRuntime tableRuntime = Mockito.mock(DefaultTableRuntime.class);
 
     Mockito.when(tableRuntime.getCurrentSnapshotId()).thenAnswer(f -> getCurrentSnapshotId());
-    Mockito.when(tableRuntime.getCurrentChangeSnapshotId())
-        .thenAnswer(f -> getCurrentChangeSnapshotId());
     Mockito.when(tableRuntime.getProcessId()).thenReturn(1L);
     Mockito.when(tableRuntime.getPendingInput()).thenReturn(null);
     Mockito.when(tableRuntime.getLastMinorOptimizingTime()).thenReturn(0L);
@@ -228,10 +225,6 @@ public class CompleteOptimizingFlow {
 
   private long getCurrentSnapshotId() {
     return IcebergTableUtil.getSnapshotId(table, false);
-  }
-
-  private long getCurrentChangeSnapshotId() {
-    return Constants.INVALID_SNAPSHOT_ID;
   }
 
   private StructLikeMap<Long> getStructLike(Map<String, Long> partitionSequence) {

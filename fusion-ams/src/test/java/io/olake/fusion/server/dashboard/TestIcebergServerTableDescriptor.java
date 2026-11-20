@@ -179,7 +179,6 @@ public class TestIcebergServerTableDescriptor extends TestServerTableDescriptor 
         identifier,
         1L,
         1,
-        1,
         ProcessStatus.SUCCESS,
         OptimizingType.MAJOR,
         1L,
@@ -191,7 +190,6 @@ public class TestIcebergServerTableDescriptor extends TestServerTableDescriptor 
         identifier,
         2L,
         2L,
-        2L,
         ProcessStatus.SUCCESS,
         OptimizingType.MINOR,
         2L,
@@ -203,7 +201,6 @@ public class TestIcebergServerTableDescriptor extends TestServerTableDescriptor 
         identifier,
         3L,
         3L,
-        3L,
         ProcessStatus.SUCCESS,
         OptimizingType.FULL,
         3L,
@@ -213,7 +210,6 @@ public class TestIcebergServerTableDescriptor extends TestServerTableDescriptor 
 
     descriptor.insertOptimizingProcess(
         identifier,
-        4L,
         4L,
         4L,
         ProcessStatus.FAILED,
@@ -227,7 +223,6 @@ public class TestIcebergServerTableDescriptor extends TestServerTableDescriptor 
         identifier,
         5L,
         5L,
-        5L,
         ProcessStatus.SUCCESS,
         OptimizingType.MINOR,
         5L,
@@ -239,7 +234,6 @@ public class TestIcebergServerTableDescriptor extends TestServerTableDescriptor 
         identifier,
         6L,
         6L,
-        6L,
         ProcessStatus.SUCCESS,
         OptimizingType.FULL,
         6L,
@@ -249,7 +243,6 @@ public class TestIcebergServerTableDescriptor extends TestServerTableDescriptor 
 
     descriptor.insertOptimizingProcess(
         identifier,
-        7L,
         7L,
         7L,
         ProcessStatus.FAILED,
@@ -263,7 +256,6 @@ public class TestIcebergServerTableDescriptor extends TestServerTableDescriptor 
         identifier,
         8L,
         8L,
-        8L,
         ProcessStatus.SUCCESS,
         OptimizingType.MINOR,
         8L,
@@ -275,7 +267,6 @@ public class TestIcebergServerTableDescriptor extends TestServerTableDescriptor 
         identifier,
         9L,
         9L,
-        9L,
         ProcessStatus.FAILED,
         OptimizingType.FULL,
         9L,
@@ -285,7 +276,6 @@ public class TestIcebergServerTableDescriptor extends TestServerTableDescriptor 
 
     descriptor.insertOptimizingProcess(
         identifier,
-        10L,
         10L,
         10L,
         ProcessStatus.SUCCESS,
@@ -390,7 +380,6 @@ public class TestIcebergServerTableDescriptor extends TestServerTableDescriptor 
         ServerTableIdentifier identifier,
         long processId,
         long targetSnapshotId,
-        long targetChangeSnapshotId,
         ProcessStatus status,
         OptimizingType type,
         long planTime,
@@ -416,12 +405,7 @@ public class TestIcebergServerTableDescriptor extends TestServerTableDescriptor 
           OptimizingProcessMapper.class,
           mapper ->
               mapper.insertInternalProcessState(
-                  identifier.getId(),
-                  processId,
-                  targetSnapshotId,
-                  targetChangeSnapshotId,
-                  fromSequence,
-                  toSequence));
+                  identifier.getId(), processId, targetSnapshotId, fromSequence, toSequence));
     }
   }
 }
