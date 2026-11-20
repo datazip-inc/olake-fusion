@@ -320,6 +320,37 @@ public class TestIcebergCombinedReader extends TableTestBase {
     try (CloseableIterable<Record> records = dataReader.readDeletedData()) {
       Assert.assertEquals(2, Iterables.size(records));
     }
+    // The 3-row data file is passed twice, so 6 data rows, and 196 delete rows
+    Assert.assertEquals(6, dataReader.getDeleteFilter().changedKeysPerTask());
+    // The key is an int column, so it has no string length
+    Assert.assertEquals(0, dataReader.getDeleteFilter().maxKeyLength());
+    dataReader.close();
+  }
+
+  @Test
+  public void withoutBloomFilterMaxKeyLengthIsTheDefault() throws IOException {
+    CombinedDeleteFilter.FILTER_EQ_DELETE_TRIGGER_RECORD_COUNT = 1000000L;
+    GenericCombinedIcebergDataReader dataReader =
+        new GenericCombinedIcebergDataReader(
+            getFusionTable().io(),
+            getTable().schema(),
+            getTable().spec(),
+            getTable().encryption(),
+            null,
+            false,
+            IdentityPartitionConverters::convertConstant,
+            false,
+            null,
+            filterEqDeleteScanTask,
+            "");
+
+    Assert.assertFalse(dataReader.getDeleteFilter().isFilterEqDelete());
+    try (CloseableIterable<Record> records = dataReader.readData()) {
+      Assert.assertEquals(1, Iterables.size(records));
+    }
+    Assert.assertEquals(32, dataReader.getDeleteFilter().maxKeyLength());
+    // No bloom filter: all 196 delete rows are kept, though the task has only 6 data rows
+    Assert.assertEquals(196, dataReader.getDeleteFilter().changedKeysPerTask());
     dataReader.close();
   }
 
@@ -397,6 +428,8 @@ public class TestIcebergCombinedReader extends TableTestBase {
       Assert.assertEquals(2, Iterables.size(readRecords));
     }
 
+    // The key includes the name column, whose longest value is 4 characters
+    Assert.assertEquals(4, dataReader.getDeleteFilter().maxKeyLength());
     dataReader.close();
   }
 

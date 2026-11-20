@@ -32,6 +32,7 @@ import io.olake.fusion.server.scheduler.PeriodicTableScheduler;
 import io.olake.fusion.server.table.DefaultTableRuntime;
 import io.olake.fusion.server.table.TableService;
 import io.olake.fusion.server.utils.Command;
+import io.olake.fusion.server.utils.IcebergFormatVersions;
 import io.olake.fusion.server.utils.Telemetry;
 import io.olake.fusion.utils.CronUtils;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
@@ -106,7 +107,7 @@ public class TableRuntimeRefreshExecutor extends PeriodicTableScheduler {
       FusionTable table = loadTable(tableRuntime);
       defaultTableRuntime.refresh(table);
 
-      evaluateCronTriggers(defaultTableRuntime);
+      evaluateCronTriggers(defaultTableRuntime, table);
     } catch (Throwable throwable) {
       logger.error("Refreshing table {} failed.", tableRuntime.getTableIdentifier(), throwable);
       Telemetry.getInstance()
@@ -118,9 +119,10 @@ public class TableRuntimeRefreshExecutor extends PeriodicTableScheduler {
    * Core cron-tick logic. Iterates FULL → MAJOR → MINOR in priority order. The first type whose
    * cron has fired AND whose optimization is still necessary transitions the table to PENDING and
    * stops. Types whose crons fired but are unnecessary get a SKIPPED process record and the loop
-   * falls through to the next type.
+   * falls through to the next type. A fired type on a table that {@link IcebergFormatVersions} does
+   * not support gets a FAILED process record instead.
    */
-  private void evaluateCronTriggers(DefaultTableRuntime tableRuntime) {
+  private void evaluateCronTriggers(DefaultTableRuntime tableRuntime, FusionTable table) {
     OptimizingConfig cfg = tableRuntime.getOptimizingConfig();
     if (!cfg.isEnabled()) {
       return;
@@ -142,7 +144,13 @@ public class TableRuntimeRefreshExecutor extends PeriodicTableScheduler {
       String cronExpr = cronExpressionFor(cfg, candidate);
 
       if (CronUtils.hasFiredInLastMinute(cronExpr)) {
-        if (snapshotChanged || isNecessary(candidate, lastType)) {
+        String unsupportedReason = IcebergFormatVersions.unsupportedReason(table);
+        if (unsupportedReason != null) {
+          tableRuntime.recordFailedProcess(
+              candidate.name(),
+              unsupportedReason,
+              new UnsupportedOperationException(unsupportedReason));
+        } else if (snapshotChanged || isNecessary(candidate, lastType)) {
           logger.info(
               "[cron-trigger] table={} scheduling {} optimization (snapshotChanged={}, lastType={})",
               tableRuntime.getTableIdentifier(),

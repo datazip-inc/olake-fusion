@@ -37,6 +37,7 @@ import io.olake.fusion.server.optimizing.OptimizingStatus;
 import io.olake.fusion.server.optimizing.TaskRuntime;
 import io.olake.fusion.server.persistence.mapper.OptimizerMapper;
 import io.olake.fusion.server.persistence.mapper.OptimizingProcessMapper;
+import io.olake.fusion.server.persistence.mapper.SnapshotExpiryProcessMapper;
 import io.olake.fusion.server.persistence.mapper.TableProcessMapper;
 import io.olake.fusion.server.process.TableProcessMeta;
 import io.olake.fusion.server.resource.OptimizerInstance;
@@ -671,6 +672,57 @@ public class DefaultTableRuntime extends AbstractTableRuntime implements TableRu
         getTableIdentifier(),
         type,
         reason);
+  }
+
+  /**
+   * Records a process of {@code processType} that failed when its cron fired, without starting it.
+   * An {@link SnapshotExpiryProcessMapper#PROCESS_TYPE} run goes to {@code
+   * snapshot_expiry_process}, a compaction run ({@code MINOR}, {@code MAJOR}, {@code FULL}) to
+   * {@code table_process}. The table's state is unchanged, and the run's log gets an error entry
+   * with {@code throwable}'s stack trace.
+   */
+  public void recordFailedProcess(String processType, String reason, Throwable throwable) {
+    long now = System.currentTimeMillis();
+    long processId = ID_GENERATOR.generateId();
+    long tableId = getTableIdentifier().getId();
+    if (SnapshotExpiryProcessMapper.PROCESS_TYPE.equals(processType)) {
+      doAs(
+          SnapshotExpiryProcessMapper.class,
+          mapper ->
+              mapper.insert(processId, tableId, ProcessStatus.FAILED, 0, now, now, reason, null));
+    } else {
+      Map<String, String> summary = new HashMap<>();
+      summary.put("optimizingType", processType);
+      doAs(
+          TableProcessMapper.class,
+          mapper -> {
+            mapper.insertProcess(
+                tableId,
+                processId,
+                "",
+                ProcessStatus.FAILED,
+                processType,
+                ProcessStatus.FAILED.name().toLowerCase(),
+                "AMORO",
+                0,
+                now,
+                new HashMap<>(),
+                summary);
+            mapper.updateProcess(
+                tableId,
+                processId,
+                "",
+                ProcessStatus.FAILED,
+                ProcessStatus.FAILED.name().toLowerCase(),
+                0,
+                now,
+                reason,
+                new HashMap<>(),
+                summary);
+          });
+    }
+    LOG.warn("[cron-fail] table={} type={} failed: {}", getTableIdentifier(), processType, reason);
+    appendDriverLogEntry(processId, "ERROR", describeThrowable(throwable, reason), throwable);
   }
 
   public void beginCommitting() {

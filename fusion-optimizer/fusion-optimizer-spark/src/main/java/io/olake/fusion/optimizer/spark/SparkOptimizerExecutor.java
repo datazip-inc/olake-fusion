@@ -63,6 +63,7 @@ public class SparkOptimizerExecutor extends OptimizerExecutor {
     OptimizingTaskLogContext.setDriverContext(task.getTaskId().getProcessId());
 
     try {
+      ExecutorOverheadCheck.check(jsc.getConf());
       ImmutableList<OptimizingTask> of = ImmutableList.of(task);
       jsc.setJobDescription(jobDescription(task));
       SparkOptimizingTaskFunction taskFunction =
