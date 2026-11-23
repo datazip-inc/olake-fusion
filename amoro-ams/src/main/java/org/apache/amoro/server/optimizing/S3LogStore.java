@@ -25,6 +25,7 @@ import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.AwsSessionCredentials;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.core.client.config.ClientOverrideConfiguration;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
 import software.amazon.awssdk.regions.Region;
@@ -36,6 +37,7 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 
 import java.net.URI;
+import java.time.Duration;
 
 /**
  * Object store for optimizing logs when {@code OLAKE_STORAGE_MODE} is {@code s3}. It reads the same
@@ -60,6 +62,8 @@ public class S3LogStore {
   static final String ENV_S3_SESSION_TOKEN = "OLAKE_S3_SESSION_TOKEN";
 
   private static final String LOG_FOLDER = "fusion/logs";
+  private static final Duration API_CALL_ATTEMPT_TIMEOUT = Duration.ofSeconds(10);
+  private static final Duration API_CALL_TIMEOUT = Duration.ofSeconds(20);
 
   /** Kind of process a log belongs to; it names the log's folder. */
   public enum LogType {
@@ -105,7 +109,13 @@ public class S3LogStore {
             // More than one HTTP client is on the AMS classpath; pick one explicitly.
             .httpClientBuilder(UrlConnectionHttpClient.builder())
             .region(Region.of(region))
-            .credentialsProvider(credentials());
+            .credentialsProvider(credentials())
+            // Uploads run on scheduler and RPC threads; bound how long S3 can hold them.
+            .overrideConfiguration(
+                ClientOverrideConfiguration.builder()
+                    .apiCallAttemptTimeout(API_CALL_ATTEMPT_TIMEOUT)
+                    .apiCallTimeout(API_CALL_TIMEOUT)
+                    .build());
     if (!endpoint.isEmpty()) {
       // Path-style is required for MinIO and other S3-compatible endpoints.
       builder.endpointOverride(URI.create(endpoint)).forcePathStyle(true);
