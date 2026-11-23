@@ -38,6 +38,7 @@ import io.olake.fusion.resource.ResourceGroup;
 import io.olake.fusion.server.FusionServiceConstants;
 import io.olake.fusion.server.catalog.CatalogManager;
 import io.olake.fusion.server.manager.MetricManager;
+import io.olake.fusion.server.optimizing.S3LogStore.LogType;
 import io.olake.fusion.server.optimizing.TaskRuntime.Status;
 import io.olake.fusion.server.persistence.OptimizingProcessState;
 import io.olake.fusion.server.persistence.PersistentBase;
@@ -546,6 +547,7 @@ public class OptimizingQueue extends PersistentBase {
 
     @Override
     public void close(boolean needCommit) {
+      boolean completed = false;
       lock.lock();
       try {
         if (this.status != ProcessStatus.RUNNING) {
@@ -559,9 +561,13 @@ public class OptimizingQueue extends PersistentBase {
           persistAndSetCompleted(false);
           trackCompleted();
           appendFailureEntry();
+          completed = true;
         }
       } finally {
         lock.unlock();
+      }
+      if (completed) {
+        LogWriter.get().upload(LogType.OPTIMIZATION, processId);
       }
     }
 
@@ -594,6 +600,7 @@ public class OptimizingQueue extends PersistentBase {
     }
 
     private void acceptResult(TaskRuntime<?> taskRuntime) {
+      boolean completed = false;
       lock.lock();
       try {
         optimizingTasksMap.computeIfPresent(
@@ -661,11 +668,15 @@ public class OptimizingQueue extends PersistentBase {
               persistAndSetCompleted(false);
               trackCompleted();
               appendFailureEntry();
+              completed = true;
             }
           }
         }
       } finally {
         lock.unlock();
+      }
+      if (completed) {
+        LogWriter.get().upload(LogType.OPTIMIZATION, processId);
       }
     }
 
@@ -757,6 +768,7 @@ public class OptimizingQueue extends PersistentBase {
               .distinct()
               .count());
 
+      boolean processCompleted = false;
       lock.lock();
       try {
         if (hasCommitted) {
@@ -770,6 +782,7 @@ public class OptimizingQueue extends PersistentBase {
           }
           if (completed) {
             appendFailureEntry();
+            processCompleted = true;
           }
           throw new IllegalStateException("repeat commit, and last error " + failedReason);
         }
@@ -808,8 +821,14 @@ public class OptimizingQueue extends PersistentBase {
         }
         // Outside the try: a failed write must not be taken for a failed commit.
         appendFailureEntry();
+        processCompleted = true;
       } finally {
         lock.unlock();
+        // After the unlock, so the upload never holds the process lock. In the finally, so it also
+        // runs when a repeat commit throws.
+        if (processCompleted) {
+          LogWriter.get().upload(LogType.OPTIMIZATION, processId);
+        }
       }
     }
 

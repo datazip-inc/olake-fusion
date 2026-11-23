@@ -23,6 +23,9 @@ package io.olake.fusion.server.optimizing;
 import io.olake.fusion.api.OptimizingLogLine;
 import io.olake.fusion.api.OptimizingTaskId;
 import io.olake.fusion.log.OptimizingTaskLogContext;
+import io.olake.fusion.server.optimizing.S3LogStore.LogType;
+import io.olake.fusion.server.persistence.PersistentBase;
+import io.olake.fusion.server.persistence.mapper.TableProcessMapper;
 import io.olake.fusion.server.utils.Command;
 import io.olake.fusion.server.utils.Telemetry;
 import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.core.JsonProcessingException;
@@ -30,9 +33,11 @@ import org.apache.amoro.shade.jackson2.com.fasterxml.jackson.databind.ObjectMapp
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -41,6 +46,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -60,9 +66,12 @@ import java.util.concurrent.TimeUnit;
  * dashboard only sees the logs the serving node received, unless {@code LOG_DIR} is shared or logs
  * move to a central store.
  *
- * <p>AMS does not delete these logs; retention is handled by olake-worker.
+ * <p>When {@code OLAKE_STORAGE_MODE} is not {@code s3}, AMS does not delete these logs; retention
+ * is handled by olake-worker. When it is {@code s3}, each process's files are merged into one
+ * object in S3 once the process is completed (see {@link #upload(LogType, long)}), and then
+ * deleted.
  */
-public class LogWriter {
+public class LogWriter extends PersistentBase {
 
   private static final Logger LOG = LoggerFactory.getLogger(LogWriter.class);
   private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
@@ -83,6 +92,8 @@ public class LogWriter {
   private final Object lock = new Object();
   // Last time a write failure was reported in telemetry.
   private volatile long lastWriteFailureReport;
+  // Null when OLAKE_STORAGE_MODE is not s3.
+  private volatile S3LogStore logStore;
 
   private LogWriter(String logBaseDir) {
     this.logBaseDir = logBaseDir;
@@ -108,6 +119,127 @@ public class LogWriter {
     } catch (IOException e) {
       throw new UncheckedIOException("Failed to create optimizing log directory " + logBaseDir, e);
     }
+  }
+
+  /** Sets the S3 store that completed processes' logs are uploaded to; null keeps them local. */
+  public void setLogStore(S3LogStore logStore) {
+    this.logStore = logStore;
+  }
+
+  /**
+   * Reads a process's uploaded log from S3, split back into its files: {@code driver.log} and
+   * {@code <taskId>.log}, by the taskId of each line. A process in {@code table_process} is a
+   * compaction, read from the optimization folder; any other is read from the cleanup folder.
+   *
+   * @return file name -> content, or null if logs stay local, the process was not uploaded, or S3
+   *     cannot be read
+   */
+  public Map<String, String> readUploaded(String processId) {
+    if (logStore == null) {
+      return null;
+    }
+    try {
+      long id = Long.parseLong(processId);
+      LogType type =
+          getAs(TableProcessMapper.class, mapper -> mapper.getProcessMeta(id)) == null
+              ? LogType.CLEANUP
+              : LogType.OPTIMIZATION;
+      byte[] content = logStore.get(type, id);
+      return content == null ? null : split(new String(content, StandardCharsets.UTF_8));
+    } catch (RuntimeException e) {
+      LOG.warn("Failed to read optimizing logs of process {} from S3", processId, e);
+      return null;
+    }
+  }
+
+  /**
+   * Uploads a completed process's logs to S3 as one object (driver.log, then the task logs by task
+   * id), then deletes the local files. Call it after the process's final status is in the database
+   * and its last AMS line is appended, outside any process lock. Only the files on disk at that
+   * point are uploaded. On failure the local files are kept. Does nothing when logs stay local.
+   *
+   * <p>Lines can still arrive after completion, from tasks that were running when the process
+   * failed or was closed. Files are read and deleted under the writers' lock, so no line is read
+   * half written, and a file that grew after it was read is kept instead of being deleted.
+   */
+  public void upload(LogType type, long processId) {
+    if (logStore == null) {
+      return;
+    }
+    Path processDir = Paths.get(logBaseDir, String.valueOf(processId));
+    try {
+      List<Path> files = new ArrayList<>();
+      Map<Path, Long> uploadedSizes = new LinkedHashMap<>();
+      ByteArrayOutputStream merged = new ByteArrayOutputStream();
+      synchronized (lock) {
+        if (!Files.isDirectory(processDir)) {
+          return;
+        }
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(processDir, "*.log")) {
+          stream.forEach(files::add);
+        }
+        files.sort(Comparator.comparingLong(LogWriter::fileOrder));
+        for (Path file : files) {
+          byte[] content = Files.readAllBytes(file);
+          merged.write(content);
+          uploadedSizes.put(file, (long) content.length);
+        }
+      }
+      // Outside the lock, so a slow S3 never blocks writers.
+      logStore.put(type, processId, merged.toByteArray());
+      synchronized (lock) {
+        for (Map.Entry<Path, Long> uploaded : uploadedSizes.entrySet()) {
+          if (Files.size(uploaded.getKey()) == uploaded.getValue()) {
+            Files.delete(uploaded.getKey());
+          }
+        }
+        boolean linesLeft;
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(processDir, "*.log")) {
+          linesLeft = stream.iterator().hasNext();
+        }
+        if (linesLeft) {
+          LOG.warn(
+              "Optimizing log lines of process {} arrived after its upload; kept in {}",
+              processId,
+              processDir);
+        } else {
+          Files.deleteIfExists(processDir);
+        }
+      }
+    } catch (IOException | RuntimeException e) {
+      LOG.warn("Failed to upload optimizing logs of process {} to S3", processId, e);
+    }
+  }
+
+  /** driver.log first (-1), then task logs by task id. */
+  private static long fileOrder(Path file) {
+    String fileName = file.getFileName().toString();
+    return fileName.equals(DRIVER_LOG_FILE)
+        ? -1
+        : Long.parseLong(fileName.substring(0, fileName.length() - ".log".length()));
+  }
+
+  /**
+   * Splits a merged log by the taskId of each JSON line: empty goes to driver.log, else to {@code
+   * <taskId>.log}. A non-JSON line (a raw stack trace) stays with the line before it.
+   */
+  private static Map<String, String> split(String merged) {
+    Map<String, StringBuilder> contentByFile = new LinkedHashMap<>();
+    String fileName = DRIVER_LOG_FILE;
+    for (String line : merged.split("\n")) {
+      if (line.trim().startsWith("{")) {
+        try {
+          String taskId = OBJECT_MAPPER.readTree(line).path("taskId").asText("");
+          fileName = taskId.isEmpty() ? DRIVER_LOG_FILE : taskId + ".log";
+        } catch (JsonProcessingException e) {
+          // Not a JSON entry: keep it with the line before it.
+        }
+      }
+      contentByFile.computeIfAbsent(fileName, f -> new StringBuilder()).append(line).append('\n');
+    }
+    Map<String, String> files = new LinkedHashMap<>();
+    contentByFile.forEach((name, content) -> files.put(name, content.toString()));
+    return files;
   }
 
   /**

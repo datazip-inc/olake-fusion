@@ -35,6 +35,8 @@ import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.io.StringReader;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -61,8 +63,21 @@ public class LogController {
    * @return List of parsed log entry objects (as Maps)
    */
   private List<Map<String, Object>> parseNDJSONLogFile(Path logPath) {
+    try {
+      return parseNDJSON(Files.newBufferedReader(logPath), logPath.getFileName().toString());
+    } catch (IOException e) {
+      LOG.error("Failed to read log file: {}", logPath, e);
+      return new ArrayList<>();
+    }
+  }
+
+  private List<Map<String, Object>> parseNDJSON(String content, String fileName) {
+    return parseNDJSON(new BufferedReader(new StringReader(content)), fileName);
+  }
+
+  private List<Map<String, Object>> parseNDJSON(BufferedReader input, String fileName) {
     List<Map<String, Object>> logEntries = new ArrayList<>();
-    try (BufferedReader reader = Files.newBufferedReader(logPath)) {
+    try (BufferedReader reader = input) {
       String line;
       int lineNumber = 0;
       Map<String, Object> lastJsonEntry = null;
@@ -95,10 +110,7 @@ public class LogController {
             lastJsonEntry = logEntry;
           } catch (Exception e) {
             LOG.warn(
-                "Failed to parse JSON at line {} in {}: {}",
-                lineNumber,
-                logPath.getFileName(),
-                e.getMessage());
+                "Failed to parse JSON at line {} in {}: {}", lineNumber, fileName, e.getMessage());
             stackTraceBuffer.append(line).append("\n");
           }
         } else {
@@ -117,7 +129,7 @@ public class LogController {
         }
       }
     } catch (IOException e) {
-      LOG.error("Failed to read log file: {}", logPath, e);
+      LOG.error("Failed to read log file: {}", fileName, e);
     }
     return logEntries;
   }
@@ -128,6 +140,33 @@ public class LogController {
 
     Map<String, Object> response = new HashMap<>();
     response.put("processId", processId);
+
+    Map<String, String> uploaded = LogWriter.get().readUploaded(processId);
+    if (uploaded != null) {
+      response.put("exists", true);
+      Map<String, Object> driverLog = new HashMap<>();
+      String driverContent = uploaded.get(DRIVER_LOG_FILE);
+      driverLog.put("exists", driverContent != null);
+      if (driverContent != null) {
+        driverLog.put("content", parseNDJSON(driverContent, DRIVER_LOG_FILE));
+      }
+      response.put("driverLog", driverLog);
+      List<Map<String, Object>> taskLogs = new ArrayList<>();
+      uploaded.forEach(
+          (fileName, content) -> {
+            if (fileName.equals(DRIVER_LOG_FILE)) {
+              return;
+            }
+            Map<String, Object> taskLog = new HashMap<>();
+            taskLog.put("taskId", fileName.replace(".log", ""));
+            taskLog.put("exists", true);
+            taskLog.put("content", parseNDJSON(content, fileName));
+            taskLogs.add(taskLog);
+          });
+      response.put("taskLogs", taskLogs);
+      ctx.json(OkResponse.of(response));
+      return;
+    }
 
     if (!Files.exists(processDir) || !Files.isDirectory(processDir)) {
       response.put("exists", false);
@@ -196,6 +235,19 @@ public class LogController {
     String fileName = fileId + ".log";
     Path logFile = Paths.get(LOG_BASE_DIR, processId, fileName);
 
+    Map<String, String> uploaded = LogWriter.get().readUploaded(processId);
+    if (uploaded != null) {
+      String content = uploaded.get(fileName);
+      if (content == null) {
+        ctx.status(HttpCode.NOT_FOUND).result("Log file not found: " + processId + "/" + fileName);
+        return;
+      }
+      ctx.header("Content-Type", "text/plain; charset=UTF-8");
+      ctx.header("Content-Disposition", "attachment; filename=\"" + fileName + "\"");
+      ctx.result(content);
+      return;
+    }
+
     if (!Files.exists(logFile) || !Files.isRegularFile(logFile)) {
       ctx.status(HttpCode.NOT_FOUND).result("Log file not found: " + processId + "/" + fileName);
       return;
@@ -215,8 +267,9 @@ public class LogController {
   public void downloadProcessLogs(Context ctx) {
     String processId = ctx.pathParam("processId");
     Path processDir = Paths.get(LOG_BASE_DIR, processId);
+    Map<String, String> uploaded = LogWriter.get().readUploaded(processId);
 
-    if (!Files.exists(processDir) || !Files.isDirectory(processDir)) {
+    if (uploaded == null && (!Files.exists(processDir) || !Files.isDirectory(processDir))) {
       ctx.status(HttpCode.NOT_FOUND).result("Process log directory not found: " + processId);
       return;
     }
@@ -229,6 +282,19 @@ public class LogController {
       OutputStream out = ctx.res.getOutputStream();
       try (TarArchiveOutputStream tar = new TarArchiveOutputStream(new BufferedOutputStream(out))) {
         tar.setLongFileMode(TarArchiveOutputStream.LONGFILE_POSIX);
+
+        if (uploaded != null) {
+          for (Map.Entry<String, String> file : uploaded.entrySet()) {
+            byte[] content = file.getValue().getBytes(StandardCharsets.UTF_8);
+            TarArchiveEntry entry = new TarArchiveEntry(file.getKey());
+            entry.setSize(content.length);
+            tar.putArchiveEntry(entry);
+            tar.write(content);
+            tar.closeArchiveEntry();
+          }
+          tar.finish();
+          return;
+        }
 
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(processDir, "*.log")) {
           for (Path logFile : stream) {

@@ -34,6 +34,7 @@ import io.olake.fusion.server.FusionServiceConstants;
 import io.olake.fusion.server.optimizing.LogWriter;
 import io.olake.fusion.server.optimizing.OptimizingProcess;
 import io.olake.fusion.server.optimizing.OptimizingStatus;
+import io.olake.fusion.server.optimizing.S3LogStore.LogType;
 import io.olake.fusion.server.optimizing.TaskRuntime;
 import io.olake.fusion.server.persistence.mapper.OptimizerMapper;
 import io.olake.fusion.server.persistence.mapper.OptimizingProcessMapper;
@@ -66,7 +67,7 @@ public class DefaultTableRuntime extends AbstractTableRuntime implements TableRu
 
   private static final Logger LOG = LoggerFactory.getLogger(DefaultTableRuntime.class);
 
-  private static final SnowflakeIdGenerator ID_GENERATOR = new SnowflakeIdGenerator();
+  public static final SnowflakeIdGenerator ID_GENERATOR = new SnowflakeIdGenerator();
 
   private static final StateKey<TableRuntimeOptimizingState> OPTIMIZING_STATE_KEY =
       StateKey.stateKey("optimizing_state")
@@ -372,6 +373,7 @@ public class DefaultTableRuntime extends AbstractTableRuntime implements TableRu
     // Best effort, and written once the table is IDLE again.
     if (failed) {
       appendDriverLogEntry(processId, "ERROR", describeThrowable(throwable, reason), throwable);
+      LogWriter.get().upload(LogType.OPTIMIZATION, processId);
     }
   }
 
@@ -723,6 +725,12 @@ public class DefaultTableRuntime extends AbstractTableRuntime implements TableRu
     }
     LOG.warn("[cron-fail] table={} type={} failed: {}", getTableIdentifier(), processType, reason);
     appendDriverLogEntry(processId, "ERROR", describeThrowable(throwable, reason), throwable);
+    LogWriter.get()
+        .upload(
+            SnapshotExpiryProcessMapper.PROCESS_TYPE.equals(processType)
+                ? LogType.CLEANUP
+                : LogType.OPTIMIZATION,
+            processId);
   }
 
   public void beginCommitting() {

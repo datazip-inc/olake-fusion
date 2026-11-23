@@ -38,6 +38,8 @@ import io.olake.fusion.server.dashboard.JavalinJsonMapper;
 import io.olake.fusion.server.dashboard.response.ErrorResponse;
 import io.olake.fusion.server.dashboard.utils.AmsUtil;
 import io.olake.fusion.server.manager.MetricManager;
+import io.olake.fusion.server.optimizing.LogWriter;
+import io.olake.fusion.server.optimizing.S3LogStore;
 import io.olake.fusion.server.persistence.DataSourceFactory;
 import io.olake.fusion.server.persistence.HttpSessionHandlerFactory;
 import io.olake.fusion.server.persistence.SqlSessionFactoryProvider;
@@ -183,6 +185,7 @@ public class FusionServiceContainer {
     tableManager = new DefaultTableManager();
     optimizerManager = new DefaultOptimizerManager(serviceConfig, catalogManager);
     terminalManager = new TerminalManager(serviceConfig, catalogManager);
+    LogWriter.get().setLogStore(S3LogStore.fromEnv());
 
     initHttpService();
     startHttpService();
