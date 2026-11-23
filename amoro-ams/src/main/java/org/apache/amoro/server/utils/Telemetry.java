@@ -429,6 +429,30 @@ public class Telemetry {
         });
   }
 
+  /** "Orphan Files Cleaning Completed - Fusion", sent once per run, success or failure. */
+  public void trackOrphanFilesCleaningCompleted(
+      String cleaningStatus,
+      long durationMs,
+      int attempts,
+      int dataFilesCleaned,
+      int metadataFilesCleaned,
+      long minExistingMinutes,
+      long tableSizeBytes) {
+    sendEvent(
+        "Orphan Files Cleaning Completed - Fusion",
+        () -> {
+          Map<String, Object> props = new HashMap<>();
+          props.put("cleaning_status", cleaningStatus);
+          props.put("duration_ms", durationMs);
+          props.put("attempts", attempts);
+          props.put("data_files_cleaned", dataFilesCleaned);
+          props.put("metadata_files_cleaned", metadataFilesCleaned);
+          props.put("min_existing_minutes", minExistingMinutes);
+          props.put("table_size (GB)", bytesToGb(tableSizeBytes));
+          return props;
+        });
+  }
+
   public void trackCatalogCreated(String catalogType, boolean imported, boolean success) {
     sendEvent("Catalog Created - Fusion", () -> catalogProps(catalogType, imported, success));
   }

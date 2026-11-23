@@ -60,7 +60,8 @@ public class InlineTableExecutors {
           new OrphanFilesCleaningExecutor(
               tableService,
               conf.getInteger(AmoroManagementConf.CLEAN_ORPHAN_FILES_THREAD_COUNT),
-              conf.get(AmoroManagementConf.CLEAN_ORPHAN_FILES_INTERVAL));
+              Clock.systemDefaultZone(),
+              Telemetry.getInstance());
     }
     if (conf.getBoolean(AmoroManagementConf.CLEAN_DANGLING_DELETE_FILES_ENABLED)) {
       this.danglingDeleteFilesCleaningExecutor =

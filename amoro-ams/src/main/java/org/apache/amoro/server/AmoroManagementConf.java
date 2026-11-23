@@ -137,7 +137,7 @@ public class AmoroManagementConf {
   public static final ConfigOption<Boolean> CLEAN_ORPHAN_FILES_ENABLED =
       ConfigOptions.key("clean-orphan-files.enabled")
           .booleanType()
-          .defaultValue(false) // TODO: will be enabled with cleaning feature
+          .defaultValue(true)
           .withDescription("Enable orphan files cleaning.");
 
   public static final ConfigOption<Integer> CLEAN_ORPHAN_FILES_THREAD_COUNT =
