@@ -157,6 +157,10 @@ public class LogWriter extends PersistentBase {
    * id), then deletes the local files. Call it after the process's final status is in the database
    * and its last AMS line is appended, outside any process lock. Only the files on disk at that
    * point are uploaded. On failure the local files are kept. Does nothing when logs stay local.
+   *
+   * <p>Lines can still arrive after completion, from tasks that were running when the process
+   * failed or was closed. Files are read and deleted under the writers' lock, so no line is read
+   * half written, and a file that grew after it was read is kept instead of being deleted.
    */
   public void upload(LogType type, long processId) {
     if (logStore == null) {
@@ -164,23 +168,44 @@ public class LogWriter extends PersistentBase {
     }
     Path processDir = Paths.get(logBaseDir, String.valueOf(processId));
     try {
-      if (!Files.isDirectory(processDir)) {
-        return;
-      }
       List<Path> files = new ArrayList<>();
-      try (DirectoryStream<Path> stream = Files.newDirectoryStream(processDir, "*.log")) {
-        stream.forEach(files::add);
-      }
-      files.sort(Comparator.comparingLong(LogWriter::fileOrder));
+      Map<Path, Long> uploadedSizes = new LinkedHashMap<>();
       ByteArrayOutputStream merged = new ByteArrayOutputStream();
-      for (Path file : files) {
-        merged.write(Files.readAllBytes(file));
+      synchronized (lock) {
+        if (!Files.isDirectory(processDir)) {
+          return;
+        }
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(processDir, "*.log")) {
+          stream.forEach(files::add);
+        }
+        files.sort(Comparator.comparingLong(LogWriter::fileOrder));
+        for (Path file : files) {
+          byte[] content = Files.readAllBytes(file);
+          merged.write(content);
+          uploadedSizes.put(file, (long) content.length);
+        }
       }
+      // Outside the lock, so a slow S3 never blocks writers.
       logStore.put(type, processId, merged.toByteArray());
-      for (Path file : files) {
-        Files.deleteIfExists(file);
+      synchronized (lock) {
+        for (Map.Entry<Path, Long> uploaded : uploadedSizes.entrySet()) {
+          if (Files.size(uploaded.getKey()) == uploaded.getValue()) {
+            Files.delete(uploaded.getKey());
+          }
+        }
+        boolean linesLeft;
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(processDir, "*.log")) {
+          linesLeft = stream.iterator().hasNext();
+        }
+        if (linesLeft) {
+          LOG.warn(
+              "Optimizing log lines of process {} arrived after its upload; kept in {}",
+              processId,
+              processDir);
+        } else {
+          Files.deleteIfExists(processDir);
+        }
       }
-      Files.deleteIfExists(processDir);
     } catch (IOException | RuntimeException e) {
       LOG.warn("Failed to upload optimizing logs of process {} to S3", processId, e);
     }
