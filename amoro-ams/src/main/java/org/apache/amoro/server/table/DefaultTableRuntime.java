@@ -40,6 +40,7 @@ import org.apache.amoro.server.AmoroServiceConstants;
 import org.apache.amoro.server.optimizing.LogWriter;
 import org.apache.amoro.server.optimizing.OptimizingProcess;
 import org.apache.amoro.server.optimizing.OptimizingStatus;
+import org.apache.amoro.server.optimizing.S3LogStore.LogType;
 import org.apache.amoro.server.optimizing.TaskRuntime;
 import org.apache.amoro.server.persistence.mapper.OptimizerMapper;
 import org.apache.amoro.server.persistence.mapper.OptimizingProcessMapper;
@@ -82,7 +83,7 @@ public class DefaultTableRuntime extends AbstractTableRuntime
 
   private static final Logger LOG = LoggerFactory.getLogger(DefaultTableRuntime.class);
 
-  private static final SnowflakeIdGenerator ID_GENERATOR = new SnowflakeIdGenerator();
+  public static final SnowflakeIdGenerator ID_GENERATOR = new SnowflakeIdGenerator();
 
   private static final StateKey<TableRuntimeOptimizingState> OPTIMIZING_STATE_KEY =
       StateKey.stateKey("optimizing_state")
@@ -421,6 +422,7 @@ public class DefaultTableRuntime extends AbstractTableRuntime
     // Best effort, and written once the table is IDLE again.
     if (failed) {
       appendDriverLogEntry(processId, "ERROR", describeThrowable(throwable, reason), throwable);
+      LogWriter.get().upload(LogType.OPTIMIZATION, processId);
     }
   }
 
@@ -760,6 +762,12 @@ public class DefaultTableRuntime extends AbstractTableRuntime
     }
     LOG.warn("[cron-fail] table={} type={} failed: {}", getTableIdentifier(), processType, reason);
     appendDriverLogEntry(processId, "ERROR", describeThrowable(throwable, reason), throwable);
+    LogWriter.get()
+        .upload(
+            SnapshotExpiryProcessMapper.PROCESS_TYPE.equals(processType)
+                ? LogType.CLEANUP
+                : LogType.OPTIMIZATION,
+            processId);
   }
 
   public void beginCommitting() {
