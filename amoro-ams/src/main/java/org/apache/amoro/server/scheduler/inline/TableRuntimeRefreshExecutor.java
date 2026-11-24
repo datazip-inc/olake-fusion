@@ -31,6 +31,9 @@ import org.apache.amoro.server.optimizing.OptimizingStatus;
 import org.apache.amoro.server.scheduler.PeriodicTableScheduler;
 import org.apache.amoro.server.table.DefaultTableRuntime;
 import org.apache.amoro.server.table.TableService;
+import org.apache.amoro.server.utils.Command;
+import org.apache.amoro.server.utils.IcebergFormatVersions;
+import org.apache.amoro.server.utils.Telemetry;
 import org.apache.amoro.shade.guava32.com.google.common.base.Preconditions;
 import org.apache.amoro.table.MixedTable;
 import org.apache.amoro.utils.CronUtils;
@@ -106,9 +109,11 @@ public class TableRuntimeRefreshExecutor extends PeriodicTableScheduler {
       defaultTableRuntime.refresh(table);
 
       MixedTable mixedTable = (MixedTable) table.originalTable();
-      evaluateCronTriggers(defaultTableRuntime, mixedTable);
+      evaluateCronTriggers(defaultTableRuntime, table, mixedTable);
     } catch (Throwable throwable) {
       logger.error("Refreshing table {} failed.", tableRuntime.getTableIdentifier(), throwable);
+      Telemetry.getInstance()
+          .trackFailure(Command.REFRESH_TABLE, errorSource(tableRuntime), throwable);
     }
   }
 
@@ -116,9 +121,11 @@ public class TableRuntimeRefreshExecutor extends PeriodicTableScheduler {
    * Core cron-tick logic. Iterates FULL → MAJOR → MINOR in priority order. The first type whose
    * cron has fired AND whose optimization is still necessary transitions the table to PENDING and
    * stops. Types whose crons fired but are unnecessary get a SKIPPED process record and the loop
-   * falls through to the next type.
+   * falls through to the next type. A fired type on a table that {@link IcebergFormatVersions} does
+   * not support gets a FAILED process record instead.
    */
-  private void evaluateCronTriggers(DefaultTableRuntime tableRuntime, MixedTable mixedTable) {
+  private void evaluateCronTriggers(
+      DefaultTableRuntime tableRuntime, AmoroTable<?> table, MixedTable mixedTable) {
     OptimizingConfig cfg = tableRuntime.getOptimizingConfig();
     if (!cfg.isEnabled()) {
       return;
@@ -140,7 +147,13 @@ public class TableRuntimeRefreshExecutor extends PeriodicTableScheduler {
       String cronExpr = cronExpressionFor(cfg, candidate);
 
       if (CronUtils.hasFiredInLastMinute(cronExpr)) {
-        if (snapshotChanged || isNecessary(candidate, lastType)) {
+        String unsupportedReason = IcebergFormatVersions.unsupportedReason(table);
+        if (unsupportedReason != null) {
+          tableRuntime.recordFailedProcess(
+              candidate.name(),
+              unsupportedReason,
+              new UnsupportedOperationException(unsupportedReason));
+        } else if (snapshotChanged || isNecessary(candidate, lastType)) {
           logger.info(
               "[cron-trigger] table={} scheduling {} optimization (snapshotChanged={}, lastType={})",
               tableRuntime.getTableIdentifier(),

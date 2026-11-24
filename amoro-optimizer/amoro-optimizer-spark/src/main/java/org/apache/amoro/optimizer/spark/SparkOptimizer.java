@@ -50,11 +50,13 @@ public class SparkOptimizer extends Optimizer {
             .appName(String.format(APP_NAME_FORMAT, config.getResourceId()))
             .getOrCreate();
     JavaSparkContext jsc = new JavaSparkContext(spark.sparkContext());
+    SparkOptimizingLogSupport.registerOnDriver(config);
     if (!jsc.getConf().getBoolean("spark.dynamicAllocation.enabled", false)) {
       LOG.warn(
           "To better utilize computing resources, it is recommended to enable 'spark.dynamicAllocation.enabled' "
               + "and set 'spark.dynamicAllocation.maxExecutors' equal to 'OPTIMIZER_EXECUTION_PARALLEL'");
     }
+    ExecutorOverheadCheck.check(jsc.getConf());
 
     // calculate optimizer memory allocation
     int driverMemory = Utils.memoryStringToMb(jsc.getConf().get("spark.driver.memory", "1g"));
@@ -67,6 +69,7 @@ public class SparkOptimizer extends Optimizer {
     SparkOptimizer optimizer = new SparkOptimizer(config, jsc);
     OptimizerToucher toucher = optimizer.getToucher();
     toucher.withRegisterProperty(Resource.PROPERTY_JOB_ID, spark.sparkContext().applicationId());
+    toucher.withTokenChangeListener(SparkOptimizingLogSupport::onTokenChange);
     // Fusion has no other source for the optimizer's Spark settings, which its telemetry reports.
     // A setting that is not set is sent empty, not as Spark's default.
     toucher.withRegisterProperty(
@@ -78,6 +81,10 @@ public class SparkOptimizer extends Optimizer {
     toucher.withRegisterProperty(
         OptimizerProperties.SPARK_EXECUTOR_CORES,
         jsc.getConf().get(OptimizerProperties.SPARK_EXECUTOR_CORES, ""));
+    // Baked into the fusion-spark image at build time, so a release pulled as latest still reports
+    // its version; sent empty outside a release image.
+    toucher.withRegisterProperty(
+        OptimizerProperties.OPTIMIZER_VERSION, System.getenv().getOrDefault("FUSION_VERSION", ""));
 
     LOG.info("Starting the spark optimizer with configuration:{}", config);
     optimizer.startOptimizing();
