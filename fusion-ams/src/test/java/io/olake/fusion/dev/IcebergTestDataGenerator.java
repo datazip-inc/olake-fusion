@@ -29,6 +29,7 @@ import org.apache.iceberg.CatalogUtil;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileFormat;
+import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionKey;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.RowDelta;
@@ -36,6 +37,7 @@ import org.apache.iceberg.Schema;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableProperties;
+import org.apache.iceberg.UpdateProperties;
 import org.apache.iceberg.aws.AwsClientProperties;
 import org.apache.iceberg.aws.s3.S3FileIO;
 import org.apache.iceberg.aws.s3.S3FileIOProperties;
@@ -45,17 +47,21 @@ import org.apache.iceberg.catalog.SupportsNamespaces;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.data.GenericAppenderFactory;
 import org.apache.iceberg.data.GenericRecord;
+import org.apache.iceberg.data.IcebergGenerics;
 import org.apache.iceberg.data.Record;
 import org.apache.iceberg.deletes.EqualityDeleteWriter;
 import org.apache.iceberg.deletes.PositionDelete;
 import org.apache.iceberg.deletes.PositionDeleteWriter;
 import org.apache.iceberg.encryption.EncryptedOutputFile;
+import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.DataWriter;
 import org.apache.iceberg.io.OutputFileFactory;
 import org.apache.iceberg.jdbc.JdbcCatalog;
+import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Types;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -66,7 +72,9 @@ import java.util.Set;
 /**
  * Debug tool behind {@code make debug-data}: creates an Iceberg table in the debug catalog with
  * small data files and position or equality delete files, one commit each. {@code --update} re-adds
- * each deleted row with {@code version} + 1, like an upsert.
+ * each deleted row with {@code version} + 1, like an upsert. {@code --append} adds to an existing
+ * table instead: new ids continue after the highest id written so far, and deletes only target the
+ * rows of this run.
  */
 public class IcebergTestDataGenerator {
 
@@ -95,6 +103,8 @@ public class IcebergTestDataGenerator {
           "  --partitions <n>          identity-partition on column part with n values (default 0:"
               + " unpartitioned)",
           "  --recreate                drop the table first if it exists",
+          "  --append                  add to the table if it exists (new ids continue after the"
+              + " highest one)",
           "  --minor-cron <cron>       enable optimizing and set self-optimizing.minor.trigger.cron",
           "  --major-cron <cron>       enable optimizing and set self-optimizing.major.trigger.cron",
           "  --full-cron <cron>        enable optimizing and set self-optimizing.full.trigger.cron",
@@ -205,16 +215,25 @@ public class IcebergTestDataGenerator {
     return CatalogUtil.buildIcebergCatalog(catalogName, properties, new Configuration());
   }
 
-  private void createTable(Catalog catalog, TableIdentifier identifier) {
+  private void createTable(Catalog catalog, TableIdentifier identifier) throws IOException {
     Namespace namespace = identifier.namespace();
     SupportsNamespaces namespaces = (SupportsNamespaces) catalog;
     if (!namespaces.namespaceExists(namespace)) {
       namespaces.createNamespace(namespace);
     }
+    if (options.containsKey("recreate") && options.containsKey("append")) {
+      throw new IllegalArgumentException("--recreate and --append cannot be used together");
+    }
     if (catalog.tableExists(identifier)) {
+      if (options.containsKey("append")) {
+        openForAppend(catalog.loadTable(identifier));
+        return;
+      }
       if (!options.containsKey("recreate")) {
         throw new IllegalStateException(
-            "Table " + identifier + " already exists; pass --recreate to drop it first");
+            "Table "
+                + identifier
+                + " already exists; pass --append to add to it or --recreate to drop it first");
       }
       catalog.dropTable(identifier, true);
       System.out.println("Dropped " + identifier);
@@ -237,12 +256,68 @@ public class IcebergTestDataGenerator {
     }
     table = catalog.createTable(identifier, SCHEMA, spec, properties);
     System.out.println("Created " + identifier + " (" + spec + ")");
+    initWriters();
+  }
 
+  /**
+   * Adds to an existing table: counts its rows, continues ids after the highest one any data file
+   * holds (so an id removed by an earlier delete is not reused), and applies the cron options.
+   */
+  private void openForAppend(Table existing) throws IOException {
+    table = existing;
+    long maxId = 0;
+    try (CloseableIterable<FileScanTask> tasks = table.newScan().includeColumnStats().planFiles()) {
+      for (FileScanTask task : tasks) {
+        ByteBuffer upper =
+            task.file().upperBounds() == null
+                ? null
+                : task.file().upperBounds().get(SCHEMA.findField("id").fieldId());
+        if (upper != null) {
+          maxId = Math.max(maxId, Conversions.<Long>fromByteBuffer(Types.LongType.get(), upper));
+        }
+      }
+    }
+    try (CloseableIterable<Record> rows = IcebergGenerics.read(table).select("id").build()) {
+      for (Record row : rows) {
+        liveRows++;
+        maxId = Math.max(maxId, (Long) row.getField("id"));
+      }
+    }
+    nextId = maxId + 1;
+
+    UpdateProperties update = table.updateProperties();
+    boolean changed = false;
+    for (String type : new String[] {"minor", "major", "full"}) {
+      String cron = options.get(type + "-cron");
+      if (cron != null) {
+        update.set("self-optimizing.enabled", "true");
+        update.set("self-optimizing." + type + ".trigger.cron", cron);
+        changed = true;
+      }
+    }
+    if (changed) {
+      update.commit();
+    }
+    System.out.printf(
+        Locale.ROOT,
+        "Appending to %s (%s): %d rows already in it, new ids start at %d%n",
+        table.name(),
+        table.spec(),
+        liveRows,
+        nextId);
+    initWriters();
+  }
+
+  private void initWriters() {
     files = OutputFileFactory.builderFor(table, 1, 1).format(format).build();
     Schema equalityRowSchema = SCHEMA.select("id");
     appenders =
         new GenericAppenderFactory(
-            SCHEMA, spec, new int[] {SCHEMA.findField("id").fieldId()}, equalityRowSchema, null);
+            SCHEMA,
+            table.spec(),
+            new int[] {SCHEMA.findField("id").fieldId()},
+            equalityRowSchema,
+            null);
   }
 
   private void appendDataFile(int rows, int part) throws IOException {
@@ -379,7 +454,7 @@ public class IcebergTestDataGenerator {
     }
   }
 
-  private static final Set<String> FLAGS = Sets.newHashSet("update", "recreate", "help");
+  private static final Set<String> FLAGS = Sets.newHashSet("update", "recreate", "append", "help");
 
   private static final Set<String> NUMBER_OPTIONS =
       Sets.newHashSet("files", "rows", "pos", "eq", "deletes-per-file", "partitions", "seed");

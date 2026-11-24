@@ -30,7 +30,7 @@
       "name": "Fusion: optimizer",
       "request": "launch",
       "mainClass": "io.olake.fusion.optimizer.standalone.StandaloneOptimizer",
-      "projectName": "fusion-optimizer-standalone",
+      "projectName": "fusion-ams",
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
       "args": "-a thrift://127.0.0.1:1261 -g spark-container -p 1",

@@ -41,7 +41,8 @@ MVN := JAVA_HOME="$(JAVA_HOME_17)" PATH="$(JAVA_HOME_17)/bin:$(PATH)" ./mvnw
 .DEFAULT_GOAL := help
 
 .PHONY: help build debug debug-deps debug-compile debug-server debug-optimizer debug-catalog \
-        debug-data debug-stop debug-reset debug-clean vscode setup-debug-mode clean-debug-mode \
+        debug-data debug-ui debug-ui-stop debug-stop debug-reset debug-clean vscode setup-debug-mode \
+        clean-debug-mode \
         start-deps stop-deps start-fusion-docker clean-fusion-docker \
         sync-frontend spotless-fix install-hooks integration-test integration-test-build \
         integration-test-images integration-test-down
@@ -60,6 +61,8 @@ help:
 	@echo "  make debug-catalog         Register catalog $(DEBUG_CATALOG) on the local MinIO (server must run)"
 	@echo "  make debug-data ARGS=...   Create an Iceberg table with data and delete files, e.g."
 	@echo "                             ARGS=\"--files 20 --pos 20 --update\" (ARGS=--help lists options)"
+	@echo "  make debug-ui              Start OLake-UI (published images) on $(OLAKE_UI_URL) against debug-server"
+	@echo "  make debug-ui-stop         Stop OLake-UI (keeps its data)"
 	@echo "  make debug-stop            Stop the server and optimizer started from this checkout"
 	@echo "  make vscode                Install VS Code launch, task and settings files into .vscode/"
 	@echo "  make debug-reset           Drop and recreate the $(DEBUG_DB) database"
@@ -116,6 +119,16 @@ DEBUG_BUILD_DIR      := target-debug
 DEBUG_CP             := $(CURDIR)/fusion-ams/$(DEBUG_BUILD_DIR)/debug-classpath.txt
 DEBUG_COOKIES        := $(CURDIR)/fusion-ams/$(DEBUG_BUILD_DIR)/debug-cookies.txt
 FUSION_URL           := http://localhost:1630
+# OLake-UI from its published images, with its compose file from OLake-UI's master branch.
+OLAKE_UI_COMPOSE_URL ?= https://raw.githubusercontent.com/datazip-inc/olake-ui/master/docker-compose-v1.yml
+# Host port of OLake-UI; set it when 8000 is taken, e.g. make debug-ui OLAKE_UI_PORT=8010.
+OLAKE_UI_PORT        ?= 8000
+OLAKE_UI_URL         := http://localhost:$(OLAKE_UI_PORT)
+DEBUG_UI_DIR         := $(CURDIR)/$(DEBUG_BUILD_DIR)/olake-ui
+# Run from DEBUG_UI_DIR: OLake-UI's compose keeps its data under $${PWD}, which must stay out of the
+# source tree.
+DEBUG_UI_COMPOSE      = cd "$(DEBUG_UI_DIR)" && OLAKE_UI_PORT=$(OLAKE_UI_PORT) docker compose -p fusion-debug-ui \
+                        -f "$(DEBUG_UI_DIR)/docker-compose-v1.yml" -f "$(CURDIR)/$(COMPOSE_DIR)/olake-ui.override.yml"
 
 JAVA_17       := "$(JAVA_HOME_17)/bin/java"
 JVM_ADD_OPENS := $(foreach p,java.lang java.lang.invoke java.lang.reflect java.io java.net java.nio \
@@ -195,6 +208,21 @@ debug-data: $(if $(NO_COMPILE),,debug-compile)
 		-cp "$(CURDIR)/fusion-ams/$(DEBUG_BUILD_DIR)/test-classes:$(DEBUG_RUN_CP)" \
 		io.olake.fusion.dev.IcebergTestDataGenerator \
 		--catalog $(DEBUG_CATALOG) --uri "jdbc:postgresql://localhost:5432/$(DEBUG_DB)" $(ARGS)
+
+# Only the UI and what it needs (Postgres, Temporal); no ingestion worker and no Fusion containers.
+debug-ui:
+	@curl -sf -o /dev/null "$(FUSION_URL)/" \
+		|| echo "WARNING: nothing answers on $(FUSION_URL); start 'make debug-server' for the UI's optimization pages."
+	@if ! docker ps --format '{{.Names}}' | grep -qx olake-ui && lsof -nP -iTCP:$(OLAKE_UI_PORT) -sTCP:LISTEN >/dev/null 2>&1; then \
+		echo "ERROR: port $(OLAKE_UI_PORT) is in use; run 'make debug-ui OLAKE_UI_PORT=<free port>'."; exit 1; fi
+	@mkdir -p "$(DEBUG_UI_DIR)"
+	@curl -fsSL "$(OLAKE_UI_COMPOSE_URL)" -o "$(DEBUG_UI_DIR)/docker-compose-v1.yml"
+	@$(DEBUG_UI_COMPOSE) up -d olake-ui signup-init
+	@echo "OLake-UI on $(OLAKE_UI_URL) (admin / password), using Fusion at $(FUSION_URL)"
+
+debug-ui-stop:
+	@if [ -f "$(DEBUG_UI_DIR)/docker-compose-v1.yml" ]; then $(DEBUG_UI_COMPOSE) down; \
+	else echo "OLake-UI was not started with 'make debug-ui'."; fi
 
 # Force-kills after 10 seconds: the server does not always exit on SIGTERM.
 debug-stop:
