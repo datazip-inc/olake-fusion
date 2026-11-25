@@ -39,7 +39,7 @@ on:
       - 'dist/**'
       - 'docker/**'
       - 'integration-tests/**'
-      - 'amoro-web/**'
+      - 'fusion-web/**'
       - '.github/workflows/integration-tests.yml'
   pull_request:
     branches:
@@ -53,7 +53,7 @@ on:
       - 'dist/**'
       - 'docker/**'
       - 'integration-tests/**'
-      - 'amoro-web/**'
+      - 'fusion-web/**'
       - '.github/workflows/integration-tests.yml'
   workflow_dispatch:
 

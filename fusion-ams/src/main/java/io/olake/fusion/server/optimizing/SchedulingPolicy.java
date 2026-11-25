@@ -1,0 +1,190 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * Modified by Datazip Inc. in 2026
+ */
+
+package io.olake.fusion.server.optimizing;
+
+import io.olake.fusion.ServerTableIdentifier;
+import io.olake.fusion.resource.ResourceGroup;
+import io.olake.fusion.server.optimizing.sorter.QuotaOccupySorter;
+import io.olake.fusion.server.optimizing.sorter.SorterFactory;
+import io.olake.fusion.server.table.DefaultTableRuntime;
+import org.apache.amoro.shade.guava32.com.google.common.annotations.VisibleForTesting;
+import org.apache.amoro.shade.guava32.com.google.common.collect.Maps;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Optional;
+import java.util.ServiceLoader;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+
+/**
+ * Selects the next table to plan from the set of tables currently registered in an optimizer group.
+ *
+ * <p>A table is eligible for planning if and only if:
+ *
+ * <ul>
+ *   <li>It is not already being processed (FULL/MAJOR/MINOR_OPTIMIZING, COMMITTING) or planned.
+ *   <li>Its status is {@link OptimizingStatus#PENDING} — meaning the cron-tick scheduler in {@code
+ *       TableRuntimeRefreshExecutor} already determined that a cron expression fired and the
+ *       optimization is necessary.
+ * </ul>
+ *
+ * <p>Cron evaluation, "not necessary" skip logic, and SKIPPED record creation are all handled
+ * upstream in {@code TableRuntimeRefreshExecutor}. This class is intentionally kept simple.
+ */
+public class SchedulingPolicy {
+
+  public static final Logger LOG = LoggerFactory.getLogger(SchedulingPolicy.class);
+
+  private static final String SCHEDULING_POLICY_PROPERTY_NAME = "scheduling-policy";
+
+  private final Map<ServerTableIdentifier, DefaultTableRuntime> tableRuntimeMap = new HashMap<>();
+  private volatile String policyName;
+  private final Lock tableLock = new ReentrantLock();
+  private static final Map<String, SorterFactory> sorterFactoryCache = new ConcurrentHashMap<>();
+
+  public SchedulingPolicy(ResourceGroup group) {
+    setTableSorterIfNeeded(group);
+  }
+
+  public void setTableSorterIfNeeded(ResourceGroup optimizerGroup) {
+    tableLock.lock();
+    try {
+      policyName =
+          Optional.ofNullable(optimizerGroup.getProperties())
+              .orElseGet(Maps::newHashMap)
+              .getOrDefault(SCHEDULING_POLICY_PROPERTY_NAME, QuotaOccupySorter.IDENTIFIER);
+    } finally {
+      tableLock.unlock();
+    }
+  }
+
+  static {
+    ServiceLoader<SorterFactory> sorterFactories = ServiceLoader.load(SorterFactory.class);
+    Iterator<SorterFactory> iterator = sorterFactories.iterator();
+    iterator.forEachRemaining(
+        sorterFactory -> {
+          String identifier = sorterFactory.getIdentifier();
+          sorterFactoryCache.put(identifier, sorterFactory);
+          LOG.info(
+              "Loaded scheduling policy {} and its corresponding sorter instance {}",
+              identifier,
+              sorterFactory.getClass().getName());
+        });
+  }
+
+  public String name() {
+    return policyName;
+  }
+
+  public DefaultTableRuntime scheduleTable(Set<ServerTableIdentifier> skipSet) {
+    tableLock.lock();
+    try {
+      fillSkipSet(skipSet);
+      return tableRuntimeMap.values().stream()
+          .filter(tableRuntime -> !skipSet.contains(tableRuntime.getTableIdentifier()))
+          .min(createSorterByPolicy())
+          .orElse(null);
+    } finally {
+      tableLock.unlock();
+    }
+  }
+
+  private Comparator<DefaultTableRuntime> createSorterByPolicy() {
+    if (sorterFactoryCache.get(policyName) != null) {
+      SorterFactory sorterFactory = sorterFactoryCache.get(policyName);
+      return sorterFactory.createComparator();
+    } else {
+      throw new IllegalArgumentException("Unsupported scheduling policy: " + policyName);
+    }
+  }
+
+  /**
+   * Populates {@code originalSet} with the identifiers of tables that are not eligible for
+   * scheduling right now. A table is ineligible if it is already being processed / planned, or if
+   * it has not been marked PENDING by the cron-tick scheduler.
+   */
+  private void fillSkipSet(Set<ServerTableIdentifier> originalSet) {
+    tableRuntimeMap.values().stream()
+        .filter(tableRuntime -> !isEligibleForScheduling(tableRuntime))
+        .forEach(tableRuntime -> originalSet.add(tableRuntime.getTableIdentifier()));
+  }
+
+  /**
+   * A table is eligible for scheduling when:
+   *
+   * <ol>
+   *   <li>It is not already running or being planned (no concurrent processing).
+   *   <li>Its status is {@link OptimizingStatus#PENDING} — set exclusively by the cron-tick
+   *       scheduler after verifying that a cron expression fired and the optimization is necessary.
+   * </ol>
+   */
+  private boolean isEligibleForScheduling(DefaultTableRuntime tableRuntime) {
+    OptimizingStatus status = tableRuntime.getOptimizingStatus();
+
+    if (status.isProcessing() || status == OptimizingStatus.PLANNING) {
+      LOG.debug(
+          "[optimization-skip] {} skipped - already {} (will schedule after completion)",
+          tableRuntime.getTableIdentifier(),
+          status.displayValue());
+      return false;
+    }
+
+    if (status != OptimizingStatus.PENDING) {
+      LOG.debug(
+          "[optimization-skip] {} skipped - status is {} (waiting for cron tick to set PENDING)",
+          tableRuntime.getTableIdentifier(),
+          status.displayValue());
+      return false;
+    }
+
+    return true;
+  }
+
+  public void addTable(DefaultTableRuntime tableRuntime) {
+    tableLock.lock();
+    try {
+      tableRuntimeMap.put(tableRuntime.getTableIdentifier(), tableRuntime);
+    } finally {
+      tableLock.unlock();
+    }
+  }
+
+  public void removeTable(DefaultTableRuntime tableRuntime) {
+    tableLock.lock();
+    try {
+      tableRuntimeMap.remove(tableRuntime.getTableIdentifier());
+    } finally {
+      tableLock.unlock();
+    }
+  }
+
+  @VisibleForTesting
+  Map<ServerTableIdentifier, DefaultTableRuntime> getTableRuntimeMap() {
+    return tableRuntimeMap;
+  }
+}
