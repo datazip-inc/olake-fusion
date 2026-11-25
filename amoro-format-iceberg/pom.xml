@@ -123,6 +123,17 @@
             <artifactId>iceberg-aliyun</artifactId>
         </dependency>
 
+        <!-- GCS FileIO + GoogleAuthManager for BigLake / GCS-backed catalogs -->
+        <dependency>
+            <groupId>org.apache.iceberg</groupId>
+            <artifactId>iceberg-gcp</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.iceberg</groupId>
+            <artifactId>iceberg-gcp-bundle</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>com.aliyun.oss</groupId>
             <artifactId>aliyun-sdk-oss</artifactId>

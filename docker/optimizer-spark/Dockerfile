@@ -29,6 +29,10 @@ FROM apache/spark:${SPARK_JAVA_TAG}
 ARG MAVEN_MIRROR=https://repo.maven.apache.org/maven2
 ARG OPTIMIZER_JOB=optimizer-job.jar
 ARG AWS_VERSION=2.24.12
+# Iceberg 1.10 needs Avro 1.12 (e.g. LogicalTypes.timestampNanos). Spark 3.5 ships Avro 1.11.x,
+# which is loaded first and makes Iceberg classes such as BaseFile resolve differently from AMS,
+# breaking optimizing-task deserialization (InvalidClassException on serialVersionUID).
+ARG AVRO_VERSION=1.12.0
 ARG TARGETARCH
 # The release tag this image is built for, reported by telemetry; empty for local builds.
 ARG FUSION_VERSION=
@@ -46,6 +50,8 @@ ENV PATH="${JAVA_HOME}/bin:${PATH}"
 RUN cd $SPARK_HOME/jars \
     && wget ${MAVEN_MIRROR}/software/amazon/awssdk/bundle/${AWS_VERSION}/bundle-${AWS_VERSION}.jar \
     && wget ${MAVEN_MIRROR}/software/amazon/awssdk/url-connection-client/${AWS_VERSION}/url-connection-client-${AWS_VERSION}.jar \
+    && rm -f avro-1.11.*.jar \
+    && wget ${MAVEN_MIRROR}/org/apache/avro/avro/${AVRO_VERSION}/avro-${AVRO_VERSION}.jar \
     && chown spark:spark *.jar \
     && mkdir -p $SPARK_HOME/usrlib
 

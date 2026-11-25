@@ -153,6 +153,12 @@
                                     <pattern>org.apache.parquet</pattern>
                                     <shadedPattern>org.apache.amoro.shade.org.apache.parquet</shadedPattern>
                                 </relocation>
+                                <!-- Parquet's own shaded deps (fastutil, jackson) clash with Spark's
+                                     Parquet 1.13 copies of the same classes (e.g. LongList.of() missing) -->
+                                <relocation>
+                                    <pattern>shaded.parquet</pattern>
+                                    <shadedPattern>org.apache.amoro.shade.shaded.parquet</shadedPattern>
+                                </relocation>
                                 <relocation>
                                     <pattern>org.apache.orc</pattern>
                                     <shadedPattern>org.apache.amoro.shade.org.apache.orc</shadedPattern>
