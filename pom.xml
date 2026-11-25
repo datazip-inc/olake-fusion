@@ -104,7 +104,8 @@
         <maven-clean-plugin.version>3.3.2</maven-clean-plugin.version>
         <maven-checkstyle-plugin.version>3.3.1</maven-checkstyle-plugin.version>
 
-        <iceberg.version>1.7.2</iceberg.version>
+        <!-- 1.10+ is required for GCP/BigLake: AuthManager (1.8) and GoogleAuthManager (1.10) -->
+        <iceberg.version>1.10.0</iceberg.version>
         <!-- paimon 1.2.0 does not support scala 2.13; use 1.1.1 as default (matches scala-2.13 profile) -->
         <paimon.version>1.1.1</paimon.version>
         <hive.version>3.1.3</hive.version>
@@ -128,7 +129,9 @@
         <cglib.version>2.2.2</cglib.version>
         <curator.version>5.7.0</curator.version>
         <mockito.version>4.11.0</mockito.version>
-        <parquet.version>1.15.2</parquet.version>
+        <!-- Iceberg 1.10 needs Parquet 1.16 (VariantLogicalTypeAnnotation); 1.16 brings in jts-core -->
+        <parquet.version>1.16.0</parquet.version>
+        <zstd-jni.version>1.5.7-3</zstd-jni.version>
         <mysql-jdbc.version>8.4.0</mysql-jdbc.version>
         <lz4-java.version>1.11.4</lz4-java.version>
         <orc-core.version>1.9.7</orc-core.version>
@@ -149,7 +152,7 @@
         <kryo.version>4.0.3</kryo.version>
         <trino.version>406</trino.version>
         <lucene.version>8.11.2</lucene.version>
-        <bitmap.version>1.0.1</bitmap.version>
+        <bitmap.version>1.3.0</bitmap.version>
         <prometheus.version>0.16.0</prometheus.version>
         <flink.version>1.20.4</flink.version>
         <flink.scala.binary.version>2.12</flink.scala.binary.version>
@@ -330,6 +333,24 @@
                 <groupId>org.apache.iceberg</groupId>
                 <artifactId>iceberg-aliyun</artifactId>
                 <version>${iceberg.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.iceberg</groupId>
+                <artifactId>iceberg-gcp</artifactId>
+                <version>${iceberg.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.iceberg</groupId>
+                <artifactId>iceberg-gcp-bundle</artifactId>
+                <version>${iceberg.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.github.luben</groupId>
+                <artifactId>zstd-jni</artifactId>
+                <version>${zstd-jni.version}</version>
             </dependency>
 
             <dependency>
