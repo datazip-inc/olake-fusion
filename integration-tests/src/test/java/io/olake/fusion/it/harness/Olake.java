@@ -23,6 +23,7 @@ package io.olake.fusion.it.harness;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.olake.fusion.it.Contract.Catalog;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -71,11 +72,20 @@ public final class Olake {
 
   private final String database;
   private final String namespace;
+  /** The OLake destination fixture: the catalog OLake writes to. */
+  private final String destinationTemplate;
+
   private final String slot;
   private final String publication;
   private final Path workDir;
 
+  /** Writes to {@link Catalog#JDBC}. */
   public Olake(String test, Path workDir) {
+    this(test, workDir, Catalog.JDBC);
+  }
+
+  public Olake(String test, Path workDir, Catalog catalog) {
+    this.destinationTemplate = catalog.destinationTemplate();
     String name = (test + "_" + Env.RUN_ID).toLowerCase();
     this.database = SOURCE_DB_PREFIX + name;
     this.namespace = NAMESPACE_PREFIX + name;
@@ -162,7 +172,7 @@ public final class Olake {
       Map<String, String> values =
           Map.of("${SOURCE_DB}", database, "${SLOT}", slot, "${PUBLICATION}", publication);
       render("olake/source.template.json", "source.json", values);
-      render("olake/destination.template.json", "destination.json", values);
+      render(destinationTemplate, "destination.json", values);
     } catch (IOException e) {
       throw new UncheckedIOException(e);
     }

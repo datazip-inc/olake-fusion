@@ -25,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
+import io.olake.fusion.it.Contract.Catalog;
 import io.olake.fusion.it.Contract.Names;
 import io.olake.fusion.it.Contract.TableProps;
 import io.olake.fusion.it.harness.Await;
@@ -68,14 +69,25 @@ abstract class ItBase {
     assertTrue(
         client.resourceGroups().contains(Names.OPTIMIZER_GROUP),
         "resource groups contain " + Names.OPTIMIZER_GROUP);
-    assertTrue(client.catalogs().contains(Names.CATALOG), "catalogs contain " + Names.CATALOG);
+    for (Catalog catalog : Catalog.values()) {
+      assertTrue(
+          client.catalogs().contains(catalog.catalogName()),
+          "catalogs contain " + catalog.catalogName());
+    }
     Await.until(
         "a live optimizer in " + Names.OPTIMIZER_GROUP,
         Duration.ofMinutes(3),
         client::liveOptimizers,
         optimizers -> !optimizers.isEmpty());
-    SparkTable.sql("SHOW NAMESPACES IN " + Names.CATALOG);
+    for (Catalog catalog : Catalog.values()) {
+      SparkTable.sql("SHOW NAMESPACES IN " + catalog.catalogName());
+    }
     fusion = client;
+  }
+
+  /** The catalog this class's tables live in; a subclass runs the same tests on another one. */
+  Catalog catalog() {
+    return Catalog.JDBC;
   }
 
   /**
@@ -116,13 +128,20 @@ abstract class ItBase {
      * table, Fusion picks it up, and the table gets the settings OLake-UI writes.
      */
     static TestTable create(String name) {
-      Path workDir = Paths.get("target", "work", Env.RUN_ID, name);
-      Olake olake = new Olake(name, workDir);
+      return create(name, Catalog.JDBC);
+    }
+
+    /** As {@link #create(String)}, with OLake writing to {@code catalog}. */
+    static TestTable create(String name, Catalog catalog) {
+      String tableName = catalog.tablePrefix() + name;
+      Path workDir = Paths.get("target", "work", Env.RUN_ID, tableName);
+      Olake olake = new Olake(tableName, workDir, catalog);
+      Fusion.bindNamespace(olake.namespace(), catalog.catalogName());
       olake.createSource();
       olake.discover();
       olake.insert(1, SEED_ROWS);
       olake.sync();
-      SparkTable table = new SparkTable(olake.namespace(), Olake.TABLE);
+      SparkTable table = new SparkTable(catalog.catalogName(), olake.namespace(), Olake.TABLE);
       fusion.awaitTableListed(table.namespace(), table.name());
       // OLake-UI's target file size setting, which also enables optimization.
       fusion.setTableProperties(

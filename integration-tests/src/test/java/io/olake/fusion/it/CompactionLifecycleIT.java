@@ -73,7 +73,7 @@ class CompactionLifecycleIT extends ItBase {
   @Test
   @Order(1)
   void minorConvertsEqualityDeletesToPositionDeletes() {
-    table = TestTable.create("lifecycle");
+    table = TestTable.create("lifecycle", catalog());
     table.cdc();
     // Every data file must be a segment file for the conversion to be the planned work.
     useSegmentSizedFiles(table);

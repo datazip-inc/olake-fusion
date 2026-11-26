@@ -24,6 +24,7 @@ import static io.olake.fusion.it.Contract.ProcessStatus.SUCCESS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.olake.fusion.it.Contract.Catalog;
 import io.olake.fusion.it.Contract.TableProps;
 import io.olake.fusion.it.harness.Fusion;
 import org.junit.jupiter.api.Test;
@@ -67,7 +68,7 @@ class SnapshotExpiryIT extends ItBase {
    */
   @Test
   void retainsSnapshotsNewerThanTheRetention() throws InterruptedException {
-    TestTable table = TestTable.create("expiry_split");
+    TestTable table = TestTable.create("expiry_split", catalog());
     while (snapshots(table).size() < 2) {
       table.load();
     }
@@ -91,14 +92,14 @@ class SnapshotExpiryIT extends ItBase {
    */
   @Test
   void keepsOnlyTheNewestWhenAllAreOlder() throws InterruptedException {
-    TestTable table = tableWithOldSnapshots("expiry_all_old", MIN_COUNT + 2);
+    TestTable table = tableWithOldSnapshots("expiry_all_old", MIN_COUNT + 2, catalog());
     assertSnapshotsLeft(table, "1min", MIN_COUNT, MIN_COUNT);
   }
 
   /** retain_last 10, none of 11 snapshots older than the retention: every snapshot is left. */
   @Test
   void expiresNothingWhenNoneIsOlder() {
-    TestTable table = TestTable.create("expiry_none_old");
+    TestTable table = TestTable.create("expiry_none_old", catalog());
     while (snapshots(table).size() < MIN_COUNT + 1) {
       table.load();
     }
@@ -120,11 +121,12 @@ class SnapshotExpiryIT extends ItBase {
   }
 
   /**
-   * A table written by OLake syncs until it has at least {@code count} snapshots, which are then
-   * older than one minute.
+   * A table of {@code catalog} written by OLake syncs until it has at least {@code count}
+   * snapshots, which are then older than one minute.
    */
-  static TestTable tableWithOldSnapshots(String name, int count) throws InterruptedException {
-    TestTable table = TestTable.create(name);
+  static TestTable tableWithOldSnapshots(String name, int count, Catalog catalog)
+      throws InterruptedException {
+    TestTable table = TestTable.create(name, catalog);
     while (snapshots(table).size() < count) {
       table.load();
     }

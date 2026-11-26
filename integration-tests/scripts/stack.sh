@@ -18,7 +18,7 @@
 # Modified by Datazip Inc. in 2026
 
 # The test stack: Fusion, its Postgres and MinIO, the Spark optimizer on Kind, and what a user
-# brings (a source Postgres for OLake, a Spark Connect query engine).
+# brings (a source Postgres for OLake, a Spark Connect query engine, a Hive Metastore).
 #
 #   stack.sh up            Render the config, start everything, wait until it is usable
 #   stack.sh down          Remove the containers, volumes, Kind cluster and network
@@ -93,11 +93,12 @@ up() {
   config
   mkdir -p "$TEST_LOG_DIR/compaction"
 
-  # spark-connect is the only image compose builds itself (Spark with the Iceberg runtime OLake
-  # writes with). `up` builds an image only when it is missing, so an edited Dockerfile or
-  # spark-defaults.conf would silently keep the old image; building first picks up the change
-  # (cached layers make this a no-op otherwise).
-  compose build spark-connect
+  # spark-connect and hive-metastore are the images compose builds itself (Spark with the Iceberg
+  # runtime OLake writes with, and the Hive Metastore with its S3A jars). `up` builds an image
+  # only when it is missing, so an edited Dockerfile, spark-defaults.conf or hive-site.xml would
+  # silently keep the old image; building first picks up the change (cached layers make this a
+  # no-op otherwise).
+  compose build spark-connect hive-metastore
   compose up -d
 
   echo "Waiting for $INIT to finish..."

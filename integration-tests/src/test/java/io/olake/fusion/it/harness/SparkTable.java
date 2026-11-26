@@ -78,10 +78,17 @@ public final class SparkTable {
 
   private static SparkSession session;
 
+  private final String catalog;
   private final String namespace;
   private final String name;
 
+  /** A table of {@link Names#CATALOG}. */
   public SparkTable(String namespace, String name) {
+    this(Names.CATALOG, namespace, name);
+  }
+
+  public SparkTable(String catalog, String namespace, String name) {
+    this.catalog = catalog;
     this.namespace = namespace;
     this.name = name;
   }
@@ -95,7 +102,7 @@ public final class SparkTable {
   }
 
   public String ident() {
-    return Names.CATALOG + ".`" + namespace + "`.`" + name + "`";
+    return catalog + ".`" + namespace + "`.`" + name + "`";
   }
 
   // Session
@@ -153,7 +160,7 @@ public final class SparkTable {
   public void rollbackTo(String snapshotId) {
     sql(
         "CALL "
-            + Names.CATALOG
+            + catalog
             + ".system.rollback_to_snapshot(table => '"
             + namespace
             + "."
