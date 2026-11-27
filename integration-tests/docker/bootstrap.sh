@@ -17,7 +17,7 @@
 #
 # Modified by Datazip Inc. in 2026
 
-# Serial bootstrap, once per stack: optimizer group, optimizer, catalog. All through the
+# Serial bootstrap, once per stack: optimizer group, optimizer, catalogs. All through the
 # public REST API, exactly as a user sets Fusion up. Run by the fusion-init service.
 #
 #   API                    REST base URL, e.g. http://fusion:1630/api/ams/v1
@@ -76,6 +76,35 @@ curl -sf -b /tmp/c -X POST "$API/catalogs" -H "$H" -H 'Content-Type: application
       "endpoint":"http://10.210.40.5:9000",
       "access-key-id":"admin",
       "secret-access-key":"password",
+      "cache-enabled":"false"
+    },
+    "tableProperties":{}
+  }'
+echo
+
+# A Hive catalog, as OLake-UI creates one (uri, warehouse, clients, S3 storage, AK/SK), plus
+# s3.path-style-access, which MinIO needs and OLake-UI's Hive mapping does not set.
+echo "Creating catalog olake_hive"
+curl -sf -b /tmp/c -X POST "$API/catalogs" -H "$H" -H 'Content-Type: application/json' -d '{
+    "name":"olake_hive",
+    "type":"hive",
+    "optimizerGroup":"spark-container",
+    "tableFormatList":["ICEBERG"],
+    "storageConfig":{
+      "storage.type":"S3",
+      "storage.s3.endpoint":"http://10.210.40.5:9000",
+      "storage.s3.region":"us-east-1"
+    },
+    "authConfig":{
+      "auth.type":"AK/SK",
+      "auth.ak_sk.access_key":"admin",
+      "auth.ak_sk.secret_key":"password"
+    },
+    "properties":{
+      "uri":"thrift://10.210.40.30:9083",
+      "warehouse":"s3://warehouse/olake_hive/",
+      "clients":"5",
+      "s3.path-style-access":"true",
       "cache-enabled":"false"
     },
     "tableProperties":{}

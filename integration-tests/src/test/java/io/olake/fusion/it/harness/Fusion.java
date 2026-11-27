@@ -48,6 +48,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -240,8 +241,24 @@ public final class Fusion {
 
   // Tables
 
+  /**
+   * The catalog each test namespace lives in. A test binds its namespace when it creates its table;
+   * a namespace nobody bound is in {@link Names#CATALOG}. Namespaces carry the test name and the
+   * run id, so one never lives in two catalogs.
+   */
+  private static final Map<String, String> CATALOG_OF_NAMESPACE = new ConcurrentHashMap<>();
+
+  /** Makes every call about tables in {@code database} go to {@code catalog}. */
+  public static void bindNamespace(String database, String catalog) {
+    CATALOG_OF_NAMESPACE.put(database, catalog);
+  }
+
+  private static String catalogOf(String database) {
+    return CATALOG_OF_NAMESPACE.getOrDefault(database, Names.CATALOG);
+  }
+
   public Set<String> tables(String database) {
-    String path = String.format(ApiPaths.TABLES, Names.CATALOG, encode(database));
+    String path = String.format(ApiPaths.TABLES, encode(catalogOf(database)), encode(database));
     return Json.elements(get(path), path).stream()
         .map(t -> Json.text(t, Fields.NAME))
         .collect(Collectors.toSet());
@@ -270,7 +287,7 @@ public final class Fusion {
     JsonNode session =
         call(
             "POST",
-            String.format(ApiPaths.TERMINAL_EXECUTE, encode(Names.CATALOG)),
+            String.format(ApiPaths.TERMINAL_EXECUTE, encode(catalogOf(database))),
             Map.of(Fields.SQL, sql));
     String logsPath =
         String.format(ApiPaths.TERMINAL_LOGS, encode(Json.text(session, Fields.SESSION_ID)));
@@ -590,7 +607,7 @@ public final class Fusion {
   }
 
   private static String[] ids(String database, String table) {
-    return new String[] {encode(Names.CATALOG), encode(database), encode(table)};
+    return new String[] {encode(catalogOf(database)), encode(database), encode(table)};
   }
 
   private static String quote(String value) {

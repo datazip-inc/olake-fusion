@@ -37,10 +37,48 @@ public final class Contract {
   public static final class Names {
     public static final String OPTIMIZER_GROUP = "spark-container";
     public static final String CATALOG = "olake_iceberg";
+    public static final String HIVE_CATALOG = "olake_hive";
     public static final String ADMIN_USER = "admin";
     public static final String ADMIN_PASSWORD = "password";
 
     private Names() {}
+  }
+
+  /**
+   * A catalog the stack bootstrap creates, with the OLake destination that writes to it and the
+   * prefix of its tests' table names, which keeps the source databases of two catalogs' tests
+   * apart.
+   */
+  public enum Catalog {
+    /** Iceberg's JDBC catalog on the stack's Postgres: Fusion's {@code custom} catalog type. */
+    JDBC(Names.CATALOG, "olake/destination.template.json", ""),
+    /** A Hive Metastore. */
+    HIVE(Names.HIVE_CATALOG, "olake/destination.hive.template.json", "hive_");
+
+    private final String catalogName;
+    private final String destinationTemplate;
+    private final String tablePrefix;
+
+    Catalog(String catalogName, String destinationTemplate, String tablePrefix) {
+      this.catalogName = catalogName;
+      this.destinationTemplate = destinationTemplate;
+      this.tablePrefix = tablePrefix;
+    }
+
+    /** The catalog's name in Fusion and in the query engine. */
+    public String catalogName() {
+      return catalogName;
+    }
+
+    /** The OLake destination fixture that writes to this catalog. */
+    public String destinationTemplate() {
+      return destinationTemplate;
+    }
+
+    /** The prefix of the table names of this catalog's tests. */
+    public String tablePrefix() {
+      return tablePrefix;
+    }
   }
 
   /** REST paths, relative to {@link #BASE}. Placeholders are filled with {@code String.format}. */

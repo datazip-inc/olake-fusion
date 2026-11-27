@@ -17,7 +17,8 @@
 # Modified by Datazip Inc. in 2026
 
 # Test stack: Fusion (AMS) + catalog Postgres + MinIO + Spark optimizer on Kind, plus what a
-# user brings: a source Postgres for OLake and a Spark Connect query engine. Same topology as
+# user brings: a source Postgres for OLake, a Spark Connect query engine and a Hive Metastore
+# (for the tests on a Hive catalog). Same topology as
 # local-test/docker-compose.yml, isolated from it: own container names, subnet, Kind cluster,
 # volumes and host ports.
 #
@@ -68,6 +69,9 @@ services:
         condition: service_started
       kind-load-image:
         condition: service_completed_successfully
+      # Creating the Hive catalog runs Fusion's connection test against the metastore.
+      hive-metastore:
+        condition: service_healthy
     networks:
       fusion-test-net:
     environment:
@@ -127,12 +131,36 @@ services:
         condition: service_healthy
       mc:
         condition: service_completed_successfully
+      hive-metastore:
+        condition: service_healthy
     networks:
       fusion-test-net:
     ports:
       - "${TEST_SPARK_CONNECT_PORT:-15002}:15002"
     environment:
       AWS_REGION: us-east-1
+
+  # The user's Hive Metastore, behind the olake_hive catalog. Its own metadata is in an embedded
+  # Derby database, so it starts empty with every stack.
+  hive-metastore:
+    image: fusion-hive-metastore:test
+    build:
+      context: ../..
+      dockerfile: integration-tests/docker/hive-metastore/Dockerfile
+    container_name: fusion-test-hive-metastore
+    depends_on:
+      mc:
+        condition: service_completed_successfully
+    networks:
+      fusion-test-net:
+        ipv4_address: 10.210.40.30
+    environment:
+      SERVICE_NAME: metastore
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/9083'"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
 
   minio:
     image: olakego/minio:RELEASE.2025-04-03T14-56-28Z
