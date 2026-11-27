@@ -183,7 +183,9 @@
                             </properties>
                         </configuration>
                     </execution>
-                    <!-- Timing-sensitive tests, one at a time, after the parallel ones. -->
+                    <!-- Tests whose methods must run in order, after the parallel ones: a class's methods
+                         run one at a time in one thread, and the classes run concurrently, so the
+                         same steps on two catalogs take as long as the slower one. -->
                     <execution>
                         <id>serial</id>
                         <goals>
@@ -194,6 +196,13 @@
                             <reportsDirectory>${project.build.directory}/failsafe-reports/serial</reportsDirectory>
                             <failIfNoTests>false</failIfNoTests>
                             <summaryFile>${project.build.directory}/failsafe-reports/failsafe-summary-serial.xml</summaryFile>
+                            <properties>
+                                <configurationParameters>junit.jupiter.execution.parallel.enabled = true
+                                    junit.jupiter.execution.parallel.mode.default = same_thread
+                                    junit.jupiter.execution.parallel.mode.classes.default = concurrent
+                                    junit.jupiter.execution.parallel.config.strategy = fixed
+                                    junit.jupiter.execution.parallel.config.fixed.parallelism = ${test.parallelism}</configurationParameters>
+                            </properties>
                         </configuration>
                     </execution>
                     <execution>
