@@ -49,6 +49,11 @@ package org.apache.thrift.transport;
  * TestIcebergOnlyCatalogService} in fusion-ams, which starts a real Hive metastore and connects to
  * it through {@code HiveCatalog}.
  */
+// TODO: remove this shim, together with the TFilterTransport shim in
+// org.apache.hadoop.hive.metastore.security, once Fusion's Iceberg version (iceberg.version)
+// supports a Hive metastore client built against Thrift 0.14 or newer (Hive 4.x) and hive.version
+// is bumped to it. As of Iceberg 1.12, HiveCatalog is built and tested only against Hive 2.3.x
+// (1.7.2: also 3.1.3), so the bump waits on Iceberg.
 public class TFramedTransport extends org.apache.thrift.transport.layered.TFramedTransport {
 
   public TFramedTransport(TTransport transport, int maxLength) throws TTransportException {
