@@ -171,6 +171,11 @@ logs() {
   if [[ -d "$TEST_LOG_DIR" ]]; then
     cp -r "$TEST_LOG_DIR" "$out/optimization-logs" 2>/dev/null
   fi
+  # AMS and the Hive Metastore log to files, not to the console, so compose.log has neither:
+  # AMS's ams-*.log holds its planning and commit errors, the metastore's hive.log its lock and
+  # alter_table calls. docker cp works on a stopped container too.
+  docker cp fusion-test-ams:/usr/local/fusion/logs "$out/ams" >/dev/null 2>&1 || true
+  docker cp fusion-test-hive-metastore:/tmp/hive "$out/hive-metastore" >/dev/null 2>&1 || true
   return 0
 }
 
