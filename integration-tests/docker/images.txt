@@ -19,8 +19,8 @@
 # Third-party images the test stack pulls, one per line. The single source of truth for
 # `scripts/stack.sh pull` and for the CI cache key: change a tag here and the cache is rebuilt.
 # The OLake source image is not listed; it is pulled from $OLAKE_IMAGE, which the caller may
-# override. Images this repo builds (fusion:test, fusion-spark:test, fusion-spark-connect:test)
-# are never cached: they change on every commit.
+# override. Images this repo builds (fusion:test, fusion-spark:test, fusion-spark-connect:test,
+# fusion-hive-metastore:test) are never cached: they change on every commit.
 
 # The stack's services.
 postgres:15
@@ -37,4 +37,6 @@ kindest/node:v1.28.0
 # follows SPARK_VERSION's default in scripts/build.sh; override that and this one is only a
 # cache miss, not a failure.
 apache/spark:3.5.8-java17
+# Base of fusion-hive-metastore:test; follows HIVE_VERSION in docker/hive-metastore/Dockerfile.
+apache/hive:4.0.0
 eclipse-temurin:17-jdk-jammy

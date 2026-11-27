@@ -33,6 +33,7 @@ import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.junit.jupiter.api.extension.ExtendWith;
 
@@ -45,17 +46,20 @@ import org.junit.jupiter.api.extension.ExtendWith;
  * <p>The steps share one table on purpose: MAJOR is only given position deletes to merge by the
  * MINOR before it, and the FULL needs the equality deletes that MINOR already converted, which is
  * why it time travels back to the snapshot OLake left. The steps therefore run in order, one at a
- * time: the class is tagged {@code serial} so it runs in the suite's serial lane.
+ * time: the class is tagged {@code serial}, and the serial lane runs a class's methods in one
+ * thread. Classes there run concurrently, so a subclass on another catalog runs alongside this one;
+ * each class has its own instance, and with it its own table.
  */
 @ExtendWith(Report.class)
 @Tag("serial")
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class CompactionLifecycleIT extends ItBase {
   /** The table every step works on, created by the first one. */
-  private static TestTable table;
+  private TestTable table;
 
   /** The snapshot OLake ingested: the last one before any compaction, equality deletes and all. */
-  private static String ingested;
+  private String ingested;
 
   /** The run's report keys its evidence by test, and all three steps drive the same table. */
   @BeforeEach
@@ -73,7 +77,7 @@ class CompactionLifecycleIT extends ItBase {
   @Test
   @Order(1)
   void minorConvertsEqualityDeletesToPositionDeletes() {
-    table = TestTable.create("lifecycle");
+    table = TestTable.create("lifecycle", catalog());
     table.cdc();
     // Every data file must be a segment file for the conversion to be the planned work.
     useSegmentSizedFiles(table);

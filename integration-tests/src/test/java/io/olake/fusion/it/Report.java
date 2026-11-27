@@ -20,6 +20,7 @@
 
 package io.olake.fusion.it;
 
+import io.olake.fusion.it.Contract.Catalog;
 import io.olake.fusion.it.harness.Env;
 import io.olake.fusion.it.harness.Fusion;
 import org.junit.jupiter.api.extension.BeforeEachCallback;
@@ -31,10 +32,12 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
@@ -47,8 +50,9 @@ import java.util.stream.Collectors;
  * only they know which process belongs to which table. The alternative, reading failsafe's XML
  * afterwards, cannot see any of it.
  *
- * <p>Failsafe runs the parallel tests and the serial ones in two JVMs, so two tables are printed,
- * one per lane.
+ * <p>Failsafe runs the parallel tests and the serial ones in two JVMs, so each lane prints its own
+ * report: one table per catalog the tests ran on, the same tests running on several catalogs. On
+ * GitHub Actions the tables also go to the job summary.
  */
 public final class Report
     implements BeforeEachCallback, TestWatcher, ExtensionContext.Store.CloseableResource {
@@ -71,7 +75,11 @@ public final class Report
 
   /** One test's row. */
   private static final class Entry {
+    /** {@code Class#method}: a subclass runs its parent's tests on another catalog. */
     private final String test;
+    /** The catalog the test's tables live in. */
+    private final String catalog;
+
     private final long started = System.currentTimeMillis();
     private final List<Fusion.Process> processes = new ArrayList<>();
     private String table = "";
@@ -80,8 +88,9 @@ public final class Report
     private long took;
     private String failure;
 
-    Entry(String test) {
+    Entry(String test, String catalog) {
       this.test = test;
+      this.catalog = catalog;
     }
 
     String processSummary() {
@@ -129,7 +138,7 @@ public final class Report
     if (laneStarted == 0) {
       laneStarted = System.currentTimeMillis();
     }
-    Entry entry = new Entry(context.getRequiredTestMethod().getName());
+    Entry entry = new Entry(key(context), catalogOf(context));
     CURRENT.set(entry);
     ENTRIES.put(entry.test, entry);
     // Registering on the root context makes close() the last thing this JVM does.
@@ -157,12 +166,24 @@ public final class Report
   }
 
   private void finish(ExtensionContext context, String failure) {
-    Entry entry = ENTRIES.get(context.getRequiredTestMethod().getName());
+    Entry entry = ENTRIES.get(key(context));
     if (entry != null) {
       entry.took = System.currentTimeMillis() - entry.started;
       entry.failure = failure;
     }
     CURRENT.remove();
+  }
+
+  private static String key(ExtensionContext context) {
+    return context.getRequiredTestClass().getSimpleName()
+        + "#"
+        + context.getRequiredTestMethod().getName();
+  }
+
+  private static String catalogOf(ExtensionContext context) {
+    Object test = context.getTestInstance().orElse(null);
+    Catalog catalog = test instanceof ItBase ? ((ItBase) test).catalog() : Catalog.JDBC;
+    return catalog.catalogName() + " (" + catalog.name() + ")";
   }
 
   /** Printed when the engine shuts down, after every test in this JVM. */
@@ -173,6 +194,55 @@ public final class Report
     }
     ENTRIES.values().forEach(Report::collect);
     System.out.println(render());
+    writeJobSummary();
+  }
+
+  /**
+   * On GitHub Actions, appends this lane's tables to the job summary, so the run page shows which
+   * tests ran on which catalog without opening the log. Best effort.
+   */
+  private static void writeJobSummary() {
+    String summary = System.getenv("GITHUB_STEP_SUMMARY");
+    if (summary == null || summary.isEmpty()) {
+      return;
+    }
+    StringBuilder out = new StringBuilder();
+    for (Map.Entry<String, List<Entry>> catalog : byCatalog().entrySet()) {
+      List<Entry> rows = catalog.getValue();
+      long failed = rows.stream().filter(r -> r.failure != null).count();
+      out.append(
+              String.format(
+                  "%n### Catalog %s: %d run, %d passed, %d failed%n%n",
+                  catalog.getKey(), rows.size(), rows.size() - failed, failed))
+          .append("| Result | Test | Time | Table | Optimizing processes |\n")
+          .append("| --- | --- | --- | --- | --- |\n");
+      for (Entry row : rows) {
+        out.append(
+                String.format(
+                    "| %s | %s | %s | %s | %s |",
+                    row.failure == null ? "PASS" : "FAIL",
+                    row.test,
+                    time(row.took),
+                    row.table.isEmpty() ? "-" : row.table,
+                    row.processSummary()))
+            .append('\n');
+      }
+    }
+    try {
+      Files.writeString(
+          Path.of(summary), out.toString(), StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+    } catch (IOException e) {
+      System.out.println("could not write the job summary: " + e);
+    }
+  }
+
+  /** Rows per catalog, catalogs in name order, the slowest test first within each. */
+  private static Map<String, List<Entry>> byCatalog() {
+    Map<String, List<Entry>> byCatalog = new TreeMap<>();
+    ENTRIES.values().stream()
+        .sorted((a, b) -> Long.compare(b.took, a.took))
+        .forEach(row -> byCatalog.computeIfAbsent(row.catalog, c -> new ArrayList<>()).add(row));
+    return byCatalog;
   }
 
   /**
@@ -180,7 +250,7 @@ public final class Report
    * collect its logs still reports its results, with the live paths in place of the copies.
    */
   private static void collect(Entry row) {
-    Path into = COLLECTED.resolve(row.test);
+    Path into = COLLECTED.resolve(row.catalog.split(" ")[0]).resolve(row.test);
     try {
       if (row.olakeLogs != null && Files.isDirectory(row.olakeLogs)) {
         copyInto(row.olakeLogs, into.resolve("olake"));
@@ -233,21 +303,33 @@ public final class Report
                 time(System.currentTimeMillis() - laneStarted)))
         .append('\n')
         .append(rule)
-        .append('\n')
-        .append(String.format(format, "RESULT", "TEST", "TIME", "TABLE", "OPTIMIZING PROCESSES"))
         .append('\n');
-    for (Entry row : rows) {
+    for (Map.Entry<String, List<Entry>> catalog : byCatalog().entrySet()) {
+      List<Entry> catalogRows = catalog.getValue();
+      long catalogFailed = catalogRows.stream().filter(r -> r.failure != null).count();
       out.append(
               String.format(
-                  format,
-                  row.failure == null ? "PASS" : "FAIL",
-                  row.test,
-                  time(row.took),
-                  row.table.isEmpty() ? "-" : row.table,
-                  row.processSummary()))
+                  " Catalog %s: %d run, %d passed, %d failed",
+                  catalog.getKey(),
+                  catalogRows.size(),
+                  catalogRows.size() - catalogFailed,
+                  catalogFailed))
+          .append('\n')
+          .append(String.format(format, "RESULT", "TEST", "TIME", "TABLE", "OPTIMIZING PROCESSES"))
           .append('\n');
+      for (Entry row : catalogRows) {
+        out.append(
+                String.format(
+                    format,
+                    row.failure == null ? "PASS" : "FAIL",
+                    row.test,
+                    time(row.took),
+                    row.table.isEmpty() ? "-" : row.table,
+                    row.processSummary()))
+            .append('\n');
+      }
+      out.append(rule).append('\n');
     }
-    out.append(rule).append('\n');
     for (Entry row : failed) {
       out.append(failureDetail(row));
     }

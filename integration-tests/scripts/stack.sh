@@ -18,7 +18,7 @@
 # Modified by Datazip Inc. in 2026
 
 # The test stack: Fusion, its Postgres and MinIO, the Spark optimizer on Kind, and what a user
-# brings (a source Postgres for OLake, a Spark Connect query engine).
+# brings (a source Postgres for OLake, a Spark Connect query engine, a Hive Metastore).
 #
 #   stack.sh up            Render the config, start everything, wait until it is usable
 #   stack.sh down          Remove the containers, volumes, Kind cluster and network
@@ -82,7 +82,7 @@ config() {
   mkdir -p "$TESTS_DIR/build"
   docker run --rm -v "$REPO_DIR:/work:ro" -w /work "$YQ_IMAGE" eval-all \
     'select(fileIndex == 0) * select(fileIndex == 1)' \
-    dist/src/main/amoro-bin/conf/config.yaml \
+    dist/src/main/fusion-bin/conf/config.yaml \
     integration-tests/docker/fusion-config.overlay.yaml \
     > "$TESTS_DIR/build/config.yaml"
   echo "Rendered $TESTS_DIR/build/config.yaml"
@@ -93,11 +93,12 @@ up() {
   config
   mkdir -p "$TEST_LOG_DIR/compaction"
 
-  # spark-connect is the only image compose builds itself (Spark with the Iceberg runtime OLake
-  # writes with). `up` builds an image only when it is missing, so an edited Dockerfile or
-  # spark-defaults.conf would silently keep the old image; building first picks up the change
-  # (cached layers make this a no-op otherwise).
-  compose build spark-connect
+  # spark-connect and hive-metastore are the images compose builds itself (Spark with the Iceberg
+  # runtime OLake writes with, and the Hive Metastore with its S3A jars). `up` builds an image
+  # only when it is missing, so an edited Dockerfile, spark-defaults.conf or hive-site.xml would
+  # silently keep the old image; building first picks up the change (cached layers make this a
+  # no-op otherwise).
+  compose build spark-connect hive-metastore
   compose up -d
 
   echo "Waiting for $INIT to finish..."
@@ -170,6 +171,11 @@ logs() {
   if [[ -d "$TEST_LOG_DIR" ]]; then
     cp -r "$TEST_LOG_DIR" "$out/optimization-logs" 2>/dev/null
   fi
+  # AMS and the Hive Metastore log to files, not to the console, so compose.log has neither:
+  # AMS's ams-*.log holds its planning and commit errors, the metastore's hive.log its lock and
+  # alter_table calls. docker cp works on a stopped container too.
+  docker cp fusion-test-ams:/usr/local/fusion/logs "$out/ams" >/dev/null 2>&1 || true
+  docker cp fusion-test-hive-metastore:/tmp/hive "$out/hive-metastore" >/dev/null 2>&1 || true
   return 0
 }
 
